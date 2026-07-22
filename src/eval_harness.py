@@ -14,11 +14,6 @@ Usage:
         --prompt-prefix "Read skill linear-baseline. Then, " \
         --langfuse-host http://localhost:3000
 
-Dependencies:
-    DEV-381 — dataset must exist in Langfuse before running
-    DEV-379 — root span input/output populated (Done)
-    DEV-349 — session ID on OTel spans (required for trace linking)
-
 Credentials:
     LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY environment variables.
     The openclaw agent CLI handles gateway auth internally — the harness
