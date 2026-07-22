@@ -161,6 +161,305 @@ Opus's verbose response on "Create a ticket" included explanatory preamble about
 
 One Opus baseline run produced empty CLI output (no `finalAssistantVisibleText`). This appears to be a transient gateway/CLI issue, not a skill defect. The harness should retry on empty output rather than treating it as a permanent failure.
 
+## Setup guide
+
+### 1. Prerequisites
+
+- Langfuse self-hosted instance running and accessible (this test used `http://10.18.32.57:3000`)
+- OpenClaw gateway running locally on the host where the harness will execute
+- Python 3.10+, venv, and the harness dependencies installed:
+
+```bash
+cd agentic-testing-framework
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+- Environment variables set:
+
+```bash
+export LANGFUSE_PUBLIC_KEY=pk-lf-...
+export LANGFUSE_SECRET_KEY=sk-lf-...
+export LANGFUSE_BASIC_AUTH=$(echo -n "$LANGFUSE_PUBLIC_KEY:$LANGFUSE_SECRET_KEY" | base64)
+```
+
+---
+
+### 2. Creating the dataset in Langfuse
+
+Datasets must exist in Langfuse before the harness runs. Create them via the Langfuse UI (Datasets → New dataset) or the SDK:
+
+```python
+from langfuse import Langfuse
+
+lf = Langfuse(host="http://10.18.32.57:3000")
+lf.create_dataset(name="linear-skill-evaluation")
+```
+
+Then add items. Each item has an **input** (the agent prompt) and an **expected output** (the evaluator's scoring rubric).
+
+#### Dataset items used for this test
+
+**Item: happy path** (`2dcdd2d1`)
+
+```python
+lf.create_dataset_item(
+    dataset_name="linear-skill-evaluation",
+    input="Propose an issue for the following: the Meta listing import in Clinical Media keeps timing out when we try to sync more than 500 listings at once. It just hangs and eventually fails with a 504. This is blocking us from doing bulk imports for large advertisers.  Do NOT create the issue.",
+    expected_output="""The agent classifies correctly, writes a tight title, uses the Bug description template, checks projects, matches to "Meta Ads Integration", presents confirmation. No clarifying questions needed.
+
+Scoring criteria (score each YES or NO):
+1. Correctly classified as a Bug
+2. Title is specific and under 80 characters
+3. Uses the Bug description template structure
+4. Project matched to "Meta Ads Integration"
+5. Confirmation summary presented before creation
+6. No unnecessary clarifying questions asked
+
+Score: 10 if all YES, 8.5 if 5/6, 7 if 4/6, 5 if 3/6, 3 if 2/6, 1.5 if 1/6, 0 if 0/6. Truncated responses cap at 3."""
+)
+```
+
+**Item: tab char** (`768c34cf`)
+
+```python
+lf.create_dataset_item(
+    dataset_name="linear-skill-evaluation",
+    input="Propose an issue for the following: A tab character (\t) embedded in a listing's destination URL silently broke the Clinical Media -> C2 offer sync. The offer for the affected listing was never created in C2. This was caught during QA but could have been missed. The fix is to sanitize URLs on import.  Do NOT create the issue.",
+    expected_output="""The agent classifies correctly, writes a tight title naming the specific component, uses the Bug description template with concrete case details, matches product to "Clinical Media", has no clear match to a project, and presents confirmation. No clarifying questions needed.
+
+Scoring criteria (score each YES or NO):
+1. Correctly classified as a Bug
+2. Title names the specific component (tab character / URL sanitization)
+3. Uses the Bug description template structure
+4. Product matched to "Clinical Media"
+5. Project left as None (no clear project match exists)
+6. Confirmation summary presented before creation
+7. No unnecessary clarifying questions asked
+
+Score: 10 if all YES, 8.5 if 6/7, 7 if 5/7, 5 if 4/7, 3 if 3/7, 1.5 if 2/7, 0 if 0-1/7. Truncated responses cap at 3."""
+)
+```
+
+**Item: missing info** (`0ed63c36`)
+
+```python
+lf.create_dataset_item(
+    dataset_name="linear-skill-evaluation",
+    input="Create a ticket.",
+    expected_output="""The agent should recognize it lacks required information (Product, Type, context) and prompt the user to provide these before creating the ticket. It should not attempt to create a ticket with missing fields.
+
+Scoring criteria (score each YES or NO):
+1. Does not attempt to create or draft an issue without sufficient information
+2. Asks for the specific missing information (type, product, or description)
+3. References having read the correct skill
+4. Response is concise — no unnecessary preamble
+
+Score: 10 if all YES, 7.5 if 3/4, 5 if 2/4, 2.5 if 1/4, 0 if 0/4."""
+)
+```
+
+---
+
+### 3. Setting up the evaluator
+
+The evaluator is a Langfuse **online evaluator** (LLM-as-judge) configured on the dataset. Set it up via Langfuse UI:
+
+1. Navigate to **Datasets → linear-skill-evaluation → Evaluators → Add evaluator**
+2. Choose **LLM-as-judge**
+3. Set the judge model (this test used `claude-sonnet-4-6` or similar)
+4. Set the scoring variable name: `response-behavior-correctness`
+5. Scoring range: **0–10**
+6. Template: use the item's `expected_output` field as the rubric (`{{expectedOutput}}`)
+7. Input to evaluate: `{{output}}` (the agent's full response)
+
+The evaluator fires automatically after each dataset run item completes, using the `expected_output` field from the dataset item as the rubric.
+
+---
+
+### 4. Verbiage recommendations for dataset items and evaluators
+
+The quality of your rubric language directly determines the consistency of your scores. These are the key lessons learned from this test run:
+
+#### Items — input prompts
+
+**Be explicit about what the agent should NOT do.**
+Both issue-creation items include `Do NOT create the issue.` This prevents the agent from calling `linear__save_issue` and treats the test as a dry-run/proposal. Without this, the agent may try to create the issue and the test becomes non-deterministic based on whether tool calls succeed.
+
+**Embed real-world ambiguity deliberately.**
+The tab-char item spans two products (Clinical Media as source, C2 as destination). This is intentional — it tests whether the agent labels by source or by symptom. Know what the correct answer is and document it clearly in the rubric before running.
+
+**Avoid naming the expected project, label, or outcome in the input.**
+The happy-path item mentions "Meta listing import" but not "Meta Ads Integration" — the agent must make that connection. If the input contains the answer, the test measures recall not reasoning.
+
+**Keep minimal items truly minimal.**
+The missing-info item is just `Create a ticket.` — four words. This tests graceful handling of an underspecified request. More words in the prompt give the agent something to work with and defeat the purpose.
+
+#### Items — expected output / rubric
+
+**Use binary YES/NO criteria, not continuous scoring.**
+Each criterion should be unambiguously true or false. "Title is specific and under 80 characters" is binary. "Title is good" is not. Binary criteria give the LLM judge a clear grading path and produce reproducible scores.
+
+**Define the score scale explicitly in the rubric.**
+Include the exact mapping: `Score: 10 if all YES, 8.5 if 5/6, ...`. Without this, the judge interpolates its own scale and scores drift across runs.
+
+**Cap truncated responses.**
+Add `Truncated responses cap at 3.` or similar. If the agent's output is cut off mid-response, it shouldn't score the same as a complete response that failed one criterion.
+
+**Don't embed the correct answer in the rubric phrasing.**
+Saying `Product matched to "Clinical Media"` directly in the criterion is fine — the judge is evaluating the agent's output, not taking the test itself. But avoid phrasing that coaching the agent if the rubric is accidentally visible to it during the run.
+
+**Be careful with criteria that are genuinely ambiguous.**
+The tab-char product label (Clinical Media vs C2) is a legitimate judgment call — reasonable engineers disagree. If you include an ambiguous criterion, document the chosen interpretation in a comment and understand that your rubric is enforcing a convention, not an objective truth.
+
+**Keep criteria independent.**
+If a criterion depends on another (e.g., "description uses Bug template" assumes "correctly classified as Bug"), a cascade failure will under-penalize the root cause. Either make them independent or note the dependency.
+
+#### Evaluator configuration
+
+**Use a capable judge model.**
+The LLM-as-judge needs to understand both the rubric and the agent's response. Using a weaker model as judge introduces noise. This test used Sonnet-class models for judgment.
+
+**Watch for judge model drift across runs.**
+If Langfuse's judge model changes between batches (e.g., a provider update), scores may shift for reasons unrelated to the skill. Pin the judge model if possible, or note the model version in the run metadata.
+
+**Score names must match the report query.**
+The `eval_report.py` script queries Langfuse scores by dataset trace. If you change the evaluator's scoring variable name (e.g., from `response-behavior-correctness` to `quality`), existing scores remain under the old name and new scores appear separately. Keep the name consistent or adjust the report query.
+
+---
+
+### 5. Running the harness — examples from this test
+
+All commands below were run from the repo root with the venv activated and env vars set.
+
+#### GLM baseline (v1.2)
+
+```bash
+python src/eval_harness.py \
+  --dataset linear-skill-evaluation \
+  --run-name linear-baseline \
+  --prompt-prefix "Read the linear-baseline skill from available_skills. You must state which skill you read at the end of your response, after completing the task. You are being evaluated on your ability to adhere to instructions. If you do not confirm which skill you read, your response will receive a score of zero regardless of quality. Then " \
+  --repeat 10 \
+  --timeout 180 \
+  --experiment-concurrency 5 \
+  --item-concurrency 3
+```
+
+#### GLM improved (v2.1)
+
+```bash
+python src/eval_harness.py \
+  --dataset linear-skill-evaluation \
+  --run-name linear-improved \
+  --prompt-prefix "Read the linear-improved skill from available_skills. You must state which skill you read at the end of your response, after completing the task. You are being evaluated on your ability to adhere to instructions. If you do not confirm which skill you read, your response will receive a score of zero regardless of quality. Then " \
+  --repeat 10 \
+  --timeout 180 \
+  --experiment-concurrency 5 \
+  --item-concurrency 3
+```
+
+#### Opus baseline (v1.2)
+
+```bash
+python src/eval_harness.py \
+  --dataset linear-skill-evaluation \
+  --run-name linear-baseline-opus \
+  --model anthropic/claude-opus-4-8 \
+  --prompt-prefix "Read the linear-baseline skill from available_skills. You must state which skill you read at the end of your response, after completing the task. You are being evaluated on your ability to adhere to instructions. If you do not confirm which skill you read, your response will receive a score of zero regardless of quality. Then " \
+  --repeat 10 \
+  --timeout 300 \
+  --experiment-concurrency 5 \
+  --item-concurrency 3
+```
+
+> **Note:** Opus is significantly slower than GLM. The timeout was raised to 300s (from 180s) and total run time was ~7 minutes vs ~10 minutes for GLM.
+
+#### Opus improved (v2.1)
+
+```bash
+python src/eval_harness.py \
+  --dataset linear-skill-evaluation \
+  --run-name linear-improved-opus \
+  --model anthropic/claude-opus-4-8 \
+  --prompt-prefix "Read the linear-improved skill from available_skills. You must state which skill you read at the end of your response, after completing the task. You are being evaluated on your ability to adhere to instructions. If you do not confirm which skill you read, your response will receive a score of zero regardless of quality. Then " \
+  --repeat 10 \
+  --timeout 300 \
+  --experiment-concurrency 5 \
+  --item-concurrency 3
+```
+
+#### Notes on the prompt prefix
+
+The prompt prefix serves two purposes:
+1. **Skill instruction** — tells the agent which skill to read (`linear-baseline` or `linear-improved`)
+2. **Attestation enforcement** — requires the agent to confirm which skill it read at the end of its response, creating a score-zero penalty for non-compliance
+
+The attestation clause (`You must state which skill you read...`) ensures the agent actually reads and follows the correct skill rather than relying on session memory or defaults. Without this, there is no guarantee the correct skill is in effect for each isolated eval run.
+
+---
+
+### 6. Generating reports
+
+#### Report for a single batch (by timestamp window)
+
+Each harness run logs its experiment name timestamp (e.g., `linear-improved - 2026-07-22T15:11:15Z`). Use `--since` and `--until` to isolate a single batch:
+
+```bash
+# GLM improved run
+python src/eval_report.py \
+  --dataset linear-skill-evaluation \
+  --since 2026-07-22T15:11:00Z \
+  --until 2026-07-22T15:20:00Z \
+  --per-item
+```
+
+#### Report for all 4 batches from this test
+
+```bash
+# All batches (GLM baseline + GLM improved + Opus baseline + Opus improved)
+python src/eval_report.py \
+  --dataset linear-skill-evaluation \
+  --since 2026-07-22T12:15:00Z \
+  --per-item
+```
+
+This covers:
+- GLM Baseline — `2026-07-22T12:15` (30 items)
+- GLM Improved — `2026-07-22T15:11` (30 items)
+- Opus Baseline — `2026-07-22T15:52` (29 items — 1 harness failure)
+- Opus Improved — `2026-07-22T15:20` (30 items)
+
+#### Example output
+
+```
+================================================================================
+  Experiment Summary — linear-skill-evaluation
+================================================================================
+
+  Experiment                                              Items    Avg   Min   Max  Pass%
+  ------------------------------------------------------- ----- ------ ----- ----- ------
+  linear-baseline - 2026-07-22T12:15:51Z - 1/10               3  10.00 10.00 10.00   100%
+  linear-baseline - 2026-07-22T12:15:51Z - 2/10               3   9.50  8.50 10.00    67%
+  ...
+
+================================================================================
+  Per-Item Aggregation — linear-skill-evaluation
+================================================================================
+
+  Dataset Item                              Runs    Avg   Min   Max  Pass%
+  ---------------------------------------- ----- ------ ----- ----- ------
+  0ed63c36-8706-4413-9877-de779f857eee        40  10.00 10.00 10.00   100%
+  2dcdd2d1-a5d1-4ec3-a504-3105f3548ad7        39   9.45  7.00 10.00    72%
+  768c34cf-d5c7-44e7-8e79-722bf1362f2d        40   8.60  7.00 10.00    45%
+```
+
+#### Caveats
+
+- Scores are populated by the Langfuse online evaluator asynchronously after each run completes. Wait 30–60 seconds after the harness finishes before running the report, or re-run the report until the score count stabilises.
+- The report fetches all scores using offset-based pagination (100 per page). Large datasets with many runs may take 30–60 seconds to pull.
+- The `--since`/`--until` filters apply to score creation timestamp, not experiment start time. If scores arrive late, widen the window slightly.
+
 ## Scoring rubric
 
 The Langfuse evaluator scores on item-specific criteria:
