@@ -65,6 +65,8 @@ python src/eval_report.py --dataset linear-skill-evaluation --per-item
 | `--experiment-concurrency` | Parallel experiments (default: 3) |
 | `--item-concurrency` | Parallel items within an experiment (default: 2) |
 | `--langfuse-host` | Langfuse host URL (default: http://localhost:3000) |
+| `--agent` | OpenClaw agent ID (default: main) |
+| `--model` | Model override (e.g. `anthropic/claude-opus-4-8`) |
 | `--item-id` | Run only a specific dataset item by ID (partial match) |
 
 ### eval_report.py
