@@ -38,9 +38,9 @@ Key properties that make this meaningful:
 
 ## The evaluation triad — as important as the skill itself
 
-Writing the skill is one-third of the work. The other two-thirds is designing the evaluation correctly. A poorly designed prefix, a vague dataset item, or an ambiguous rubric will produce scores that measure the wrong thing — and a skill that scores well against a bad rubric is not a validated skill.
+A skill change is only as validated as the evaluation that tests it. Think of it as a three-legged stool — the skill, the dataset items, and the evaluator rubric are the three legs. If any one is weak, the whole thing collapses. A brilliantly written skill tested against a vague rubric tells you nothing. A sharp rubric paired with a poorly designed dataset item measures the wrong behavior. And a skill that scores well against a bad eval is not a validated skill — it's a lucky one.
 
-The three components that must be designed with the same care as the skill itself:
+All three legs require deliberate design:
 
 ### 1. The prompt prefix
 
