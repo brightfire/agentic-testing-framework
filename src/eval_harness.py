@@ -12,17 +12,12 @@ Usage:
         --dataset linear-skill-evaluation \
         --run-name linear-baseline-run-1 \
         --prompt-prefix "Read skill linear-baseline. Then, " \
-        --gateway-url http://10.18.32.50:18789 \
         --langfuse-host http://10.18.32.57:3000
-
-Dependencies:
-    DEV-381 — dataset must exist in Langfuse before running
-    DEV-379 — root span input/output populated (Done)
-    DEV-349 — session ID on OTel spans (required for trace linking)
 
 Credentials:
     LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY environment variables.
-    The openclaw agent CLI handles gateway auth internally.
+    The openclaw agent CLI handles gateway auth internally — the harness
+    must run on a host with OpenClaw installed and a running local gateway.
 """
 
 import argparse
@@ -114,7 +109,7 @@ def get_dataset(langfuse_client, dataset_name):
         sys.exit(1)
 
 
-def make_task(prompt_prefix, agent_id, gateway_url, timeout_seconds,
+def make_task(prompt_prefix, agent_id, timeout_seconds,
               langfuse_client, langfuse_host, auth_header, model=None):
     """
     Build a task function for run_experiment.
@@ -216,10 +211,6 @@ def main():
     parser.add_argument(
         "--run-name", required=True,
         help="Name for this experiment run (e.g. linear-baseline-run-1)"
-    )
-    parser.add_argument(
-        "--gateway-url", default="http://10.18.32.50:18789",
-        help="OpenClaw gateway URL (default: http://10.18.32.50:18789)"
     )
     parser.add_argument(
         "--langfuse-host", default="http://10.18.32.57:3000",
@@ -325,7 +316,6 @@ def main():
     task = make_task(
         prompt_prefix=args.prompt_prefix,
         agent_id=args.agent,
-        gateway_url=args.gateway_url,
         timeout_seconds=args.timeout,
         langfuse_client=langfuse_client,
         langfuse_host=args.langfuse_host,
@@ -362,24 +352,19 @@ def main():
         log(f"  Dataset run: {result.dataset_run_url}")
         return run_idx, result
 
-    if args.experiment_concurrency > 1:
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-        log(f"Running {total} experiments with experiment-concurrency={args.experiment_concurrency}, item-concurrency={args.item_concurrency}")
-        with ThreadPoolExecutor(max_workers=args.experiment_concurrency) as executor:
-            futures = {
-                executor.submit(run_single_experiment, i): i
-                for i in range(1, total + 1)
-            }
-            for future in as_completed(futures):
-                run_idx, result = future.result()
-                all_results.append((run_idx, result))
-        # Sort by run index for consistent summary output
-        all_results.sort(key=lambda x: x[0])
-        all_results = [r for _, r in all_results]
-    else:
-        for i in range(1, total + 1):
-            _, result = run_single_experiment(i)
-            all_results.append(result)
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    log(f"Running {total} experiments with experiment-concurrency={args.experiment_concurrency}, item-concurrency={args.item_concurrency}")
+    with ThreadPoolExecutor(max_workers=args.experiment_concurrency) as executor:
+        futures = {
+            executor.submit(run_single_experiment, i): i
+            for i in range(1, total + 1)
+        }
+        for future in as_completed(futures):
+            run_idx, result = future.result()
+            all_results.append((run_idx, result))
+    # Sort by run index for consistent summary output
+    all_results.sort(key=lambda x: x[0])
+    all_results = [r for _, r in all_results]
 
     # Use the last result for the summary (all runs share the same dataset)
     result = all_results[-1]
