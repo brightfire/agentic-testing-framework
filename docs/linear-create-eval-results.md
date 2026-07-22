@@ -38,7 +38,7 @@ Key properties that make this meaningful:
 
 ## The evaluation triad — as important as the skill itself
 
-A skill change is only as validated as the evaluation that tests it. Think of it as a three-legged stool — the skill, the dataset items, and the evaluator rubric are the three legs. If any one is weak, the whole thing collapses. A brilliantly written skill tested against a vague rubric tells you nothing. A sharp rubric paired with a poorly designed dataset item measures the wrong behavior. And a skill that scores well against a bad eval is not a validated skill — it's a lucky one.
+The results of a test are only as trustworthy as the evaluation that produced it. Think of it as a three-legged stool — the skill, the dataset items, and the evaluator rubric are the three legs. If any one is weak, the whole thing collapses. A brilliantly written skill tested against a vague rubric tells you nothing. A sharp rubric paired with a poorly designed dataset item measures the wrong behavior. And a skill that scores well against a bad eval is not a validated skill — it's a lucky one.
 
 All three legs require deliberate design:
 
