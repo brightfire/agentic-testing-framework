@@ -12,7 +12,6 @@ Usage:
         --dataset linear-skill-evaluation \
         --run-name linear-baseline-run-1 \
         --prompt-prefix "Read skill linear-baseline. Then, " \
-        --gateway-url http://10.18.32.50:18789 \
         --langfuse-host http://10.18.32.57:3000
 
 Dependencies:
@@ -22,7 +21,8 @@ Dependencies:
 
 Credentials:
     LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY environment variables.
-    The openclaw agent CLI handles gateway auth internally.
+    The openclaw agent CLI handles gateway auth internally — the harness
+    must run on a host with OpenClaw installed and a running local gateway.
 """
 
 import argparse
@@ -114,7 +114,7 @@ def get_dataset(langfuse_client, dataset_name):
         sys.exit(1)
 
 
-def make_task(prompt_prefix, agent_id, gateway_url, timeout_seconds,
+def make_task(prompt_prefix, agent_id, timeout_seconds,
               langfuse_client, langfuse_host, auth_header, model=None):
     """
     Build a task function for run_experiment.
@@ -216,10 +216,6 @@ def main():
     parser.add_argument(
         "--run-name", required=True,
         help="Name for this experiment run (e.g. linear-baseline-run-1)"
-    )
-    parser.add_argument(
-        "--gateway-url", default="http://10.18.32.50:18789",
-        help="OpenClaw gateway URL (default: http://10.18.32.50:18789)"
     )
     parser.add_argument(
         "--langfuse-host", default="http://10.18.32.57:3000",
@@ -325,7 +321,6 @@ def main():
     task = make_task(
         prompt_prefix=args.prompt_prefix,
         agent_id=args.agent,
-        gateway_url=args.gateway_url,
         timeout_seconds=args.timeout,
         langfuse_client=langfuse_client,
         langfuse_host=args.langfuse_host,
