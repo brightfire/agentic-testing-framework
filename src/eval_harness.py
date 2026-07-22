@@ -352,24 +352,19 @@ def main():
         log(f"  Dataset run: {result.dataset_run_url}")
         return run_idx, result
 
-    if args.experiment_concurrency > 1:
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-        log(f"Running {total} experiments with experiment-concurrency={args.experiment_concurrency}, item-concurrency={args.item_concurrency}")
-        with ThreadPoolExecutor(max_workers=args.experiment_concurrency) as executor:
-            futures = {
-                executor.submit(run_single_experiment, i): i
-                for i in range(1, total + 1)
-            }
-            for future in as_completed(futures):
-                run_idx, result = future.result()
-                all_results.append((run_idx, result))
-        # Sort by run index for consistent summary output
-        all_results.sort(key=lambda x: x[0])
-        all_results = [r for _, r in all_results]
-    else:
-        for i in range(1, total + 1):
-            _, result = run_single_experiment(i)
-            all_results.append(result)
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    log(f"Running {total} experiments with experiment-concurrency={args.experiment_concurrency}, item-concurrency={args.item_concurrency}")
+    with ThreadPoolExecutor(max_workers=args.experiment_concurrency) as executor:
+        futures = {
+            executor.submit(run_single_experiment, i): i
+            for i in range(1, total + 1)
+        }
+        for future in as_completed(futures):
+            run_idx, result = future.result()
+            all_results.append((run_idx, result))
+    # Sort by run index for consistent summary output
+    all_results.sort(key=lambda x: x[0])
+    all_results = [r for _, r in all_results]
 
     # Use the last result for the summary (all runs share the same dataset)
     result = all_results[-1]
