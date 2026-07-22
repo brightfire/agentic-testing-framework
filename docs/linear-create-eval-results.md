@@ -16,12 +16,12 @@ The core problem the framework solves: **without structured evaluation, you can'
 
 ## How the framework works
 
-Each eval run follows this loop:
+The prompt prefix is fixed for the entire script invocation — it's prepended to every dataset item. For each item in each run:
 
 ```
-Dataset item (prompt)
-  → Prompt prefix (skill instruction + attestation)
-    → Isolated OpenClaw agent session
+Prompt prefix (fixed per invocation: skill instruction + attestation)
+  + Dataset item prompt
+    → Combined prompt sent to isolated OpenClaw agent session
       → Agent response
         → LLM-as-judge scores against rubric
           → Score recorded in Langfuse
