@@ -83,13 +83,15 @@ The improved version was developed and validated through [PR #125](https://githu
 
 The agent completed all other criteria correctly but set Project to `None`. The "Meta Ads Integration" project has an **empty description** in Linear, so the cascading summary match in v2.1 can't find it — only name keyword matching would work, and "Meta listing import" doesn't directly match the project name "Meta Ads Integration."
 
-**Affected:** GLM Baseline (3 runs), GLM Improved (1), Opus Baseline (7), Opus Improved (0)
+**Affected:** GLM Baseline (3 runs), GLM Improved (1), Opus Baseline (7)
+
+> **Note:** Opus Improved had 0 Pattern A failures (the cascading match found the project in 8/10 runs). The one non-perfect Opus Improved happy-path score (run 4, 8.5) is a separate case — the project WAS matched, but the agent asked unnecessary clarifying questions about project and priority, failing criterion 6. See Pattern B.
 
 ### Pattern B: Happy path 7.0 — project + unnecessary questions (3 runs)
 
 Same as Pattern A, plus the agent asked the user to confirm priority or project — penalized for unnecessary clarifying questions.
 
-**Affected:** GLM Baseline (1), Opus Baseline (1), Opus Improved (1, special case — title exceeded 80 chars + MCP tools unavailable)
+**Affected:** GLM Baseline (1), Opus Baseline (1), Opus Improved (2 — run 4: matched project but asked unnecessary questions; run 9: title exceeded 80 chars + MCP tools unavailable)
 
 ### Pattern C: Tab char 8.5 — wrong product label, no hedging (6 runs)
 
