@@ -113,6 +113,54 @@ Opus Improved Run 9 produced a 92-character title (limit is 80) and reported MCP
 
 7. **One harness failure (Opus Baseline run 4, first batch).** Agent returned empty output. No harness failures in the rerun or any other batch.
 
+## Recommendations for future skill improvements
+
+Based on the failure analysis, the following changes to the `linear-create` skill could improve scores further:
+
+### 1. Product label guidance for cross-system bugs (would fix Patterns C + D — 22 failures)
+
+The tab-char item exposes a systematic reasoning gap: when a bug involves data flowing from Product A (Clinical Media) to Product B (C2), agents consistently pick Product B because that's where the failure surfaces and the fix lives. The eval expects Product A (source of the defective data).
+
+**Suggested addition to the Label Taxonomy section:**
+
+> When a bug spans two products — data originates in Product A and surfaces as a failure in Product B — label the issue with **Product A** (the source of the defective data), not Product B where the symptom appears.
+
+### 2. No hedging on classification (would fix the "unnecessary questions" penalty — 19 failures)
+
+Opus consistently flags ambiguity and asks the user to confirm product label or priority. GLM commits without asking. The rubric penalizes this as an unnecessary clarifying question because the confirmation step already exists for overrides.
+
+**Suggested addition to step 6 (Confirm with the user):**
+
+> Do not ask the user to confirm or choose between product labels, types, or priority — commit to your best classification based on the context. The user can override any field during the confirmation step.
+
+### 3. Project matching with empty descriptions (would help Pattern A — 11 failures)
+
+The "Meta Ads Integration" project has an empty description in Linear. The cascading match in v2.1 checks name → summary → description, but when both summary and description are empty, the agent has nothing to match against. Adding a note about keyword matching in project names would help.
+
+**Suggested addition to step 5b (Summary match):**
+
+> Some projects have empty summaries and descriptions. If no summary match is possible, check whether keywords from the issue context appear in any project name — even partial or semantic matches (e.g., "Meta listing import" → "Meta Ads Integration").
+
+### 4. Title length enforcement (would fix Pattern F — 1 failure)
+
+One Opus run produced a 92-character title (limit is 80). The skill already states the 80-char limit, but the agent didn't enforce it. A stronger directive may help:
+
+**Suggested addition to Title Standards:**
+
+> If your title exceeds 80 characters, rewrite it shorter before presenting the confirmation summary. Never present an over-length title.
+
+### 5. Conciseness when asking for missing info (would fix Pattern E — 1 failure)
+
+Opus's verbose response on "Create a ticket" included explanatory preamble about why the information was needed. The rubric penalizes verbosity.
+
+**Suggested addition to step 2 (Assess the request):**
+
+> When asking for missing context, be brief — list what you need without explaining why you need it or how you'll use it.
+
+### 6. Harness robustness (operational, not skill-level)
+
+One Opus baseline run produced empty CLI output (no `finalAssistantVisibleText`). This appears to be a transient gateway/CLI issue, not a skill defect. The harness should retry on empty output rather than treating it as a permanent failure.
+
 ## Scoring rubric
 
 The Langfuse evaluator scores on item-specific criteria:
@@ -128,3 +176,4 @@ The Langfuse evaluator scores on item-specific criteria:
 - **Improved skill (v2.1):** https://github.com/brightfire/gpt-skills/blob/904fea2/linear-create/SKILL.md
 - **Eval harness:** `src/eval_harness.py` in this repo
 - **Report generator:** `src/eval_report.py` in this repo
+- **Non-perfect score investigation:** `scratch/eval-investigation.md` (session workspace, not committed)
