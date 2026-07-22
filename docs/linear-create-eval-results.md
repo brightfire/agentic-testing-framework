@@ -1,28 +1,129 @@
-# Linear Create Skill — Eval Results Reference
+# Linear Create Skill — Eval Case Study
 
-**Date:** July 21–22, 2026  
-**Dataset:** `linear-skill-evaluation` (3 items × 10 runs per batch, 0–10 scale)  
-**Evaluation platform:** Langfuse (self-hosted) + OpenClaw agent CLI  
-**Models tested:** `openrouter/z-ai/glm-5.2` (GLM), `anthropic/claude-opus-4-8` (Opus)
+**Date:** July 21–22, 2026
+**Authors:** Vash (eval design, harness execution, analysis)
+**Repo:** [brightfire/agentic-testing-framework](https://github.com/brightfire/agentic-testing-framework)
 
-## Skill versions
+---
 
-| Version | Skill | Commit | Description |
-|---------|-------|--------|-------------|
-| **v1.2 (baseline)** | linear-create | [`eeeeeee`](https://github.com/example-org/skill-repo/blob/eeeeeee/linear-create/SKILL.md) | Auto-assigns projects on name match only; no dry-run handling |
-| **v2.1 (improved)** | linear-create | [`fffffff`](https://github.com/example-org/skill-repo/blob/fffffff/linear-create/SKILL.md) | Cascading project matching (name → summary → description); explicit dry-run/preview handling |
+## Overview
 
-The improved version was developed and validated through [PR #125](https://github.com/example-org/skill-repo/pull/125) in `example-org/skill-repo`.
+This document demonstrates how the agentic testing framework can produce objective, repeatable evidence that a skill change actually improves agent behavior — or doesn't. It uses the `linear-create` skill improvement shipped in [PR #125](https://github.com/example-org/skill-repo/pull/125) as a concrete case study.
 
-## Dataset items
+The core problem the framework solves: **without structured evaluation, you can't distinguish a good skill change from a lucky demo.** A single test run tells you the agent worked once. Ten isolated runs per item, scored by an LLM judge against a fixed rubric, tell you whether the behavior is reliable.
 
-| ID (prefix) | Label | Prompt summary | Tests |
-|-------------|-------|-----------------|-------|
-| `0ed63c36` | missing-info | "Create a ticket." | Agent asks for missing context before proceeding |
-| `2dcdd2d1` | happy path | Meta listing import in AdHub timing out with 504s on bulk sync. "Do NOT create the issue." | Title, description, labels, project matching to "Meta Ads Integration" |
-| `768c34cf` | tab char | Tab character in listing URL broke AdHub → OfferSync offer sync. "Do NOT create the issue." | Title, description, product label selection (AdHub vs OfferSync), type label |
+---
 
-## Final results
+## How the framework works
+
+Each eval run follows this loop:
+
+```
+Dataset item (prompt)
+  → Prompt prefix (skill instruction + attestation)
+    → Isolated OpenClaw agent session
+      → Agent response
+        → LLM-as-judge scores against rubric
+          → Score recorded in Langfuse
+```
+
+Key properties that make this meaningful:
+
+- **Isolated sessions** — each item in each run gets a fresh agent session with no carry-over context from prior runs. The agent cannot rely on memory of a previous correct answer.
+- **Repetition** — running 10 repeats per item surfaces variance. A skill that scores 10/10 on run 1 and 7/10 on run 6 is not reliable; one that scores 10/10 across all 10 is.
+- **Objective scoring** — an LLM judge grades each response against a fixed binary rubric. The same rubric applies to every run, every model, every skill version.
+- **Controlled comparison** — baseline and improved skill versions run against identical items with identical scoring, making the delta meaningful.
+
+---
+
+## The evaluation triad — as important as the skill itself
+
+Writing the skill is one-third of the work. The other two-thirds is designing the evaluation correctly. A poorly designed prefix, a vague dataset item, or an ambiguous rubric will produce scores that measure the wrong thing — and a skill that scores well against a bad rubric is not a validated skill.
+
+The three components that must be designed with the same care as the skill itself:
+
+### 1. The prompt prefix
+
+The prefix is prepended to every dataset item before it reaches the agent. It must do two things:
+
+1. **Direct the agent to the correct skill** — tell it explicitly which skill to read, by name, before starting the task.
+2. **Verify compliance** — require the agent to prove it followed the instruction.
+
+For this test, the prefix was:
+
+```
+Read the linear-baseline skill from available_skills. You must state which
+skill you read at the end of your response, after completing the task. You
+are being evaluated on your ability to adhere to instructions. If you do not
+confirm which skill you read, your response will receive a score of zero
+regardless of quality. Then
+```
+
+The attestation clause (`You must state which skill you read... score of zero...`) is the critical part. Without it, the agent may use cached context from a previous session, default to a built-in behavior, or read a different skill entirely — and you'd never know. The penalty creates a strong incentive to comply.
+
+**This is non-negotiable for isolated session testing.** The prefix must close the loop between "the agent was told to use skill X" and "the agent actually used skill X." The rubric can then trust that the behavior being scored reflects the skill under test.
+
+Early test runs without attestation showed the agent occasionally not confirming which skill it read at all. With the attestation clause, non-compliance becomes immediately visible and scoreable.
+
+### 2. Dataset items
+
+Dataset items are the test cases. Each item is a user prompt plus a scoring rubric. The prompt design determines what behavior the eval actually measures.
+
+**What makes a good item:**
+
+- **No answer in the prompt.** The happy-path item says "Meta listing import" but not "Meta Ads Integration" — the agent must make the semantic connection. If the prompt contains the answer, you're testing recall, not reasoning.
+- **Explicit constraints.** Both issue-creation items end with `Do NOT create the issue.` Without this, the agent calls `linear__save_issue` and the test becomes dependent on whether the tool call succeeds — which is not what you're testing.
+- **Deliberate ambiguity where appropriate.** The tab-char item spans two products (AdHub as source, OfferSync as destination). This is intentional — it tests how the agent handles cross-system attribution. Know what the correct answer is before you run.
+- **Truly minimal items test edge cases.** `Create a ticket.` is four words. That's the point — it tests graceful degradation when context is missing, not issue creation.
+
+### 3. The evaluator rubric
+
+The rubric is the judge's scoring guide. It determines whether a 9.0 means "almost perfect" or "the judge was generous."
+
+**What makes a good rubric:**
+
+- **Binary criteria only.** Each criterion must be a YES/NO question with no room for partial credit within the criterion. "Title is specific and under 80 characters" is binary. "Title quality is high" is not. Binary criteria produce consistent scores across runs.
+- **Explicit score mapping.** Define the scale: `Score: 10 if all YES, 8.5 if 5/6, 7 if 4/6...`. Without this, the judge interpolates its own scale and scores drift between batches.
+- **Cap degraded responses.** `Truncated responses cap at 3.` prevents a half-finished response from scoring the same as a complete response that failed one criterion.
+- **Independent criteria.** If criterion B assumes criterion A (e.g., "uses Bug template" assumes "classified as Bug"), a root-cause failure cascades and undercounts the problem. Make criteria independent where possible.
+- **Name the expected value explicitly.** `Product matched to "AdHub"` is clear. The judge evaluates the agent's output against this — it's not coaching the agent since each run is isolated.
+
+**The rubric is also where you encode what you care about.** The "no unnecessary clarifying questions" criterion in the happy-path rubric is a policy decision — we want the agent to commit to a classification rather than defer. This is not universally true in production use, but it's the behavior this skill targets.
+
+---
+
+## Case study: `linear-create` skill — PR #125
+
+### What changed
+
+| Version | Commit | Summary |
+|---------|--------|---------|
+| **v1.2 (baseline)** | [`eeeeeee`](https://github.com/example-org/skill-repo/blob/eeeeeee/linear-create/SKILL.md) | Auto-assigns projects on name match only |
+| **v2.1 (improved)** | [`fffffff`](https://github.com/example-org/skill-repo/blob/fffffff/linear-create/SKILL.md) | Cascading project matching (name → summary → description); explicit dry-run handling |
+
+**Problem the change addresses:** Eval results showed agents were missing semantic project matches — "Meta listing import" should match the "Meta Ads Integration" project, but agents relying on name-only matching couldn't make the connection. The v2.1 skill adds a 4-step cascade: check project names, then summaries, then full descriptions, then give up.
+
+A secondary improvement in v2.1: explicit dry-run/preview handling at step 6 — the agent presents the confirmation summary and stops, rather than asking a clarifying question about whether to proceed.
+
+### Dataset items
+
+| Label | Input | What it tests |
+|-------|-------|---------------|
+| **happy path** | "Propose an issue for the following: the Meta listing import in AdHub keeps timing out when we try to sync more than 500 listings at once... Do NOT create the issue." | Title, description, labels, project matching to "Meta Ads Integration" |
+| **tab char** | "Propose an issue for the following: A tab character embedded in a listing's destination URL silently broke the AdHub → OfferSync offer sync... Do NOT create the issue." | Title, description, product label (AdHub vs OfferSync), no unnecessary questions |
+| **missing-info** | "Create a ticket." | Agent asks for missing context; does not draft or create without info |
+
+### Test configuration
+
+- **10 runs per batch** — each run is a separate, isolated experiment; all 3 items run per experiment
+- **Models:** `openrouter/z-ai/glm-5.2` (GLM) and `anthropic/claude-opus-4-8` (Opus)
+- **Batches:** GLM Baseline, GLM Improved, Opus Baseline, Opus Improved
+- **Concurrency:** `--experiment-concurrency 5 --item-concurrency 3` (up to 15 concurrent agent calls)
+- **Scoring:** 0–10 via LLM-as-judge against per-item binary rubrics
+
+---
+
+## Results
 
 ### Per-skill summary
 
@@ -73,119 +174,129 @@ The improved version was developed and validated through [PR #125](https://githu
 | 10/10 | 10.00 ✓ | 10.00 ✓ | 7.00 | 7.00 |
 | **Avg** | **9.85 (90%)** | **9.70 (80%)** | **7.15 (0%)** | **7.30 (0%)** |
 
+---
+
 ## Failure analysis
 
-38 non-perfect scores across 120 items. Six distinct failure patterns:
+38 non-perfect scores across 120 items. Six distinct failure patterns identified by pulling the agent's actual response from each non-perfect trace.
 
 ### Pattern A: Happy path 8.5 — project not matched (11 runs)
 
-**Failed criterion:** Project should be matched to "Meta Ads Integration"
+**Failed criterion:** Project matched to "Meta Ads Integration"
 
-The agent completed all other criteria correctly but set Project to `None`. The "Meta Ads Integration" project has an **empty description** in Linear, so the cascading summary match in v2.1 can't find it — only name keyword matching would work, and "Meta listing import" doesn't directly match the project name "Meta Ads Integration."
+The agent completed all other criteria correctly but set Project to `None`. Root cause: "Meta Ads Integration" has an **empty description** in Linear, so the v2.1 cascading summary match can't find it — only name keyword matching would work, and "Meta listing import" doesn't directly surface the project name.
 
-**Affected:** GLM Baseline (3 runs), GLM Improved (1), Opus Baseline (7)
+> "Project: None (no active project clearly matches from context)" — GLM Baseline Run 2
 
-> **Note:** Opus Improved had 0 Pattern A failures (the cascading match found the project in 8/10 runs). The one non-perfect Opus Improved happy-path score (run 4, 8.5) is a separate case — the project WAS matched, but the agent asked unnecessary clarifying questions about project and priority, failing criterion 6. See Pattern B.
+**Affected:** GLM Baseline (3), GLM Improved (1), Opus Baseline (7)
 
-### Pattern B: Happy path 7.0 — project + unnecessary questions (3 runs)
+> **Note:** Opus Improved had 0 Pattern A failures — the cascading match found the project in 8/10 runs. The one non-perfect Opus Improved happy-path score (run 4, 8.5) is a different failure; the project WAS matched but the agent asked unnecessary questions. See Pattern B.
 
-Same as Pattern A, plus the agent asked the user to confirm priority or project — penalized for unnecessary clarifying questions.
+### Pattern B: Happy path 7.0 — project + unnecessary questions (4 runs)
 
-**Affected:** GLM Baseline (1), Opus Baseline (1), Opus Improved (2 — run 4: matched project but asked unnecessary questions; run 9: title exceeded 80 chars + MCP tools unavailable)
+Same as Pattern A but the agent also hedged — asked the user to confirm priority or project choice. Two criteria failed → 4/6 → 7.0.
 
-### Pattern C: Tab char 8.5 — wrong product label, no hedging (6 runs)
+> "Priority: I left it at 0... If you want this flagged as Urgent or High given it's blocking large-advertiser bulk imports, let me know and I'll adjust before creation." — GLM Baseline Run 1
 
-**Failed criterion:** Product should be "AdHub", not "OfferSync"
+**Affected:** GLM Baseline (1), Opus Baseline (1), Opus Improved (2 — run 4: project matched but asked questions; run 9: title exceeded 80 chars + MCP tools unavailable)
 
-The tab character originates from a AdHub listing, but the failure surfaces in OfferSync (offer never created). The agent reasons "fix lives on OfferSync side" and commits to OfferSync. No hedging — only one criterion failed.
+### Pattern C: Tab char 8.5 — wrong product, no hedging (6 runs)
 
-**Affected:** GLM Baseline (1), GLM Improved (2), Opus Improved (2), Opus Baseline (1, borderline)
+**Failed criterion:** Product matched to "AdHub"
+
+The agent chose **OfferSync** instead of **AdHub**, reasoning that the fix lives on the OfferSync import path. It committed to this choice without asking — only one criterion failed → 6/7 → 8.5.
+
+> "Product: OfferSync — I went with OfferSync since the fix — sanitizing URLs on import — is on the OfferSync sync side." — GLM Baseline Run 5
+
+**Affected:** GLM Baseline (1), GLM Improved (2), Opus Improved (2), Opus Baseline (1)
 
 ### Pattern D: Tab char 7.0 — wrong product + hedging (16 runs — largest cluster)
 
-Same wrong product label, but the agent additionally flagged ambiguity and asked the user to decide. This double-failure (wrong product + unnecessary question) is why Opus scores 7.0 on tab char while GLM scores 8.5 — **GLM commits, Opus hedges**.
+Same wrong product label, but the agent additionally flagged ambiguity and asked the user to decide. Two criteria failed → 5/7 → 7.0.
+
+This is why **Opus scores 7.0 on tab char while GLM scores 8.5** — GLM commits to a choice, Opus hedges.
+
+> "Product: ⚠️ Ambiguous — this spans both AdHub (source) and OfferSync (where the offer fails). My lean is OfferSync... Let me know if you'd rather tag it AdHub." — Opus Baseline Run 1
 
 **Affected:** Opus Baseline (8), Opus Improved (8)
 
 ### Pattern E: Missing-info 7.5 — verbosity (1 run)
 
-Opus Improved Run 3 correctly asked for missing info but was too verbose — extra preamble explaining why the information was needed. 1 of 40 missing-info runs across all batches.
+Opus Improved Run 3 correctly asked for missing info but added an explanatory preamble about why the information was needed. The rubric penalizes verbosity → 3/4 → 7.5.
+
+**Affected:** Opus Improved (1)
 
 ### Pattern F: Happy path 7.0 — title length + tool failure (1 run)
 
-Opus Improved Run 9 produced a 92-character title (limit is 80) and reported MCP tools unavailable. Unique failure — likely a transient gateway/CLI issue.
+Opus Improved Run 9 produced a 92-character title (limit: 80) and reported `linear__list_projects` unavailable. Likely a transient gateway issue.
+
+**Affected:** Opus Improved (1)
+
+---
 
 ## Key findings
 
-1. **The improved skill's cascading match is the big win on happy path.** GLM pass rate jumped 60% → 90%, Opus 20% → 80%. The cascade helps the agent reason about project association beyond name-only matching.
+1. **The framework proved the improvement works — and quantified how much.** GLM happy-path pass rate: 60% → 90%. Opus: 20% → 80%. These are not assertions; they're counts across 10 isolated runs per model per skill version.
 
-2. **Removing the eval-specific example improved scores.** The v2.0 skill contained an example identical to the test case ("Meta listing import" → "Meta Ads Integration"). Replacing it with real-project examples (v2.1) actually improved GLM happy path from 70% → 90% — the agent reasons independently instead of pattern-matching the example.
+2. **Repetition exposed what a single run hides.** GLM Baseline run 1 scored 7.0 on the happy path; runs 3–10 ranged from 8.5 to 10.0. Without 10 runs, you might conclude the skill works fine or that it's broken — either conclusion would be wrong. The distribution tells the real story.
 
-3. **Tab char product label is a model-level problem, not a skill problem.** Both baseline and improved fail at the same rate (Opus: 0% pass, GLM: 80–90%). The agents reason "fix lives on OfferSync side" instead of "bad data originates from AdHub." The skill can't fix this — it's a reasoning difference.
+3. **The eval caught a bad example in the skill.** v2.0 included an example that used "Meta listing import" → "Meta Ads Integration" — the exact test case. Replacing it with real-project examples (v2.1) improved GLM happy-path from 70% → 90%. The agent was pattern-matching the example, not reasoning. The framework caught this; manual testing wouldn't have.
 
-4. **GLM commits, Opus hedges.** GLM picks a label and presents the proposal. Opus flags ambiguity and asks the user to confirm. This style difference costs Opus a full criterion point on 19 runs. The skill should add explicit "do not ask the user to confirm product label or priority" guidance.
+4. **Tab char product label is a model difference, not a skill deficiency.** Both v1.2 and v2.1 fail at the same rate (Opus: 0%, GLM: 80–90%). The skill can't fix a fundamental difference in how models handle cross-system attribution. The framework isolates this clearly.
 
-5. **Missing-info is well-handled.** 39 of 40 runs perfect. The only failure was Opus verbosity, not a logic error.
+5. **GLM commits, Opus hedges — and the data quantifies the cost.** Hedging costs Opus a full criterion point on 19 of 38 non-perfect scores. This is actionable: a "commit to your classification" instruction in the skill targets this directly.
 
-6. **Improved skill helps Opus more than GLM.** GLM gains +0.15 avg, +7% pass. Opus gains +0.21 avg, +16% pass. GLM is already good at semantic reasoning without explicit instruction; Opus benefits from the structured cascade.
+6. **Missing-info handling is solid.** 39 of 40 runs perfect across all batches. One verbosity deduction. This is a behavior that works and doesn't need attention.
 
-7. **One harness failure (Opus Baseline run 4, first batch).** Agent returned empty output. No harness failures in the rerun or any other batch.
+7. **One harness failure (Opus Baseline, first batch).** Agent returned empty output. No harness failures in the rerun. Points to a retry gap in the harness, not a skill issue.
+
+---
 
 ## Recommendations for future skill improvements
 
-Based on the failure analysis, the following changes to the `linear-create` skill could improve scores further:
+### 1. Product label: source over symptom (fixes Patterns C + D — 22 failures)
 
-### 1. Product label guidance for cross-system bugs (would fix Patterns C + D — 22 failures)
+Add to the Label Taxonomy section:
 
-The tab-char item exposes a systematic reasoning gap: when a bug involves data flowing from Product A (AdHub) to Product B (OfferSync), agents consistently pick Product B because that's where the failure surfaces and the fix lives. The eval expects Product A (source of the defective data).
+> When a bug involves data flowing from Product A to Product B, label the issue with **Product A** (the source of the defective data), not Product B where the symptom appears.
 
-**Suggested addition to the Label Taxonomy section:**
+### 2. Commit to classification (fixes hedging penalty — 19 failures)
 
-> When a bug spans two products — data originates in Product A and surfaces as a failure in Product B — label the issue with **Product A** (the source of the defective data), not Product B where the symptom appears.
+Add to step 6 (Confirm with the user):
 
-### 2. No hedging on classification (would fix the "unnecessary questions" penalty — 19 failures)
+> Do not ask the user to confirm or choose between product labels, types, or priority — commit to your best classification. The user can override any field during the confirmation step.
 
-Opus consistently flags ambiguity and asks the user to confirm product label or priority. GLM commits without asking. The rubric penalizes this as an unnecessary clarifying question because the confirmation step already exists for overrides.
+### 3. Name keyword matching for empty-description projects (helps Pattern A — 11 failures)
 
-**Suggested addition to step 6 (Confirm with the user):**
-
-> Do not ask the user to confirm or choose between product labels, types, or priority — commit to your best classification based on the context. The user can override any field during the confirmation step.
-
-### 3. Project matching with empty descriptions (would help Pattern A — 11 failures)
-
-The "Meta Ads Integration" project has an empty description in Linear. The cascading match in v2.1 checks name → summary → description, but when both summary and description are empty, the agent has nothing to match against. Adding a note about keyword matching in project names would help.
-
-**Suggested addition to step 5b (Summary match):**
+Add to step 5b (Summary match):
 
 > Some projects have empty summaries and descriptions. If no summary match is possible, check whether keywords from the issue context appear in any project name — even partial or semantic matches (e.g., "Meta listing import" → "Meta Ads Integration").
 
-### 4. Title length enforcement (would fix Pattern F — 1 failure)
+### 4. Enforce title length before presenting (fixes Pattern F)
 
-One Opus run produced a 92-character title (limit is 80). The skill already states the 80-char limit, but the agent didn't enforce it. A stronger directive may help:
-
-**Suggested addition to Title Standards:**
+Add to Title Standards:
 
 > If your title exceeds 80 characters, rewrite it shorter before presenting the confirmation summary. Never present an over-length title.
 
-### 5. Conciseness when asking for missing info (would fix Pattern E — 1 failure)
+### 5. Concise missing-info requests (fixes Pattern E)
 
-Opus's verbose response on "Create a ticket" included explanatory preamble about why the information was needed. The rubric penalizes verbosity.
-
-**Suggested addition to step 2 (Assess the request):**
+Add to step 2:
 
 > When asking for missing context, be brief — list what you need without explaining why you need it or how you'll use it.
 
-### 6. Harness robustness (operational, not skill-level)
+### 6. Harness retry on empty output (operational)
 
-One Opus baseline run produced empty CLI output (no `finalAssistantVisibleText`). This appears to be a transient gateway/CLI issue, not a skill defect. The harness should retry on empty output rather than treating it as a permanent failure.
+The harness should retry once on empty `finalAssistantVisibleText` before marking an item failed.
+
+---
 
 ## Setup guide
 
-### 1. Prerequisites
+### Prerequisites
 
-- Langfuse self-hosted instance running and accessible (this test used `http://localhost:3000`)
-- OpenClaw gateway running locally on the host where the harness will execute
-- Python 3.10+, venv, and the harness dependencies installed:
+- Langfuse self-hosted instance accessible at a known URL (this test: `http://localhost:3000`)
+- OpenClaw gateway running locally — the harness shells out to `openclaw agent` which talks to the local gateway; it cannot target a remote one
+- Python 3.10+
 
 ```bash
 cd agentic-testing-framework
@@ -194,37 +305,27 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-- Environment variables set:
-
 ```bash
-export LANGFUSE_PUBLIC_KEY=pk-lf-...
-export LANGFUSE_SECRET_KEY=sk-lf-...
+export LANGFUSE_PUBLIC_KEY=***
+export LANGFUSE_SECRET_KEY=***
 export LANGFUSE_BASIC_AUTH=$(echo -n "$LANGFUSE_PUBLIC_KEY:$LANGFUSE_SECRET_KEY" | base64)
 ```
 
 ---
 
-### 2. Creating the dataset in Langfuse
-
-Datasets must exist in Langfuse before the harness runs. Create them via the Langfuse UI (Datasets → New dataset) or the SDK:
+### Creating the dataset
 
 ```python
 from langfuse import Langfuse
-
 lf = Langfuse(host="http://localhost:3000")
 lf.create_dataset(name="linear-skill-evaluation")
 ```
 
-Then add items. Each item has an **input** (the agent prompt) and an **expected output** (the evaluator's scoring rubric).
-
-#### Dataset items used for this test
-
-**Item: happy path** (`2dcdd2d1`)
-
+**Item: happy path**
 ```python
 lf.create_dataset_item(
     dataset_name="linear-skill-evaluation",
-    input="Propose an issue for the following: the Meta listing import in AdHub keeps timing out when we try to sync more than 500 listings at once. It just hangs and eventually fails with a 504. This is blocking us from doing bulk imports for large advertisers.  Do NOT create the issue.",
+    input='Propose an issue for the following: the Meta listing import in AdHub keeps timing out when we try to sync more than 500 listings at once. It just hangs and eventually fails with a 504. This is blocking us from doing bulk imports for large advertisers.  Do NOT create the issue.',
     expected_output="""The agent classifies correctly, writes a tight title, uses the Bug description template, checks projects, matches to "Meta Ads Integration", presents confirmation. No clarifying questions needed.
 
 Scoring criteria (score each YES or NO):
@@ -239,13 +340,12 @@ Score: 10 if all YES, 8.5 if 5/6, 7 if 4/6, 5 if 3/6, 3 if 2/6, 1.5 if 1/6, 0 if
 )
 ```
 
-**Item: tab char** (`768c34cf`)
-
+**Item: tab char**
 ```python
 lf.create_dataset_item(
     dataset_name="linear-skill-evaluation",
-    input="Propose an issue for the following: A tab character (\t) embedded in a listing's destination URL silently broke the AdHub -> OfferSync offer sync. The offer for the affected listing was never created in OfferSync. This was caught during QA but could have been missed. The fix is to sanitize URLs on import.  Do NOT create the issue.",
-    expected_output="""The agent classifies correctly, writes a tight title naming the specific component, uses the Bug description template with concrete case details, matches product to "AdHub", has no clear match to a project, and presents confirmation. No clarifying questions needed.
+    input='Propose an issue for the following: A tab character (\t) embedded in a listing\'s destination URL silently broke the AdHub -> OfferSync offer sync. The offer for the affected listing was never created in OfferSync. This was caught during QA but could have been missed. The fix is to sanitize URLs on import.  Do NOT create the issue.',
+    expected_output="""The agent classifies correctly, writes a tight title naming the specific component, uses the Bug description template, matches product to "AdHub", has no clear project match, presents confirmation. No clarifying questions needed.
 
 Scoring criteria (score each YES or NO):
 1. Correctly classified as a Bug
@@ -260,13 +360,12 @@ Score: 10 if all YES, 8.5 if 6/7, 7 if 5/7, 5 if 4/7, 3 if 3/7, 1.5 if 2/7, 0 if
 )
 ```
 
-**Item: missing info** (`0ed63c36`)
-
+**Item: missing info**
 ```python
 lf.create_dataset_item(
     dataset_name="linear-skill-evaluation",
-    input="Create a ticket.",
-    expected_output="""The agent should recognize it lacks required information (Product, Type, context) and prompt the user to provide these before creating the ticket. It should not attempt to create a ticket with missing fields.
+    input='Create a ticket.',
+    expected_output="""The agent should recognize it lacks required information and prompt the user to provide it. It should not attempt to create or draft a ticket.
 
 Scoring criteria (score each YES or NO):
 1. Does not attempt to create or draft an issue without sufficient information
@@ -280,79 +379,24 @@ Score: 10 if all YES, 7.5 if 3/4, 5 if 2/4, 2.5 if 1/4, 0 if 0/4."""
 
 ---
 
-### 3. Setting up the evaluator
+### Setting up the evaluator
 
-The evaluator is a Langfuse **online evaluator** (LLM-as-judge) configured on the dataset. Set it up via Langfuse UI:
+In the Langfuse UI: **Datasets → linear-skill-evaluation → Evaluators → Add evaluator**
 
-1. Navigate to **Datasets → linear-skill-evaluation → Evaluators → Add evaluator**
-2. Choose **LLM-as-judge**
-3. Set the judge model (this test used `claude-sonnet-4-6` or similar)
-4. Set the scoring variable name: `response-behavior-correctness`
-5. Scoring range: **0–10**
-6. Template: use the item's `expected_output` field as the rubric (`{{expectedOutput}}`)
-7. Input to evaluate: `{{output}}` (the agent's full response)
+- Type: **LLM-as-judge**
+- Judge model: Sonnet-class or better
+- Scoring variable: `response-behavior-correctness`
+- Scoring range: **0–10**
+- Rubric template: `{{expectedOutput}}`
+- Input: `{{output}}`
 
-The evaluator fires automatically after each dataset run item completes, using the `expected_output` field from the dataset item as the rubric.
-
----
-
-### 4. Verbiage recommendations for dataset items and evaluators
-
-The quality of your rubric language directly determines the consistency of your scores. These are the key lessons learned from this test run:
-
-#### Items — input prompts
-
-**Be explicit about what the agent should NOT do.**
-Both issue-creation items include `Do NOT create the issue.` This prevents the agent from calling `linear__save_issue` and treats the test as a dry-run/proposal. Without this, the agent may try to create the issue and the test becomes non-deterministic based on whether tool calls succeed.
-
-**Embed real-world ambiguity deliberately.**
-The tab-char item spans two products (AdHub as source, OfferSync as destination). This is intentional — it tests whether the agent labels by source or by symptom. Know what the correct answer is and document it clearly in the rubric before running.
-
-**Avoid naming the expected project, label, or outcome in the input.**
-The happy-path item mentions "Meta listing import" but not "Meta Ads Integration" — the agent must make that connection. If the input contains the answer, the test measures recall not reasoning.
-
-**Keep minimal items truly minimal.**
-The missing-info item is just `Create a ticket.` — four words. This tests graceful handling of an underspecified request. More words in the prompt give the agent something to work with and defeat the purpose.
-
-#### Items — expected output / rubric
-
-**Use binary YES/NO criteria, not continuous scoring.**
-Each criterion should be unambiguously true or false. "Title is specific and under 80 characters" is binary. "Title is good" is not. Binary criteria give the LLM judge a clear grading path and produce reproducible scores.
-
-**Define the score scale explicitly in the rubric.**
-Include the exact mapping: `Score: 10 if all YES, 8.5 if 5/6, ...`. Without this, the judge interpolates its own scale and scores drift across runs.
-
-**Cap truncated responses.**
-Add `Truncated responses cap at 3.` or similar. If the agent's output is cut off mid-response, it shouldn't score the same as a complete response that failed one criterion.
-
-**Don't embed the correct answer in the rubric phrasing.**
-Saying `Product matched to "AdHub"` directly in the criterion is fine — the judge is evaluating the agent's output, not taking the test itself. But avoid phrasing that coaching the agent if the rubric is accidentally visible to it during the run.
-
-**Be careful with criteria that are genuinely ambiguous.**
-The tab-char product label (AdHub vs OfferSync) is a legitimate judgment call — reasonable engineers disagree. If you include an ambiguous criterion, document the chosen interpretation in a comment and understand that your rubric is enforcing a convention, not an objective truth.
-
-**Keep criteria independent.**
-If a criterion depends on another (e.g., "description uses Bug template" assumes "correctly classified as Bug"), a cascade failure will under-penalize the root cause. Either make them independent or note the dependency.
-
-#### Evaluator configuration
-
-**Use a capable judge model.**
-The LLM-as-judge needs to understand both the rubric and the agent's response. Using a weaker model as judge introduces noise. This test used Sonnet-class models for judgment.
-
-**Watch for judge model drift across runs.**
-If Langfuse's judge model changes between batches (e.g., a provider update), scores may shift for reasons unrelated to the skill. Pin the judge model if possible, or note the model version in the run metadata.
-
-**Score names must match the report query.**
-The `eval_report.py` script queries Langfuse scores by dataset trace. If you change the evaluator's scoring variable name (e.g., from `response-behavior-correctness` to `quality`), existing scores remain under the old name and new scores appear separately. Keep the name consistent or adjust the report query.
+The evaluator fires automatically after each dataset run item completes.
 
 ---
 
-### 5. Running the harness — examples from this test
+### Running the harness
 
-All commands below were run from the repo root with the venv activated and env vars set.
-
-#### GLM baseline (v1.2)
-
+**GLM Baseline (v1.2)**
 ```bash
 python src/eval_harness.py \
   --dataset linear-skill-evaluation \
@@ -364,8 +408,7 @@ python src/eval_harness.py \
   --item-concurrency 3
 ```
 
-#### GLM improved (v2.1)
-
+**GLM Improved (v2.1)**
 ```bash
 python src/eval_harness.py \
   --dataset linear-skill-evaluation \
@@ -377,8 +420,7 @@ python src/eval_harness.py \
   --item-concurrency 3
 ```
 
-#### Opus baseline (v1.2)
-
+**Opus Baseline (v1.2)**
 ```bash
 python src/eval_harness.py \
   --dataset linear-skill-evaluation \
@@ -391,10 +433,9 @@ python src/eval_harness.py \
   --item-concurrency 3
 ```
 
-> **Note:** Opus is significantly slower than GLM. The timeout was raised to 300s (from 180s) and total run time was ~7 minutes vs ~10 minutes for GLM.
+> Opus is ~3× slower than GLM. Raise `--timeout` to 300 and expect ~7 min total run time.
 
-#### Opus improved (v2.1)
-
+**Opus Improved (v2.1)**
 ```bash
 python src/eval_harness.py \
   --dataset linear-skill-evaluation \
@@ -407,24 +448,12 @@ python src/eval_harness.py \
   --item-concurrency 3
 ```
 
-#### Notes on the prompt prefix
-
-The prompt prefix serves two purposes:
-1. **Skill instruction** — tells the agent which skill to read (`linear-baseline` or `linear-improved`)
-2. **Attestation enforcement** — requires the agent to confirm which skill it read at the end of its response, creating a score-zero penalty for non-compliance
-
-The attestation clause (`You must state which skill you read...`) ensures the agent actually reads and follows the correct skill rather than relying on session memory or defaults. Without this, there is no guarantee the correct skill is in effect for each isolated eval run.
-
 ---
 
-### 6. Generating reports
+### Generating reports
 
-#### Report for a single batch (by timestamp window)
-
-Each harness run logs its experiment name timestamp (e.g., `linear-improved - 2026-07-22T15:11:15Z`). Use `--since` and `--until` to isolate a single batch:
-
+**Isolate a single batch by timestamp:**
 ```bash
-# GLM improved run
 python src/eval_report.py \
   --dataset linear-skill-evaluation \
   --since 2026-07-22T15:11:00Z \
@@ -432,59 +461,37 @@ python src/eval_report.py \
   --per-item
 ```
 
-#### Report for all 4 batches from this test
-
+**All 4 batches from this test:**
 ```bash
-# All batches (GLM baseline + GLM improved + Opus baseline + Opus improved)
 python src/eval_report.py \
   --dataset linear-skill-evaluation \
   --since 2026-07-22T12:15:00Z \
   --per-item
 ```
 
-This covers:
-- GLM Baseline — `2026-07-22T12:15` (30 items)
-- GLM Improved — `2026-07-22T15:11` (30 items)
-- Opus Baseline — `2026-07-22T15:52` (29 items — 1 harness failure)
-- Opus Improved — `2026-07-22T15:20` (30 items)
+Timestamps for each batch:
+| Batch | `--since` |
+|-------|-----------|
+| GLM Baseline | `2026-07-22T12:15:00Z` |
+| GLM Improved | `2026-07-22T15:11:00Z` |
+| Opus Improved | `2026-07-22T15:20:00Z` |
+| Opus Baseline | `2026-07-22T15:52:00Z` |
 
-#### Example output
+**Caveats:**
+- Scores are populated asynchronously by the Langfuse evaluator. Wait 30–60s after the harness finishes before pulling the report, or re-run until the score count stabilises.
+- `--since`/`--until` filter on score creation timestamp, not experiment start time. Widen the window slightly if scores are arriving late.
 
-```
-================================================================================
-  Experiment Summary — linear-skill-evaluation
-================================================================================
+---
 
-  Experiment                                              Items    Avg   Min   Max  Pass%
-  ------------------------------------------------------- ----- ------ ----- ----- ------
-  linear-baseline - 2026-07-22T12:15:51Z - 1/10               3  10.00 10.00 10.00   100%
-  linear-baseline - 2026-07-22T12:15:51Z - 2/10               3   9.50  8.50 10.00    67%
-  ...
+## Scoring rubric reference
 
-================================================================================
-  Per-Item Aggregation — linear-skill-evaluation
-================================================================================
+| Item | Criteria | Points each | Score mapping |
+|------|----------|:-----------:|---------------|
+| happy path | 6 binary | ~1.67 | 10→6/6, 8.5→5/6, 7→4/6 |
+| tab char | 7 binary | ~1.43 | 10→7/7, 8.5→6/7, 7→5/7 |
+| missing-info | 4 binary | 2.5 | 10→4/4, 7.5→3/4, 5→2/4 |
 
-  Dataset Item                              Runs    Avg   Min   Max  Pass%
-  ---------------------------------------- ----- ------ ----- ----- ------
-  0ed63c36-8706-4413-9877-de779f857eee        40  10.00 10.00 10.00   100%
-  2dcdd2d1-a5d1-4ec3-a504-3105f3548ad7        39   9.45  7.00 10.00    72%
-  768c34cf-d5c7-44e7-8e79-722bf1362f2d        40   8.60  7.00 10.00    45%
-```
-
-#### Caveats
-
-- Scores are populated by the Langfuse online evaluator asynchronously after each run completes. Wait 30–60 seconds after the harness finishes before running the report, or re-run the report until the score count stabilises.
-- The report fetches all scores using offset-based pagination (100 per page). Large datasets with many runs may take 30–60 seconds to pull.
-- The `--since`/`--until` filters apply to score creation timestamp, not experiment start time. If scores arrive late, widen the window slightly.
-
-## Scoring rubric
-
-The Langfuse evaluator scores on item-specific criteria:
-
-- **Happy path** (6 criteria, ~1.67 pts each): title format, title content, type label, project matching, description structure, no unnecessary questions
-- **Tab char** (7 criteria, ~1.43 pts each): title format, title content, product label (AdHub), type label, description structure, no solutioning, no unnecessary questions
-- **Missing-info** (4 criteria, 2.5 pts each): asks for missing context, correct categories requested, no issue created, conciseness
+---
 
 ## References
 
@@ -493,4 +500,3 @@ The Langfuse evaluator scores on item-specific criteria:
 - **Improved skill (v2.1):** https://github.com/example-org/skill-repo/blob/fffffff/linear-create/SKILL.md
 - **Eval harness:** `src/eval_harness.py` in this repo
 - **Report generator:** `src/eval_report.py` in this repo
-- **Non-perfect score investigation:** `scratch/eval-investigation.md` (session workspace, not committed)
