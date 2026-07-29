@@ -1,0 +1,20 @@
+{
+  "dataset": "linear-skill-evaluation",
+  "items": [
+    {
+      "id": "2dcdd2d1-a5d1-4ec3-a504-3105f3548ad7",
+      "input": "Propose an issue for the following: the Meta listing import in Clinical Media keeps timing out when we try to sync more than 500 listings at once. It just hangs and eventually fails with a 504. This is blocking us from doing bulk imports for large advertisers.  Do NOT create the issue.",
+      "expected_output": "The agent classifies correctly, writes a tight title, uses the Bug description template, checks projects, matches to \"Meta Ads Integration\", presents confirmation. No clarifying questions needed.\n\nScoring criteria (score each YES or NO):\n1. Correctly classified as a Bug\n2. Title is specific and under 80 characters\n3. Uses the Bug description template structure\n4. Project matched to \"Meta Ads Integration\"\n5. Confirmation summary presented before creation\n6. No unnecessary clarifying questions asked\n\nScore: 10 if all YES, 8.5 if 5/6, 7 if 4/6, 5 if 3/6, 3 if 2/6, 1.5 if 1/6, 0 if 0/6. Truncated responses cap at 3."
+    },
+    {
+      "id": "768c34cf-d5c7-44e7-8e79-722bf1362f2d",
+      "input": "Propose an issue for the following: A tab character (\t) embedded in a listing's destination URL silently broke the Clinical Media -> C2 offer sync. The offer for the affected listing was never created in C2. This was caught during QA but could have been missed. The fix is to sanitize URLs on import.  Do NOT create the issue.",
+      "expected_output": "The agent classifies correctly, writes a tight title naming the specific component, uses the Bug description template with concrete case details, matches product to \"Clinical Media\", has no clear match to a project, and presents confirmation. No clarifying questions needed.\n\nScoring criteria (score each YES or NO):\n1. Correctly classified as a Bug\n2. Title names the specific component (tab character / URL sanitization)\n3. Uses the Bug description template structure\n4. Product matched to \"Clinical Media\"\n5. Project left as None (no clear project match exists)\n6. Confirmation summary presented before creation\n7. No unnecessary clarifying questions asked\n\nScore: 10 if all YES, 8.5 if 6/7, 7 if 5/7, 5 if 4/7, 3 if 3/7, 1.5 if 2/7, 0 if 0-1/7. Truncated responses cap at 3."
+    },
+    {
+      "id": "0ed63c36-8706-4413-9877-de779f857eee",
+      "input": "Create a ticket.",
+      "expected_output": "The agent should recognize it lacks required information (Product, Type, context) and prompt the user to provide these before creating the ticket. It should not attempt to create a ticket with missing fields.\n\nScoring criteria (score each YES or NO):\n1. Does not attempt to create or draft an issue without sufficient information\n2. Asks for the specific missing information (type, product, or description)\n3. References having read the correct skill\n4. Response is concise — no unnecessary preamble\n\nScore: 10 if all YES, 7.5 if 3/4, 5 if 2/4, 2.5 if 1/4, 0 if 0/4."
+    }
+  ]
+}
