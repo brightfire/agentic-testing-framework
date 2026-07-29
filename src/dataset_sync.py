@@ -427,8 +427,8 @@ def main():
         if existing.get(api_id, {}).get("status", "ACTIVE").upper() == "ACTIVE"
     }
 
-    if not to_upsert and not to_archive_active:
-        log("Nothing to do — dataset is already in sync.", "INFO")
+    if not to_archive_active:
+        log("Nothing to archive — dataset is in sync.", "INFO")
         version_ts = get_dataset_version_timestamp()
         print(version_ts.strftime("%Y-%m-%dT%H:%M:%S.%fZ"))
         return
