@@ -71,6 +71,11 @@ def parse_eval_yaml(path):
     items_list is a list of dicts with keys: id, input, expected_output.
     Exits with an error if the file is malformed or missing required fields.
     Warns (but does not fail) on unknown keys that may indicate typos.
+
+    Whitespace is stripped only for validation (emptiness checks). The
+    original unstripped values are preserved in the returned items so that
+    prompts with intentional leading/trailing whitespace (e.g. block scalars,
+    code samples) are uploaded verbatim.
     """
     try:
         with open(path, "r") as f:
@@ -99,10 +104,10 @@ def parse_eval_yaml(path):
     if not isinstance(dataset_name, str):
         log(f"'dataset' must be a string, got {type(dataset_name).__name__}", "ERROR")
         sys.exit(1)
-    dataset_name = dataset_name.strip()
-    if not dataset_name:
+    if not dataset_name.strip():
         log("'dataset' must not be empty or whitespace-only", "ERROR")
         sys.exit(1)
+    dataset_name = dataset_name.strip()
 
     # ── Validate items ──────────────────────────────────────────────────
     # Require 'items' key to be present — omitting it is likely a mistake,
@@ -130,15 +135,15 @@ def parse_eval_yaml(path):
 
         # ── Validate id ─────────────────────────────────────────────────
         item_id = item.get("id")
-        if not item_id:
+        if item_id is None:
             log(f"Item {i} missing required 'id' field", "ERROR")
             sys.exit(1)
         if not isinstance(item_id, str):
             item_id = str(item_id)
-        item_id = item_id.strip()
-        if not item_id:
+        if not item_id.strip():
             log(f"Item {i} has empty or whitespace-only 'id'", "ERROR")
             sys.exit(1)
+        item_id = item_id.strip()
         if item_id in seen_ids:
             log(f"Duplicate item id '{item_id}' (item {i}) — ids must be unique after string conversion", "ERROR")
             sys.exit(1)
@@ -152,10 +157,10 @@ def parse_eval_yaml(path):
         if not isinstance(input_value, str):
             log(f"Item '{item_id}' input must be a string, got {type(input_value).__name__}", "ERROR")
             sys.exit(1)
-        input_value = input_value.strip()
-        if not input_value:
+        if not input_value.strip():
             log(f"Item '{item_id}' has empty or whitespace-only 'input'", "ERROR")
             sys.exit(1)
+        # Preserve original (unstripped) input for upload
 
         # ── Validate expected_output ────────────────────────────────────
         expected = item.get("expected_output")
@@ -165,10 +170,10 @@ def parse_eval_yaml(path):
         if not isinstance(expected, str):
             log(f"Item '{item_id}' expected_output must be a string, got {type(expected).__name__}", "ERROR")
             sys.exit(1)
-        expected = expected.strip()
-        if not expected:
+        if not expected.strip():
             log(f"Item '{item_id}' has empty or whitespace-only 'expected_output'", "ERROR")
             sys.exit(1)
+        # Preserve original (unstripped) expected_output for upload
 
         parsed.append({
             "id": item_id,
@@ -252,9 +257,11 @@ def get_dataset_version_timestamp():
     version pin. This is guaranteed to postdate all write operations,
     including archives that may not be reflected in active-item timestamps.
 
-    Previously tried deriving from server-side updatedAt on active items,
-    but that predates archive operations (archived items are excluded from
-    the active-item response), leading to stale version pins.
+    Note: This relies on the sync host and Langfuse server having closely
+    synchronized clocks (both use NTP on the same LAN). If the hosts have
+    significant clock skew, the pin could precede server-side write
+    timestamps. For environments with clock skew concerns, parse the
+    `Date` header from the last API response instead.
     """
     return datetime.now(timezone.utc)
 
@@ -415,9 +422,13 @@ def main():
     log(f"Failed:    {failed}")
     log(f"Version:   {version_ts.isoformat()}")
 
-    # Print the version timestamp as the final line for programmatic capture
-    # Format: ISO-8601 UTC (e.g. 2026-07-29T15:51:00.000000Z)
-    print(version_ts.strftime("%Y-%m-%dT%H:%M:%S.%fZ"))
+    # Print the version timestamp as the final line for programmatic capture.
+    # Only emit on full success — a partial sync timestamp could mislead
+    # callers into running experiments against an incomplete dataset.
+    if failed == 0:
+        print(version_ts.strftime("%Y-%m-%dT%H:%M:%S.%fZ"))
+    else:
+        log("Version pin not emitted due to sync failures — fix errors and re-run.", "WARN")
 
     sys.exit(0 if failed == 0 else 1)
 
