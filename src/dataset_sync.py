@@ -259,6 +259,40 @@ def get_dataset_version_timestamp():
     return datetime.now(timezone.utc)
 
 
+def try_dry_run_archive_preview(langfuse_host, dataset_name, yaml_ids):
+    """Attempt a read-only fetch to preview archive candidates.
+
+    If credentials are available, fetches existing items from Langfuse and
+    reports which ones would be archived. If credentials are absent, skips
+    silently — dry-run should work offline without API secrets.
+    """
+    public_key = os.environ.get("LANGFUSE_PUBLIC_KEY")
+    secret_key = os.environ.get("LANGFUSE_SECRET_KEY")
+
+    if not public_key or not secret_key:
+        log("Cannot preview archive candidates — LANGFUSE credentials not set (dry-run works offline)", "WARN")
+        return
+
+    try:
+        auth_header = make_auth_header(public_key, secret_key)
+        existing = fetch_existing_items(langfuse_host, auth_header, dataset_name)
+        existing_ids = set(existing.keys())
+        to_archive = existing_ids - yaml_ids
+        to_archive_active = {
+            item_id for item_id in to_archive
+            if existing.get(item_id, {}).get("status", "ACTIVE").upper() == "ACTIVE"
+        }
+
+        if to_archive_active:
+            log(f"Would archive {len(to_archive_active)} items (in Langfuse but not in eval.yaml):")
+            for item_id in sorted(to_archive_active):
+                log(f"  [archive] {item_id}")
+        else:
+            log("No items would be archived — dataset items are a subset of eval.yaml")
+    except requests.RequestException as e:
+        log(f"Could not fetch existing items for archive preview: {e}", "WARN")
+
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
@@ -289,9 +323,13 @@ def main():
         log("=== DRY RUN ===")
         for item in yaml_items:
             preview = item["input"][:80].replace("\n", " ")
-            log(f"  [{item['id']}] input: {preview}...")
+            log(f"  [upsert] {item['id']}: {preview}...")
         log(f"Would upsert {len(yaml_items)} items to dataset '{dataset_name}'")
-        log("No API calls made.")
+
+        # Attempt read-only archive preview if credentials are available
+        try_dry_run_archive_preview(args.langfuse_host, dataset_name, yaml_ids)
+
+        log("No write API calls made.")
         return
 
     # ── Validate credentials (after dry-run so offline preview works) ────
