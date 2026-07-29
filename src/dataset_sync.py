@@ -18,6 +18,7 @@ Credentials:
 
 eval.yaml schema (DEV-321):
     dataset: <langfuse-dataset-name>
+    description: <optional human-readable description>
     items:
       - id: <unique-string-id>
         input: <prompt text sent to the agent>
@@ -49,7 +50,7 @@ API_BASE = "/api/public"
 POST_SYNC_SETTLE_SECONDS = 2
 
 # Known keys for validation warnings
-KNOWN_TOP_LEVEL_KEYS = {"dataset", "items"}
+KNOWN_TOP_LEVEL_KEYS = {"dataset", "description", "items"}
 KNOWN_ITEM_KEYS = {"id", "input", "expected_output"}
 
 # Separator for namespaced Langfuse item IDs. Langfuse dataset item IDs are
@@ -117,9 +118,10 @@ class UniqueKeyLoader(yaml.SafeLoader):
 
 
 def parse_eval_yaml(path):
-    """Parse an eval.yaml file and return (dataset_name, items_list).
+    """Parse an eval.yaml file and return (dataset_name, description, items_list).
 
     items_list is a list of dicts with keys: id, input, expected_output.
+    description is an optional string (None if not present).
     Exits with an error if the file is malformed or missing required fields.
     Warns (but does not fail) on unknown keys that may indicate typos.
 
@@ -159,6 +161,16 @@ def parse_eval_yaml(path):
         log("'dataset' must not be empty or whitespace-only", "ERROR")
         sys.exit(1)
     dataset_name = dataset_name.strip()
+
+    # ── Validate description (optional) ──────────────────────────────────
+    description = data.get("description")
+    if description is not None and not isinstance(description, str):
+        log(f"'description' must be a string, got {type(description).__name__}", "ERROR")
+        sys.exit(1)
+    if description is not None:
+        description = description.strip()
+        if not description:
+            description = None
 
     # ── Validate items ──────────────────────────────────────────────────
     # Require 'items' key to be present — omitting it is likely a mistake,
@@ -232,17 +244,20 @@ def parse_eval_yaml(path):
             "expected_output": expected,
         })
 
-    return dataset_name, parsed
+    return dataset_name, description, parsed
 
 
-def ensure_dataset_exists(host, auth_header, dataset_name):
+def ensure_dataset_exists(host, auth_header, dataset_name, description=None):
     """Create the dataset in Langfuse if it doesn't already exist.
 
     POST /api/public/datasets is idempotent — if the dataset name already
     exists, it returns the existing dataset. Safe to call before every sync.
+    If description is provided, it will be included in the creation payload.
     """
     url = f"{host}{API_BASE}/datasets"
     payload = {"name": dataset_name}
+    if description:
+        payload["description"] = description
     resp = requests.post(url, json=payload, headers=auth_header, timeout=15)
     resp.raise_for_status()
     return resp.json()
@@ -396,7 +411,7 @@ def main():
     args = parser.parse_args()
 
     # ── Parse eval.yaml (no credentials needed for dry-run) ───────────────
-    dataset_name, yaml_items = parse_eval_yaml(args.file)
+    dataset_name, description, yaml_items = parse_eval_yaml(args.file)
     yaml_api_ids = {make_api_id(dataset_name, item["id"]) for item in yaml_items}
 
     log(f"Parsed eval.yaml: dataset='{dataset_name}', {len(yaml_items)} items")
@@ -433,7 +448,7 @@ def main():
     # already exists. This prevents upsert failures on first sync.
     log(f"Ensuring dataset '{dataset_name}' exists...")
     try:
-        ensure_dataset_exists(args.langfuse_host, auth_header, dataset_name)
+        ensure_dataset_exists(args.langfuse_host, auth_header, dataset_name, description)
     except requests.RequestException as e:
         log(f"Failed to create/verify dataset '{dataset_name}': {e}", "ERROR")
         sys.exit(1)
