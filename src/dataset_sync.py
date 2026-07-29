@@ -361,7 +361,7 @@ def main():
 
     # ── Parse eval.yaml (no credentials needed for dry-run) ───────────────
     dataset_name, yaml_items = parse_eval_yaml(args.file)
-    yaml_ids = {item["id"] for item in yaml_items}
+    yaml_api_ids = {make_api_id(dataset_name, item["id"]) for item in yaml_items}
 
     log(f"Parsed eval.yaml: dataset='{dataset_name}', {len(yaml_items)} items")
 
@@ -375,7 +375,7 @@ def main():
         # Attempt read-only archive preview if credentials are available
         # and --no-preview was not passed
         if not args.no_preview:
-            try_dry_run_archive_preview(args.langfuse_host, dataset_name, yaml_ids)
+            try_dry_run_archive_preview(args.langfuse_host, dataset_name, {item["id"] for item in yaml_items})
         else:
             log("Archive preview skipped (--no-preview)")
 
@@ -392,19 +392,33 @@ def main():
 
     auth_header = make_auth_header(public_key, secret_key)
 
-    # ── Fetch existing items from Langfuse ────────────────────────────────
+    # ── Upsert items first (no dependency on existing state) ─────────────
+    # Upserting before fetching ensures our writes are visible to any
+    # concurrent sync that fetches after us. This also means the subsequent
+    # fetch sees a snapshot that includes our own upserts, so we only archive
+    # items that are genuinely stale — not items a concurrent sync just added.
+    upserted = 0
+    failed = 0
+    for item in yaml_items:
+        try:
+            upsert_item(args.langfuse_host, auth_header, dataset_name, item)
+            upserted += 1
+            log(f"  Upserted [{item['id']}]")
+        except requests.RequestException as e:
+            log(f"  Failed to upsert [{item['id']}]: {e}", "ERROR")
+            failed += 1
+
+    # ── Fetch existing items AFTER upserts (fresh snapshot) ──────────────
+    # Fetching after upserting means this snapshot includes our own writes.
+    # If a concurrent sync also upserted, we see their items too and won't
+    # archive them (they're in Langfuse but not in our YAML — but we can't
+    # distinguish them from items we need to archive, so the last sync wins).
     log(f"Fetching existing items for dataset '{dataset_name}'...")
     existing = fetch_existing_items(args.langfuse_host, auth_header, dataset_name)
     existing_api_ids = set(existing.keys())
-    log(f"Found {len(existing)} existing items in Langfuse")
+    log(f"Found {len(existing)} items in Langfuse after upsert")
 
-    # ── Determine actions ─────────────────────────────────────────────────
-    # Always upsert all yaml items — content-diffing is intentionally skipped
-    # for simplicity. Langfuse handles identical re-upserts gracefully.
-    to_upsert = yaml_items
-
-    # Compare namespaced API IDs to find items to archive
-    yaml_api_ids = {make_api_id(dataset_name, item["id"]) for item in yaml_items}
+    # ── Determine archive candidates from fresh snapshot ────────────────
     to_archive = existing_api_ids - yaml_api_ids  # in Langfuse but not in yaml
 
     # Filter out items that are already archived (no need to re-archive)
@@ -413,26 +427,13 @@ def main():
         if existing.get(api_id, {}).get("status", "ACTIVE").upper() == "ACTIVE"
     }
 
-    log(f"Plan: upsert {len(to_upsert)} items, archive {len(to_archive_active)} items")
-
     if not to_upsert and not to_archive_active:
         log("Nothing to do — dataset is already in sync.", "INFO")
-        # Still return a version timestamp for consistency
         version_ts = get_dataset_version_timestamp()
         print(version_ts.strftime("%Y-%m-%dT%H:%M:%S.%fZ"))
         return
 
-    # ── Upsert items ──────────────────────────────────────────────────────
-    upserted = 0
-    failed = 0
-    for item in to_upsert:
-        try:
-            upsert_item(args.langfuse_host, auth_header, dataset_name, item)
-            upserted += 1
-            log(f"  Upserted [{item['id']}]")
-        except requests.RequestException as e:
-            log(f"  Failed to upsert [{item['id']}]: {e}", "ERROR")
-            failed += 1
+    log(f"Plan: archive {len(to_archive_active)} items (from post-upsert snapshot)")
 
     # ── Archive removed items ─────────────────────────────────────────────
     # Skip archiving if any upserts failed — archiving removed items while
@@ -456,7 +457,7 @@ def main():
 
     # ── Capture version timestamp ─────────────────────────────────────────
     # Brief pause to let Langfuse process the version bump server-side.
-    if to_upsert or to_archive_active:
+    if upserted or archived:
         time.sleep(POST_SYNC_SETTLE_SECONDS)
 
     version_ts = get_dataset_version_timestamp()
