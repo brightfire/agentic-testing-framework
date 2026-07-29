@@ -51,6 +51,12 @@ POST_SYNC_SETTLE_SECONDS = 2
 KNOWN_TOP_LEVEL_KEYS = {"dataset", "items"}
 KNOWN_ITEM_KEYS = {"id", "input", "expected_output"}
 
+# Separator for namespaced Langfuse item IDs. Langfuse dataset item IDs are
+# project-wide unique (see langfuse#2167), so we prefix the API ID with the
+# dataset name to prevent collisions when two datasets use the same logical
+# item ID (e.g. both have `id: happy-path`). The YAML-facing ID stays as-is.
+ID_SEPARATOR = ":"
+
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -63,6 +69,28 @@ def make_auth_header(public_key, secret_key):
     """Build the Basic auth header from Langfuse API keys."""
     token = base64.b64encode(f"{public_key}:{secret_key}".encode()).decode()
     return {"Authorization": f"Basic {token}"}
+
+
+def make_api_id(dataset_name, item_id):
+    """Build a project-wide unique Langfuse API ID from dataset name + item ID.
+
+    Langfuse dataset item IDs are project-wide unique (langfuse#2167), not
+    per-dataset. Without namespacing, two datasets sharing the same logical
+    item ID (e.g. `happy-path`) would collide and corrupt each other.
+    """
+    return f"{dataset_name}{ID_SEPARATOR}{item_id}"
+
+
+def strip_dataset_prefix(api_id, dataset_name):
+    """Strip the dataset prefix from a namespaced Langfuse API ID.
+
+    Returns the logical item ID. If the API ID doesn't have the expected
+    prefix, returns it as-is (for backwards compat with non-namespaced items).
+    """
+    prefix = f"{dataset_name}{ID_SEPARATOR}"
+    if api_id.startswith(prefix):
+        return api_id[len(prefix):]
+    return api_id
 
 
 def parse_eval_yaml(path):
@@ -185,9 +213,9 @@ def parse_eval_yaml(path):
 
 
 def fetch_existing_items(host, auth_header, dataset_name):
-    """Fetch all ACTIVE dataset items from Langfuse for the given dataset.
+    """Fetch all dataset items from Langfuse for the given dataset.
 
-    Returns a dict mapping item id → item dict (with status, updatedAt, etc.).
+    Returns a dict mapping the **namespaced API ID** → item dict.
     Uses datasetName query param (datasetId has a known bug — see langfuse#13285).
     """
     url = f"{host}{API_BASE}/dataset-items"
@@ -214,12 +242,13 @@ def fetch_existing_items(host, auth_header, dataset_name):
 def upsert_item(host, auth_header, dataset_name, item):
     """Upsert a single dataset item to Langfuse via POST /api/public/dataset-items.
 
-    The custom `id` field triggers upsert-on-conflict behaviour.
-    Returns the API response dict.
+    The API ID is namespaced as `{dataset_name}:{item_id}` to avoid
+    project-wide ID collisions (see langfuse#2167).
     """
     url = f"{host}{API_BASE}/dataset-items"
+    api_id = make_api_id(dataset_name, item["id"])
     payload = {
-        "id": item["id"],
+        "id": api_id,
         "datasetName": dataset_name,
         "input": item["input"],
         "expectedOutput": item["expected_output"],
@@ -234,9 +263,7 @@ def upsert_item(host, auth_header, dataset_name, item):
 def archive_item(host, auth_header, dataset_name, item_id):
     """Archive a dataset item by upserting with status=ARCHIVED.
 
-    POST /api/public/dataset-items with the same id and status=ARCHIVED
-    archives the item. Archived items are excluded from get_dataset() results
-    (SDK defaults to ACTIVE only).
+    The `item_id` here is the namespaced API ID.
     """
     url = f"{host}{API_BASE}/dataset-items"
     payload = {
@@ -287,17 +314,21 @@ def try_dry_run_archive_preview(langfuse_host, dataset_name, yaml_ids):
     try:
         auth_header = make_auth_header(public_key, secret_key)
         existing = fetch_existing_items(langfuse_host, auth_header, dataset_name)
-        existing_ids = set(existing.keys())
-        to_archive = existing_ids - yaml_ids
+        # Build set of namespaced API IDs that exist in Langfuse
+        existing_api_ids = set(existing.keys())
+        # Build set of namespaced API IDs that will exist after sync
+        yaml_api_ids = {make_api_id(dataset_name, logical_id) for logical_id in yaml_ids}
+        to_archive = existing_api_ids - yaml_api_ids
         to_archive_active = {
-            item_id for item_id in to_archive
-            if existing.get(item_id, {}).get("status", "ACTIVE").upper() == "ACTIVE"
+            api_id for api_id in to_archive
+            if existing.get(api_id, {}).get("status", "ACTIVE").upper() == "ACTIVE"
         }
 
         if to_archive_active:
             log(f"Would archive {len(to_archive_active)} items (in Langfuse but not in eval.yaml):")
-            for item_id in sorted(to_archive_active):
-                log(f"  [archive] {item_id}")
+            for api_id in sorted(to_archive_active):
+                logical_id = strip_dataset_prefix(api_id, dataset_name)
+                log(f"  [archive] {logical_id}")
         else:
             log("No items would be archived — dataset items are a subset of eval.yaml")
     except requests.RequestException as e:
@@ -364,19 +395,22 @@ def main():
     # ── Fetch existing items from Langfuse ────────────────────────────────
     log(f"Fetching existing items for dataset '{dataset_name}'...")
     existing = fetch_existing_items(args.langfuse_host, auth_header, dataset_name)
-    existing_ids = set(existing.keys())
+    existing_api_ids = set(existing.keys())
     log(f"Found {len(existing)} existing items in Langfuse")
 
     # ── Determine actions ─────────────────────────────────────────────────
     # Always upsert all yaml items — content-diffing is intentionally skipped
     # for simplicity. Langfuse handles identical re-upserts gracefully.
     to_upsert = yaml_items
-    to_archive = existing_ids - yaml_ids  # in Langfuse but not in yaml
+
+    # Compare namespaced API IDs to find items to archive
+    yaml_api_ids = {make_api_id(dataset_name, item["id"]) for item in yaml_items}
+    to_archive = existing_api_ids - yaml_api_ids  # in Langfuse but not in yaml
 
     # Filter out items that are already archived (no need to re-archive)
     to_archive_active = {
-        item_id for item_id in to_archive
-        if existing.get(item_id, {}).get("status", "ACTIVE").upper() == "ACTIVE"
+        api_id for api_id in to_archive
+        if existing.get(api_id, {}).get("status", "ACTIVE").upper() == "ACTIVE"
     }
 
     log(f"Plan: upsert {len(to_upsert)} items, archive {len(to_archive_active)} items")
@@ -407,14 +441,15 @@ def main():
     if failed:
         log("Skipping archive step due to upsert failures — re-run after fixing errors.", "WARN")
     else:
-        for item_id in sorted(to_archive_active):
+        for api_id in sorted(to_archive_active):
             try:
-                archive_item(args.langfuse_host, auth_header, dataset_name, item_id)
-                archived += 1
-                log(f"  Archived [{item_id}]")
-            except requests.RequestException as e:
-                log(f"  Failed to archive [{item_id}]: {e}", "ERROR")
-                failed += 1
+                archive_item(args.langfuse_host, auth_header, dataset_name, api_id)
+            archived += 1
+            logical_id = strip_dataset_prefix(api_id, dataset_name)
+            log(f"  Archived [{logical_id}]")
+        except requests.RequestException as e:
+            log(f"  Failed to archive [{strip_dataset_prefix(api_id, dataset_name)}]: {e}", "ERROR")
+            failed += 1
 
     if failed:
         log(f"{failed} operation(s) failed", "WARN")
