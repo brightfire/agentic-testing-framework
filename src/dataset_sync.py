@@ -86,12 +86,19 @@ def parse_eval_yaml(path):
         log("Missing required field 'dataset' in eval.yaml", "ERROR")
         sys.exit(1)
 
-    items = data.get("items", [])
+    # Require 'items' key to be present — omitting it is likely a mistake,
+    # not an intentional empty dataset. Use `items: []` for the latter.
+    if "items" not in data:
+        log("Missing required field 'items' in eval.yaml (use 'items: []' for an empty dataset)", "ERROR")
+        sys.exit(1)
+
+    items = data["items"]
     if not isinstance(items, list):
         log("'items' must be a list", "ERROR")
         sys.exit(1)
 
     parsed = []
+    seen_ids = set()
     for i, item in enumerate(items):
         if not isinstance(item, dict):
             log(f"Item {i} is not a mapping: {item}", "ERROR")
@@ -100,13 +107,32 @@ def parse_eval_yaml(path):
         if not item_id:
             log(f"Item {i} missing required 'id' field", "ERROR")
             sys.exit(1)
-        if not item.get("input"):
-            log(f"Item '{item_id}' missing required 'input' field", "ERROR")
+        item_id_str = str(item_id)
+        if item_id_str in seen_ids:
+            log(f"Duplicate item id '{item_id_str}' (item {i}) — ids must be unique after string conversion", "ERROR")
             sys.exit(1)
+        seen_ids.add(item_id_str)
+
+        input_value = item.get("input")
+        if not input_value:
+            log(f"Item '{item_id_str}' missing required 'input' field", "ERROR")
+            sys.exit(1)
+        if not isinstance(input_value, str):
+            log(f"Item '{item_id_str}' input must be a string, got {type(input_value).__name__}", "ERROR")
+            sys.exit(1)
+
+        expected = item.get("expected_output")
+        if not expected:
+            log(f"Item '{item_id_str}' missing required 'expected_output' field", "ERROR")
+            sys.exit(1)
+        if not isinstance(expected, str):
+            log(f"Item '{item_id_str}' expected_output must be a string, got {type(expected).__name__}", "ERROR")
+            sys.exit(1)
+
         parsed.append({
-            "id": str(item_id),
-            "input": item["input"],
-            "expected_output": item.get("expected_output", ""),
+            "id": item_id_str,
+            "input": input_value,
+            "expected_output": expected,
         })
 
     return dataset_name, parsed
@@ -178,48 +204,18 @@ def archive_item(host, auth_header, dataset_name, item_id):
     return resp.json()
 
 
-def get_dataset_version_timestamp(host, auth_header, dataset_name):
-    """Determine the dataset version timestamp after sync.
+def get_dataset_version_timestamp():
+    """Return the current UTC time as the dataset version timestamp.
 
-    After all upserts/archives settle, we fetch the dataset's items and find
-    the most recent `updatedAt` timestamp. This server-side timestamp is the
-    most accurate version pin — it reflects when Langfuse last processed a
-    write for this dataset.
+    After all upserts and archives settle, use the current UTC time as the
+    version pin. This is guaranteed to postdate all write operations,
+    including archives that may not be reflected in active-item timestamps.
 
-    Falls back to datetime.now(utc) if the API doesn't return timestamps.
+    Previously tried deriving from server-side updatedAt on active items,
+    but that predates archive operations (archived items are excluded from
+    the active-item response), leading to stale version pins.
     """
-    url = f"{host}{API_BASE}/dataset-items"
-    all_items = []
-    page = 1
-
-    while True:
-        params = {"datasetName": dataset_name, "page": page, "limit": 100}
-        resp = requests.get(url, params=params, headers=auth_header, timeout=15)
-        resp.raise_for_status()
-        body = resp.json()
-        all_items.extend(body.get("data", []))
-        meta = body.get("meta", {})
-        if page >= meta.get("totalPages", 1):
-            break
-        page += 1
-
-    latest = None
-    for item in all_items:
-        updated = item.get("updatedAt")
-        if updated:
-            try:
-                ts = datetime.fromisoformat(updated.replace("Z", "+00:00"))
-                if latest is None or ts > latest:
-                    latest = ts
-            except (ValueError, TypeError):
-                continue
-
-    if latest is None:
-        # Fallback: use current time if no updatedAt fields are present
-        latest = datetime.now(timezone.utc)
-        log("Could not extract updatedAt from dataset items, using datetime.now()", "WARN")
-
-    return latest
+    return datetime.now(timezone.utc)
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
@@ -242,17 +238,7 @@ def main():
     )
     args = parser.parse_args()
 
-    # ── Validate credentials ──────────────────────────────────────────────
-    public_key = os.environ.get("LANGFUSE_PUBLIC_KEY")
-    secret_key = os.environ.get("LANGFUSE_SECRET_KEY")
-
-    if not public_key or not secret_key:
-        log("LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY environment variables are required.", "ERROR")
-        sys.exit(1)
-
-    auth_header = make_auth_header(public_key, secret_key)
-
-    # ── Parse eval.yaml ───────────────────────────────────────────────────
+    # ── Parse eval.yaml (no credentials needed for dry-run) ───────────────
     dataset_name, yaml_items = parse_eval_yaml(args.file)
     yaml_ids = {item["id"] for item in yaml_items}
 
@@ -266,6 +252,16 @@ def main():
         log(f"Would upsert {len(yaml_items)} items to dataset '{dataset_name}'")
         log("No API calls made.")
         return
+
+    # ── Validate credentials (after dry-run so offline preview works) ────
+    public_key = os.environ.get("LANGFUSE_PUBLIC_KEY")
+    secret_key = os.environ.get("LANGFUSE_SECRET_KEY")
+
+    if not public_key or not secret_key:
+        log("LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY environment variables are required.", "ERROR")
+        sys.exit(1)
+
+    auth_header = make_auth_header(public_key, secret_key)
 
     # ── Fetch existing items from Langfuse ────────────────────────────────
     log(f"Fetching existing items for dataset '{dataset_name}'...")
@@ -290,9 +286,7 @@ def main():
     if not to_upsert and not to_archive_active:
         log("Nothing to do — dataset is already in sync.", "INFO")
         # Still return a version timestamp for consistency
-        version_ts = get_dataset_version_timestamp(
-            args.langfuse_host, auth_header, dataset_name,
-        )
+        version_ts = get_dataset_version_timestamp()
         print(version_ts.strftime("%Y-%m-%dT%H:%M:%S.%fZ"))
         return
 
@@ -309,15 +303,20 @@ def main():
             failed += 1
 
     # ── Archive removed items ─────────────────────────────────────────────
+    # Skip archiving if any upserts failed — archiving removed items while
+    # new items failed to create could leave the dataset missing both.
     archived = 0
-    for item_id in sorted(to_archive_active):
-        try:
-            archive_item(args.langfuse_host, auth_header, dataset_name, item_id)
-            archived += 1
-            log(f"  Archived [{item_id}]")
-        except requests.RequestException as e:
-            log(f"  Failed to archive [{item_id}]: {e}", "ERROR")
-            failed += 1
+    if failed:
+        log("Skipping archive step due to upsert failures — re-run after fixing errors.", "WARN")
+    else:
+        for item_id in sorted(to_archive_active):
+            try:
+                archive_item(args.langfuse_host, auth_header, dataset_name, item_id)
+                archived += 1
+                log(f"  Archived [{item_id}]")
+            except requests.RequestException as e:
+                log(f"  Failed to archive [{item_id}]: {e}", "ERROR")
+                failed += 1
 
     if failed:
         log(f"{failed} operation(s) failed", "WARN")
@@ -327,9 +326,7 @@ def main():
     if to_upsert or to_archive_active:
         time.sleep(POST_SYNC_SETTLE_SECONDS)
 
-    version_ts = get_dataset_version_timestamp(
-        args.langfuse_host, auth_header, dataset_name,
-    )
+    version_ts = get_dataset_version_timestamp()
 
     # ── Summary ───────────────────────────────────────────────────────────
     log("=== SYNC COMPLETE ===")
