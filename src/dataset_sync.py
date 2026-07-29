@@ -93,6 +93,28 @@ def strip_dataset_prefix(api_id, dataset_name):
     return api_id
 
 
+class UniqueKeyLoader(yaml.SafeLoader):
+    """SafeLoader subclass that rejects duplicate mapping keys.
+
+    yaml.safe_load silently keeps the last value when a key appears twice,
+    which can mask copy-paste errors — e.g. a duplicated `items:` key where
+    the second value is empty would archive the entire dataset.
+    """
+
+    def construct_mapping(self, node, deep=False):
+        seen_keys = set()
+        for key_node, _ in node.value:
+            key = self.construct_object(key_node, deep=deep)
+            if key in seen_keys:
+                raise yaml.constructor.ConstructorError(
+                    None, None,
+                    f"Duplicate key '{key}' found in YAML mapping",
+                    key_node.start_mark,
+                )
+            seen_keys.add(key)
+        return super().construct_mapping(node, deep=deep)
+
+
 def parse_eval_yaml(path):
     """Parse an eval.yaml file and return (dataset_name, items_list).
 
@@ -107,7 +129,7 @@ def parse_eval_yaml(path):
     """
     try:
         with open(path, "r") as f:
-            data = yaml.safe_load(f)
+            data = yaml.load(f, Loader=UniqueKeyLoader)
     except FileNotFoundError:
         log(f"File not found: {path}", "ERROR")
         sys.exit(1)
