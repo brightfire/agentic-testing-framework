@@ -47,6 +47,10 @@ API_BASE = "/api/public"
 # version bump before we read it back. 2s is conservative; 1s usually suffices.
 POST_SYNC_SETTLE_SECONDS = 2
 
+# Known keys for validation warnings
+KNOWN_TOP_LEVEL_KEYS = {"dataset", "items"}
+KNOWN_ITEM_KEYS = {"id", "input", "expected_output"}
+
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -66,6 +70,7 @@ def parse_eval_yaml(path):
 
     items_list is a list of dicts with keys: id, input, expected_output.
     Exits with an error if the file is malformed or missing required fields.
+    Warns (but does not fail) on unknown keys that may indicate typos.
     """
     try:
         with open(path, "r") as f:
@@ -81,11 +86,25 @@ def parse_eval_yaml(path):
         log(f"Expected a YAML mapping at top level, got {type(data).__name__}", "ERROR")
         sys.exit(1)
 
+    # ── Warn on unknown top-level keys ───────────────────────────────────
+    unknown_top = set(data.keys()) - KNOWN_TOP_LEVEL_KEYS
+    if unknown_top:
+        log(f"Unknown top-level key(s): {', '.join(sorted(unknown_top))} — may be a typo or staged field", "WARN")
+
+    # ── Validate dataset name ────────────────────────────────────────────
     dataset_name = data.get("dataset")
     if not dataset_name:
         log("Missing required field 'dataset' in eval.yaml", "ERROR")
         sys.exit(1)
+    if not isinstance(dataset_name, str):
+        log(f"'dataset' must be a string, got {type(dataset_name).__name__}", "ERROR")
+        sys.exit(1)
+    dataset_name = dataset_name.strip()
+    if not dataset_name:
+        log("'dataset' must not be empty or whitespace-only", "ERROR")
+        sys.exit(1)
 
+    # ── Validate items ──────────────────────────────────────────────────
     # Require 'items' key to be present — omitting it is likely a mistake,
     # not an intentional empty dataset. Use `items: []` for the latter.
     if "items" not in data:
@@ -103,34 +122,56 @@ def parse_eval_yaml(path):
         if not isinstance(item, dict):
             log(f"Item {i} is not a mapping: {item}", "ERROR")
             sys.exit(1)
+
+        # Warn on unknown item keys (may indicate typos or staged fields)
+        unknown_keys = set(item.keys()) - KNOWN_ITEM_KEYS
+        if unknown_keys:
+            log(f"Item {i} has unknown key(s): {', '.join(sorted(unknown_keys))} — may be a typo or staged field", "WARN")
+
+        # ── Validate id ─────────────────────────────────────────────────
         item_id = item.get("id")
         if not item_id:
             log(f"Item {i} missing required 'id' field", "ERROR")
             sys.exit(1)
-        item_id_str = str(item_id)
-        if item_id_str in seen_ids:
-            log(f"Duplicate item id '{item_id_str}' (item {i}) — ids must be unique after string conversion", "ERROR")
+        if not isinstance(item_id, str):
+            item_id = str(item_id)
+        item_id = item_id.strip()
+        if not item_id:
+            log(f"Item {i} has empty or whitespace-only 'id'", "ERROR")
             sys.exit(1)
-        seen_ids.add(item_id_str)
+        if item_id in seen_ids:
+            log(f"Duplicate item id '{item_id}' (item {i}) — ids must be unique after string conversion", "ERROR")
+            sys.exit(1)
+        seen_ids.add(item_id)
 
+        # ── Validate input ──────────────────────────────────────────────
         input_value = item.get("input")
-        if not input_value:
-            log(f"Item '{item_id_str}' missing required 'input' field", "ERROR")
+        if input_value is None:
+            log(f"Item '{item_id}' missing required 'input' field", "ERROR")
             sys.exit(1)
         if not isinstance(input_value, str):
-            log(f"Item '{item_id_str}' input must be a string, got {type(input_value).__name__}", "ERROR")
+            log(f"Item '{item_id}' input must be a string, got {type(input_value).__name__}", "ERROR")
+            sys.exit(1)
+        input_value = input_value.strip()
+        if not input_value:
+            log(f"Item '{item_id}' has empty or whitespace-only 'input'", "ERROR")
             sys.exit(1)
 
+        # ── Validate expected_output ────────────────────────────────────
         expected = item.get("expected_output")
-        if not expected:
-            log(f"Item '{item_id_str}' missing required 'expected_output' field", "ERROR")
+        if expected is None:
+            log(f"Item '{item_id}' missing required 'expected_output' field", "ERROR")
             sys.exit(1)
         if not isinstance(expected, str):
-            log(f"Item '{item_id_str}' expected_output must be a string, got {type(expected).__name__}", "ERROR")
+            log(f"Item '{item_id}' expected_output must be a string, got {type(expected).__name__}", "ERROR")
+            sys.exit(1)
+        expected = expected.strip()
+        if not expected:
+            log(f"Item '{item_id}' has empty or whitespace-only 'expected_output'", "ERROR")
             sys.exit(1)
 
         parsed.append({
-            "id": item_id_str,
+            "id": item_id,
             "input": input_value,
             "expected_output": expected,
         })
