@@ -189,14 +189,22 @@ def get_dataset_version_timestamp(host, auth_header, dataset_name):
     Falls back to datetime.now(utc) if the API doesn't return timestamps.
     """
     url = f"{host}{API_BASE}/dataset-items"
-    params = {"datasetName": dataset_name, "limit": 100}
-    resp = requests.get(url, params=params, headers=auth_header, timeout=15)
-    resp.raise_for_status()
-    body = resp.json()
-    data = body.get("data", [])
+    all_items = []
+    page = 1
+
+    while True:
+        params = {"datasetName": dataset_name, "page": page, "limit": 100}
+        resp = requests.get(url, params=params, headers=auth_header, timeout=15)
+        resp.raise_for_status()
+        body = resp.json()
+        all_items.extend(body.get("data", []))
+        meta = body.get("meta", {})
+        if page >= meta.get("totalPages", 1):
+            break
+        page += 1
 
     latest = None
-    for item in data:
+    for item in all_items:
         updated = item.get("updatedAt")
         if updated:
             try:
@@ -266,7 +274,9 @@ def main():
     log(f"Found {len(existing)} existing items in Langfuse")
 
     # ── Determine actions ─────────────────────────────────────────────────
-    to_upsert = yaml_items  # all items from yaml get upserted
+    # Always upsert all yaml items — content-diffing is intentionally skipped
+    # for simplicity. Langfuse handles identical re-upserts gracefully.
+    to_upsert = yaml_items
     to_archive = existing_ids - yaml_ids  # in Langfuse but not in yaml
 
     # Filter out items that are already archived (no need to re-archive)
@@ -283,7 +293,7 @@ def main():
         version_ts = get_dataset_version_timestamp(
             args.langfuse_host, auth_header, dataset_name,
         )
-        print(version_ts.strftime("%Y-%m-%dT%H:%M:%S.%fZ").replace("+00:00", "Z"))
+        print(version_ts.strftime("%Y-%m-%dT%H:%M:%S.%fZ"))
         return
 
     # ── Upsert items ──────────────────────────────────────────────────────
@@ -331,7 +341,7 @@ def main():
 
     # Print the version timestamp as the final line for programmatic capture
     # Format: ISO-8601 UTC (e.g. 2026-07-29T15:51:00.000000Z)
-    print(version_ts.strftime("%Y-%m-%dT%H:%M:%S.%fZ").replace("+00:00", "Z"))
+    print(version_ts.strftime("%Y-%m-%dT%H:%M:%S.%fZ"))
 
     sys.exit(0 if failed == 0 else 1)
 
