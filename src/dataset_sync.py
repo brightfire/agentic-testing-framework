@@ -272,6 +272,10 @@ def try_dry_run_archive_preview(langfuse_host, dataset_name, yaml_ids):
     If credentials are available, fetches existing items from Langfuse and
     reports which ones would be archived. If credentials are absent, skips
     silently — dry-run should work offline without API secrets.
+
+    Note: This performs a read-only GET request when credentials are present.
+    Dry-run never makes write calls, but may make read calls for archive
+    preview. Use --no-preview to skip this entirely.
     """
     public_key = os.environ.get("LANGFUSE_PUBLIC_KEY")
     secret_key = os.environ.get("LANGFUSE_SECRET_KEY")
@@ -316,7 +320,11 @@ def main():
     )
     parser.add_argument(
         "--dry-run", action="store_true",
-        help="Parse and show what would be synced without making API calls",
+        help="Parse and show sync plan without making write calls (read-only GET for archive preview if credentials available)",
+    )
+    parser.add_argument(
+        "--no-preview", action="store_true",
+        help="Skip read-only archive preview in dry-run mode (no API calls at all)",
     )
     args = parser.parse_args()
 
@@ -334,9 +342,13 @@ def main():
         log(f"Would upsert {len(yaml_items)} items to dataset '{dataset_name}'")
 
         # Attempt read-only archive preview if credentials are available
-        try_dry_run_archive_preview(args.langfuse_host, dataset_name, yaml_ids)
+        # and --no-preview was not passed
+        if not args.no_preview:
+            try_dry_run_archive_preview(args.langfuse_host, dataset_name, yaml_ids)
+        else:
+            log("Archive preview skipped (--no-preview)")
 
-        log("No write API calls made.")
+        log("No write calls made.")
         return
 
     # ── Validate credentials (after dry-run so offline preview works) ────

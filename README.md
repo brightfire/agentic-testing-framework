@@ -42,11 +42,15 @@ python src/eval_harness.py \
 # Sync items from an eval.yaml file to a Langfuse dataset
 python src/dataset_sync.py --file skills/linear-create/eval.yaml
 
-# Dry run (parse and show plan without making API calls)
+# Dry run (parse and show sync plan without write calls;
+# makes a read-only GET for archive preview if credentials are available)
 python src/dataset_sync.py --file skills/linear-create/eval.yaml --dry-run
+
+# Dry run with no API calls at all (skip archive preview)
+python src/dataset_sync.py --file skills/linear-create/eval.yaml --dry-run --no-preview
 ```
 
-The script prints a version timestamp (ISO-8601 UTC) as its final output line. Use this with `get_dataset(version=<timestamp>)` to pin experiment runs to the exact dataset state.
+The script prints a version timestamp (ISO-8601 UTC) as its final output line on success. Use this with `get_dataset(version=<timestamp>)` to pin experiment runs to the exact dataset state.
 
 ### Generate a report
 
@@ -99,4 +103,5 @@ python src/eval_report.py --dataset linear-skill-evaluation --per-item
 |------|-------------|
 | `--file` | Path to the eval.yaml file to sync (required) |
 | `--langfuse-host` | Langfuse host URL (default: http://10.18.32.57:3000) |
-| `--dry-run` | Parse and show plan without making API calls |
+| `--dry-run` | Parse and show sync plan without write calls (read-only GET for archive preview if credentials available) |
+| `--no-preview` | Skip read-only archive preview in dry-run mode (no API calls at all) |
