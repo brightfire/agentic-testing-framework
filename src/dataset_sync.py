@@ -444,12 +444,12 @@ def main():
         for api_id in sorted(to_archive_active):
             try:
                 archive_item(args.langfuse_host, auth_header, dataset_name, api_id)
-            archived += 1
-            logical_id = strip_dataset_prefix(api_id, dataset_name)
-            log(f"  Archived [{logical_id}]")
-        except requests.RequestException as e:
-            log(f"  Failed to archive [{strip_dataset_prefix(api_id, dataset_name)}]: {e}", "ERROR")
-            failed += 1
+                archived += 1
+                logical_id = strip_dataset_prefix(api_id, dataset_name)
+                log(f"  Archived [{logical_id}]")
+            except requests.RequestException as e:
+                log(f"  Failed to archive [{strip_dataset_prefix(api_id, dataset_name)}]: {e}", "ERROR")
+                failed += 1
 
     if failed:
         log(f"{failed} operation(s) failed", "WARN")
