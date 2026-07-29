@@ -3,8 +3,9 @@
 Dataset Sync Script — DEV-543
 
 Reads an eval.yaml file (per DEV-321 schema) and syncs its items to a Langfuse
-dataset. Upserts items by id, archives items no longer in the file, and prints
-a version timestamp that pins experiment runs to the exact dataset state.
+dataset. Creates the dataset if it doesn't exist, upserts items by id,
+archives items no longer in the file, and prints a version timestamp that
+pins experiment runs to the exact dataset state.
 
 Usage:
     python src/dataset_sync.py --file skills/linear-create/eval.yaml
@@ -234,6 +235,19 @@ def parse_eval_yaml(path):
     return dataset_name, parsed
 
 
+def ensure_dataset_exists(host, auth_header, dataset_name):
+    """Create the dataset in Langfuse if it doesn't already exist.
+
+    POST /api/public/datasets is idempotent — if the dataset name already
+    exists, it returns the existing dataset. Safe to call before every sync.
+    """
+    url = f"{host}{API_BASE}/datasets"
+    payload = {"name": dataset_name}
+    resp = requests.post(url, json=payload, headers=auth_header, timeout=15)
+    resp.raise_for_status()
+    return resp.json()
+
+
 def fetch_existing_items(host, auth_header, dataset_name):
     """Fetch all dataset items from Langfuse for the given dataset.
 
@@ -413,6 +427,16 @@ def main():
         sys.exit(1)
 
     auth_header = make_auth_header(public_key, secret_key)
+
+    # ── Ensure dataset exists before upserting items ─────────────────────
+    # POST /datasets is idempotent — returns the existing dataset if it
+    # already exists. This prevents upsert failures on first sync.
+    log(f"Ensuring dataset '{dataset_name}' exists...")
+    try:
+        ensure_dataset_exists(args.langfuse_host, auth_header, dataset_name)
+    except requests.RequestException as e:
+        log(f"Failed to create/verify dataset '{dataset_name}': {e}", "ERROR")
+        sys.exit(1)
 
     # ── Upsert items first (no dependency on existing state) ─────────────
     # Upserting before fetching ensures our writes are visible to any
