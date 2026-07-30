@@ -16,13 +16,25 @@ Credentials:
     LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY environment variables.
     Same env config as eval_harness.py and eval_report.py.
 
-eval.yaml schema (DEV-321):
+eval.yaml schema (DEV-321, extended DEV-561):
     dataset: <langfuse-dataset-name>
     description: <optional human-readable description>
     items:
       - id: <unique-string-id>
         input: <prompt text sent to the agent>
-        expected_output: <what a correct response looks like>
+        expected_output: <string OR object>
+
+    # New structured expected_output (object form):
+    items:
+      - id: <unique-string-id>
+        input: <prompt text>
+        expected_output:
+          behavior: <prose description of expected agent behavior>
+          scoring_type: <pass_fail | rubric | similarity | exact_match | custom>
+          scoring_criteria: [<list of criterion strings>]
+          scoring_rules: <prose instructions for the judge LLM>
+
+    # Old flat-string expected_output is still accepted for backward compat.
 
 Output:
     Prints the dataset version timestamp (ISO-8601 UTC) on success.
@@ -52,6 +64,15 @@ POST_SYNC_SETTLE_SECONDS = 2
 # Known keys for validation warnings
 KNOWN_TOP_LEVEL_KEYS = {"dataset", "description", "items"}
 KNOWN_ITEM_KEYS = {"id", "input", "expected_output"}
+
+# Known keys inside a structured expected_output object
+KNOWN_EXPECTED_OUTPUT_KEYS = {"behavior", "scoring_type", "scoring_criteria", "scoring_rules"}
+
+# Required fields inside a structured expected_output object
+REQUIRED_EXPECTED_OUTPUT_KEYS = {"behavior", "scoring_type"}
+
+# scoring_type values that require scoring_criteria
+SCORING_TYPES_REQUIRING_CRITERIA = {"pass_fail"}
 
 # Separator for namespaced Langfuse item IDs. Langfuse dataset item IDs are
 # project-wide unique (see langfuse#2167), so we prefix the API ID with the
@@ -230,11 +251,38 @@ def parse_eval_yaml(path):
         if expected is None:
             log(f"Item '{item_id}' missing required 'expected_output' field", "ERROR")
             sys.exit(1)
-        if not isinstance(expected, str):
-            log(f"Item '{item_id}' expected_output must be a string, got {type(expected).__name__}", "ERROR")
-            sys.exit(1)
-        if not expected.strip():
-            log(f"Item '{item_id}' has empty or whitespace-only 'expected_output'", "ERROR")
+
+        if isinstance(expected, str):
+            # Old flat-string format — backward compatible
+            if not expected.strip():
+                log(f"Item '{item_id}' has empty or whitespace-only 'expected_output'", "ERROR")
+                sys.exit(1)
+            # Preserve original (unstripped) expected_output for upload
+        elif isinstance(expected, dict):
+            # New structured format
+            unknown_eo_keys = set(expected.keys()) - KNOWN_EXPECTED_OUTPUT_KEYS
+            if unknown_eo_keys:
+                log(f"Item '{item_id}' expected_output has unknown key(s): {', '.join(sorted(unknown_eo_keys))} — may be a typo or staged field", "WARN")
+
+            missing_eo = REQUIRED_EXPECTED_OUTPUT_KEYS - set(expected.keys())
+            if missing_eo:
+                log(f"Item '{item_id}' expected_output (object) missing required field(s): {', '.join(sorted(missing_eo))}", "WARN")
+
+            scoring_type = expected.get("scoring_type")
+            if scoring_type and scoring_type in SCORING_TYPES_REQUIRING_CRITERIA:
+                criteria = expected.get("scoring_criteria")
+                if not criteria:
+                    log(f"Item '{item_id}' scoring_type '{scoring_type}' requires 'scoring_criteria' but none found", "WARN")
+                elif not isinstance(criteria, list):
+                    log(f"Item '{item_id}' scoring_criteria must be a list, got {type(criteria).__name__}", "WARN")
+
+            behavior = expected.get("behavior")
+            if behavior is not None and not isinstance(behavior, str):
+                log(f"Item '{item_id}' expected_output.behavior must be a string, got {type(behavior).__name__}", "WARN")
+            if behavior is not None and not behavior.strip():
+                log(f"Item '{item_id}' expected_output.behavior is empty or whitespace-only", "WARN")
+        else:
+            log(f"Item '{item_id}' expected_output must be a string or object, got {type(expected).__name__}", "ERROR")
             sys.exit(1)
         # Preserve original (unstripped) expected_output for upload
 
@@ -295,6 +343,10 @@ def upsert_item(host, auth_header, dataset_name, item):
 
     The API ID is namespaced as `{dataset_name}:{item_id}` to avoid
     project-wide ID collisions (see langfuse#2167).
+
+    expected_output may be a flat string (legacy format) or a dict (new
+    structured schema with behavior, scoring_type, scoring_criteria,
+    scoring_rules). Both are passed through to Langfuse as-is.
     """
     url = f"{host}{API_BASE}/dataset-items"
     api_id = make_api_id(dataset_name, item["id"])

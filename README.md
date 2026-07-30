@@ -36,6 +36,57 @@ python src/eval_harness.py \
   --item-concurrency 3
 ```
 
+### eval.yaml schema
+
+Eval files support two `expected_output` formats:
+
+#### Structured format (recommended)
+
+```yaml
+dataset: linear-create-sample-sync
+description: "Sample eval dataset"
+items:
+  - id: happy-path
+    input: |
+      Propose an issue for the following: the Meta listing import in
+      Clinical Media keeps timing out when we try to sync more than 500
+      listings at once. Do NOT create the issue.
+    expected_output:
+      behavior: |
+        The agent classifies correctly, writes a tight title, uses the Bug
+        description template, checks projects, matches to "Meta Ads
+        Integration", presents confirmation.
+      scoring_type: pass_fail
+      scoring_criteria:
+        - "Correctly classified as a Bug"
+        - "Title is specific and under 80 characters"
+        - "Uses the Bug description template structure"
+        - "Project matched to 'Meta Ads Integration'"
+        - "Confirmation summary presented before creation"
+      scoring_rules: |
+        Score 10 if all criteria pass.
+        Subtract 1.5 for each failed criterion.
+        Truncated responses cap at 3.
+```
+
+Fields:
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `behavior` | yes | Prose description of expected agent behavior |
+| `scoring_type` | yes | How to evaluate (`pass_fail`, `rubric`, `similarity`, `exact_match`, `custom` — only `pass_fail` implemented so far) |
+| `scoring_criteria` | yes for `pass_fail` | List of criterion strings (pass/fail checklist items) |
+| `scoring_rules` | no | Prose instructions for the judge LLM on combining criteria into a final score |
+
+#### Legacy flat-string format (still supported)
+
+```yaml
+items:
+  - id: happy-path
+    input: "Prompt text here"
+    expected_output: "What a correct response looks like"
+```
+
 ### Sync an eval.yaml to Langfuse
 
 ```bash
@@ -50,7 +101,7 @@ python src/dataset_sync.py --file skills/linear-create/eval.yaml --dry-run
 python src/dataset_sync.py --file skills/linear-create/eval.yaml --dry-run --no-preview
 ```
 
-The script prints a version timestamp (ISO-8601 UTC) as its final output line on success. Use this with `get_dataset(version=<timestamp>)` to pin experiment runs to the exact dataset state.
+The script accepts both YAML (`.yaml`) and JSON (`.json`) files. It prints a version timestamp (ISO-8601 UTC) as its final output line on success. Use this with `get_dataset(version=<timestamp>)` to pin experiment runs to the exact dataset state.
 
 ### Generate a report
 
