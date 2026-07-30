@@ -46,9 +46,18 @@ class ExpectedOutput(BaseModel):
     scoring_criteria: list[str] = Field(description="List of yes/no criterion strings")
     scoring_rules: str | None = Field(default=None, description="Prose scoring instructions for the judge LLM")
 
-    @field_validator("behavior", "scoring_rules")
+    @field_validator("behavior")
     @classmethod
-    def must_be_non_empty(cls, v: str) -> str:
+    def behavior_must_be_non_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("must not be empty or whitespace-only")
+        return v
+
+    @field_validator("scoring_rules")
+    @classmethod
+    def scoring_rules_must_be_non_empty(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
         if not v.strip():
             raise ValueError("must not be empty or whitespace-only")
         return v
