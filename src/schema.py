@@ -65,6 +65,8 @@ class ExpectedOutput(BaseModel):
     @field_validator("scoring_criteria")
     @classmethod
     def criteria_must_be_non_empty_strings(cls, v: list[str]) -> list[str]:
+        if not v:
+            raise ValueError("scoring_criteria must contain at least one criterion")
         for i, criterion in enumerate(v):
             if not isinstance(criterion, str):
                 raise ValueError(f"[{i}] must be a string, got {type(criterion).__name__}")
