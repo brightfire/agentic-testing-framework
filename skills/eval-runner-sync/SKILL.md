@@ -13,12 +13,7 @@ manifest files needed by the execute phase for the 4-variant test matrix.
 
 ## When This Runs
 
-Whenever an `eval.yaml` file changes and needs to be synced to Langfuse. This includes:
-- PRs that modify `eval.yaml`
-- Direct commits to any branch
-- Manual sync requests
-
-If no `eval.yaml` was modified, sync is not needed — the existing dataset is used as-is.
+Always. Sync runs to ensure Langfuse has a current version of the eval dataset, regardless of whether `eval.yaml` changed.
 
 ## Inputs
 
@@ -32,8 +27,7 @@ If no `eval.yaml` was modified, sync is not needed — the existing dataset is u
 
 ### 1. Identify the eval.yaml to sync
 
-Determine which `eval.yaml` file(s) changed and the before/after git refs. If
-no `eval.yaml` was modified, skip sync entirely — report "no sync needed" and exit.
+Determine which `eval.yaml` file(s) to sync and the before/after git refs.
 
 ### 2. Extract both versions of eval.yaml
 
