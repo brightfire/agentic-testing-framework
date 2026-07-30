@@ -35,11 +35,14 @@ Use `git show` to extract each version to a temp file. This avoids modifying
 the working tree and works regardless of current checkout state.
 
 ```bash
+# Create a unique temp directory for this sync run
+TMPDIR=$(mktemp -d /tmp/eval-sync-XXXXXX)
+
 # Before version (from base branch, typically main)
-git show <base-ref>:<eval-yaml-path> > /tmp/eval-before.yaml
+git show <base-ref>:<eval-yaml-path> > "$TMPDIR/eval-before.yaml"
 
 # After version (from PR head branch)
-git show <pr-head-ref>:<eval-yaml-path> > /tmp/eval-after.yaml
+git show <pr-head-ref>:<eval-yaml-path> > "$TMPDIR/eval-after.yaml"
 ```
 
 **Edge case — new eval.yaml (no before version):**
@@ -65,13 +68,13 @@ concurrent syncs to the same dataset can interleave item timestamps.
 ```bash
 # Sync the "before" version → writes manifest with per-item timestamps
 python ~/repos/agentic-testing-framework/src/dataset_sync.py \
-  --file /tmp/eval-before.yaml \
-  --output-manifest /tmp/manifest-before.json
+  --file "$TMPDIR/eval-before.yaml" \
+  --output-manifest "$TMPDIR/manifest-before.json"
 
 # Sync the "after" version → writes manifest with per-item timestamps
 python ~/repos/agentic-testing-framework/src/dataset_sync.py \
-  --file /tmp/eval-after.yaml \
-  --output-manifest /tmp/manifest-after.json
+  --file "$TMPDIR/eval-after.yaml" \
+  --output-manifest "$TMPDIR/manifest-after.json"
 ```
 
 The `--output-manifest` flag writes a JSON file containing:
@@ -92,8 +95,8 @@ Read the sync script's stdout/stderr output for item-level operation counts:
 
 ```bash
 # Verify manifests were written
-cat /tmp/manifest-before.json | python -m json.tool | head -5
-cat /tmp/manifest-after.json | python -m json.tool | head -5
+cat "$TMPDIR/manifest-before.json" | python -m json.tool | head -5
+cat "$TMPDIR/manifest-after.json" | python -m json.tool | head -5
 ```
 
 If either sync exited non-zero, check the logs for failed items and flag the
@@ -102,7 +105,7 @@ error before proceeding to the execute phase.
 ### 5. Clean up temp files
 
 ```bash
-rm -f /tmp/eval-before.yaml /tmp/eval-after.yaml
+rm -f "$TMPDIR/eval-before.yaml" "$TMPDIR/eval-after.yaml"
 # Keep manifests — they are passed to the execute phase
 ```
 
@@ -112,8 +115,8 @@ Return a structured result for the execute phase:
 
 ```
 dataset: <langfuse-dataset-name from eval.yaml>
-before_manifest: /tmp/manifest-before.json  (or null if new eval.yaml)
-after_manifest: /tmp/manifest-after.json    (or null if deleted)
+before_manifest: $TMPDIR/manifest-before.json  (or null if new eval.yaml)
+after_manifest: $TMPDIR/manifest-after.json    (or null if deleted)
 skill: <skill-name>
 eval_yaml_path: <path within repo>
 ```
