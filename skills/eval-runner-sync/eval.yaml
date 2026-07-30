@@ -1,12 +1,12 @@
 dataset: eval-runner-sync
-description: "Eval dataset for the eval-runner-sync skill — tests eval.yaml change detection, version extraction, sync sequencing, and edge case handling."
+description: "Eval dataset for the eval-runner-sync skill — tests eval.yaml change detection, version extraction, sync sequencing, and edge case handling within the agentic-testing-framework repo."
 
 items:
   - id: happy-path-sync
     input: |
-      You are reviewing a PR (#42) in brightfire/gpt-skills that modifies
-      skills/linear-create/eval.yaml. The PR head branch is
-      feature/improve-linear-create and the base branch is main.
+      You are reviewing PR #7 in brightfire/agentic-testing-framework. The PR
+      modifies skills/eval-runner-sync/eval.yaml on branch
+      claw/vash/update-eval-items. The base branch is main.
 
       Read the eval-runner-sync skill from available_skills, then perform
       the sync phase for this PR. Report the structured output.
@@ -35,8 +35,9 @@ items:
 
   - id: no-eval-yaml-changed
     input: |
-      You are reviewing a PR (#43) in brightfire/gpt-skills that only modifies
-      skills/linear-create/SKILL.md. No eval.yaml file was changed.
+      You are reviewing PR #8 in brightfire/agentic-testing-framework. The PR
+      only modifies skills/eval-runner-sync/SKILL.md — no eval.yaml file was
+      changed. The base branch is main.
 
       Read the eval-runner-sync skill from available_skills, then perform
       the sync phase for this PR. Report the structured output.
@@ -59,9 +60,10 @@ items:
 
   - id: new-eval-yaml-edge-case
     input: |
-      You are reviewing a PR (#44) in brightfire/gpt-skills that adds a new
-      file: skills/c2-offers/eval.yaml. This file does not exist on the base
-      branch (main). The PR head branch is feature/add-c2-eval.
+      You are reviewing PR #9 in brightfire/agentic-testing-framework. The PR
+      adds a new file: skills/eval-runner-sync/eval.yaml. This file does not
+      exist on the base branch (main). The PR head branch is
+      claw/vash/add-eval-yaml.
 
       Read the eval-runner-sync skill from available_skills, then perform
       the sync phase for this PR. Report the structured output.
@@ -89,8 +91,9 @@ items:
 
   - id: sync-failure-handling
     input: |
-      You are performing the eval-runner-sync phase for a PR that modifies
-      skills/linear-create/eval.yaml. You have extracted both versions and
+      You are performing the eval-runner-sync phase for PR #7 in
+      brightfire/agentic-testing-framework, which modifies
+      skills/eval-runner-sync/eval.yaml. You have extracted both versions and
       started the sync. The "before" version sync (T1) failed —
       dataset_sync.py exited with code 1 and the log shows
       "LANGFUSE_SECRET_KEY not set".
