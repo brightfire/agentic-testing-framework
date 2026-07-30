@@ -4,7 +4,9 @@ Schema definition for eval dataset files used by the agentic-testing-framework. 
 
 ## File Format
 
-Eval files are JSON or YAML, containing a dataset name, optional description, and a list of items.
+Eval files are YAML, containing a dataset name, optional description, and a list of items.
+
+> **Note:** JSON is a subset of YAML, so `yaml.safe_load` (used by `dataset_sync.py`) will technically parse `.json` files too. However, the script and tooling are designed around YAML — use YAML for consistency and to take advantage of multiline block scalars (`|`) for readable prose fields.
 
 ```json
 {
