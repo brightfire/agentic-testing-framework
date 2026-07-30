@@ -8,8 +8,7 @@ metadata:
 
 # Eval Runner — Sync Phase
 
-First phase of the eval runner. Syncs eval definitions to Langfuse and writes
-manifest files needed by the execute phase for the 4-variant test matrix.
+First phase of the eval runner. Syncs eval definitions to Langfuse using `dataset_sync.py` with the `--output-manifest` flag, producing manifest files needed by the execute phase for the 4-variant test matrix.
 
 ## When This Runs
 
@@ -129,7 +128,6 @@ to the execute phase for the 4-variant test matrix:
 ## Gotchas
 
 - **Script location:** `~/repos/agentic-testing-framework/src/dataset_sync.py` — this is in the agentic-testing-framework repo, not in the skill directory.
-- **Manifest output:** Use `--output-manifest <path>` to write the JSON manifest. Do not parse stdout for timestamps — the script no longer outputs a version timestamp to stdout.
 - **Sequential sync:** Run before and after syncs sequentially, not in parallel. Concurrent syncs to the same dataset can interleave item timestamps.
 - **Same dataset name:** Both before and after versions should reference the same Langfuse dataset name (the `dataset:` field in eval.yaml). If they differ, flag it — that's unusual and may indicate a dataset rename.
 - **Env vars:** The sync script will exit 1 if `LANGFUSE_PUBLIC_KEY` or `LANGFUSE_SECRET_KEY` are not set. Verify these are available before starting.
