@@ -4,8 +4,9 @@ Dataset Sync Script — DEV-543
 
 Reads an eval.yaml file (per DEV-321 schema) and syncs its items to a Langfuse
 dataset. Creates the dataset if it doesn't exist, upserts items by id,
-archives items no longer in the file, and prints a version timestamp that
-pins experiment runs to the exact dataset state.
+archives items no longer in the file. Optionally writes a per-item
+manifest file (with timestamps) that can be passed to the eval harness
+to pin the exact dataset state for experiment runs.
 
 Usage:
     python src/dataset_sync.py --file skills/linear-create/eval.yaml
@@ -20,13 +21,14 @@ Schema validation is handled by src/schema.py — see that file's docstring
 for the full eval dataset schema documentation.
 
 Output:
-    Prints the dataset version timestamp (ISO-8601 UTC) on success.
-    The eval harness can use this with get_dataset(version=<timestamp>)
-    to run experiments against the exact dataset state from this sync.
+    Logs sync progress to stdout. With --output-manifest <path>, writes a
+    JSON manifest containing per-item timestamps (from Langfuse server
+    responses) that can be passed to the eval harness for version pinning.
 """
 
 import argparse
 import base64
+import json
 import os
 import sys
 from datetime import datetime, timezone
@@ -251,6 +253,31 @@ def get_server_version_timestamp(date_header, response_body=None):
     return datetime.now(timezone.utc)
 
 
+def write_manifest(output_path, dataset_name, manifest_items, sync_start):
+    """Write the sync manifest JSON file if --output-manifest was provided.
+
+    Returns True on success or if no output path was given, False on write
+    failure. Callers should check the return value when --output-manifest was
+    explicitly requested and exit non-zero on failure.
+    """
+    if not output_path:
+        return True
+    manifest = {
+        "dataset": dataset_name,
+        "synced_at": sync_start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "items": manifest_items,
+    }
+    try:
+        with open(output_path, "w") as f:
+            json.dump(manifest, f, indent=2)
+            f.write("\n")
+        log(f"Manifest written to {output_path}")
+        return True
+    except OSError as e:
+        log(f"Failed to write manifest to {output_path}: {e}", "ERROR")
+        return False
+
+
 def try_dry_run_archive_preview(langfuse_host, auth_header, dataset_name, yaml_ids):
     """Fetch existing items from Langfuse to preview archive candidates.
 
@@ -297,6 +324,10 @@ def main():
         "--dry-run", action="store_true",
         help="Parse and show sync plan without making write calls",
     )
+    parser.add_argument(
+        "--output-manifest", default=None, metavar="PATH",
+        help="Write a JSON manifest file at this path after sync (per-item timestamps)",
+    )
     args = parser.parse_args()
 
     # ── Parse and validate eval.yaml (no credentials needed) ──────────────
@@ -338,20 +369,24 @@ def main():
     # ── Upsert items first (no dependency on existing state) ─────────────
     upserted = 0
     failed = 0
-    latest_server_date = None
-    latest_response_body = None
+    manifest_items = []
+    sync_start = datetime.now(timezone.utc)
     for item in yaml_items:
+        api_id = make_api_id(dataset_name, item["id"])
         try:
             resp = upsert_item(args.langfuse_host, auth_header, dataset_name, item)
             date_str = resp.headers.get("Date")
-            if date_str:
-                latest_server_date = date_str
             try:
-                latest_response_body = resp.json()
+                resp_body = resp.json()
             except (ValueError, TypeError):
-                latest_response_body = None
+                resp_body = None
+            item_ts = get_server_version_timestamp(date_str, resp_body)
             upserted += 1
             log(f"  Upserted [{item['id']}]")
+            manifest_items.append({
+                "id": api_id,
+                "timestamp": item_ts.isoformat(),
+            })
         except requests.RequestException as e:
             log(f"  Failed to upsert [{item['id']}]: {e}", "ERROR")
             failed += 1
@@ -372,11 +407,12 @@ def main():
 
     if not to_archive_active:
         if failed:
-            log(f"{failed} upsert(s) failed — version pin not emitted. Fix errors and re-run.", "WARN")
+            log(f"{failed} upsert(s) failed — fix errors and re-run.", "WARN")
+            write_manifest(args.output_manifest, dataset_name, manifest_items, sync_start)
             sys.exit(1)
         log("Nothing to archive — dataset is in sync.", "INFO")
-        version_ts = get_server_version_timestamp(latest_server_date, latest_response_body)
-        print(version_ts.strftime("%Y-%m-%dT%H:%M:%S.%fZ"))
+        if not write_manifest(args.output_manifest, dataset_name, manifest_items, sync_start):
+            sys.exit(1)
         return
 
     log(f"Plan: archive {len(to_archive_active)} items (from post-upsert snapshot)")
@@ -390,12 +426,11 @@ def main():
             try:
                 resp = archive_item(args.langfuse_host, auth_header, dataset_name, api_id)
                 date_str = resp.headers.get("Date")
-                if date_str:
-                    latest_server_date = date_str
                 try:
-                    latest_response_body = resp.json()
+                    resp_body = resp.json()
                 except (ValueError, TypeError):
-                    latest_response_body = None
+                    resp_body = None
+                item_ts = get_server_version_timestamp(date_str, resp_body)
                 archived += 1
                 logical_id = strip_dataset_prefix(api_id, dataset_name)
                 log(f"  Archived [{logical_id}]")
@@ -406,21 +441,15 @@ def main():
     if failed:
         log(f"{failed} operation(s) failed", "WARN")
 
-    # ── Capture version timestamp from server ────────────────────────
-    version_ts = get_server_version_timestamp(latest_server_date, latest_response_body)
-
     # ── Summary ───────────────────────────────────────────────────────────
     log("=== SYNC COMPLETE ===")
     log(f"Dataset:   {dataset_name}")
     log(f"Upserted:  {upserted}")
     log(f"Archived:  {archived}")
     log(f"Failed:    {failed}")
-    log(f"Version:   {version_ts.isoformat()}")
 
-    if failed == 0:
-        print(version_ts.strftime("%Y-%m-%dT%H:%M:%S.%fZ"))
-    else:
-        log("Version pin not emitted due to sync failures — fix errors and re-run.", "WARN")
+    if not write_manifest(args.output_manifest, dataset_name, manifest_items, sync_start):
+        sys.exit(1)
 
     sys.exit(0 if failed == 0 else 1)
 
