@@ -378,17 +378,11 @@ def main():
             log(f"  Upserted [{item['id']}]")
             manifest_items.append({
                 "id": api_id,
-                "status": "upserted",
                 "timestamp": item_ts.isoformat(),
             })
         except requests.RequestException as e:
             log(f"  Failed to upsert [{item['id']}]: {e}", "ERROR")
             failed += 1
-            manifest_items.append({
-                "id": api_id,
-                "status": "failed",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-            })
 
     # ── Fetch existing items AFTER upserts (fresh snapshot) ──────────────
     log(f"Fetching existing items for dataset '{dataset_name}'...")
@@ -432,19 +426,9 @@ def main():
                 archived += 1
                 logical_id = strip_dataset_prefix(api_id, dataset_name)
                 log(f"  Archived [{logical_id}]")
-                manifest_items.append({
-                    "id": api_id,
-                    "status": "archived",
-                    "timestamp": item_ts.isoformat(),
-                })
             except requests.RequestException as e:
                 log(f"  Failed to archive [{strip_dataset_prefix(api_id, dataset_name)}]: {e}", "ERROR")
                 failed += 1
-                manifest_items.append({
-                    "id": api_id,
-                    "status": "failed",
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                })
 
     if failed:
         log(f"{failed} operation(s) failed", "WARN")
