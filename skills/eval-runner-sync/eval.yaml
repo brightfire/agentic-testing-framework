@@ -1,0 +1,118 @@
+dataset: eval-runner-sync
+description: "Eval dataset for the eval-runner-sync skill — tests eval.yaml change detection, version extraction, sync sequencing, and edge case handling."
+
+items:
+  - id: happy-path-sync
+    input: |
+      You are reviewing a PR (#42) in example-org/skill-repo that modifies
+      skills/linear-create/eval.yaml. The PR head branch is
+      feature/improve-linear-create and the base branch is main.
+
+      Read the eval-runner-sync skill from available_skills, then perform
+      the sync phase for this PR. Report the structured output.
+
+      Do NOT actually run dataset_sync.py — simulate the sync and report
+      what you would do and what output structure you would produce.
+    expected_output:
+      behavior: |
+        The agent reads the eval-runner-sync skill, detects that eval.yaml
+        was modified, extracts both versions via git show, describes
+        running dataset_sync.py sequentially (before then after), and
+        produces the structured output format with dataset, T1, T2, skill,
+        and eval_yaml_path fields.
+      scoring_type: pass_fail
+      scoring_criteria:
+        - "Detects eval.yaml change in the PR diff"
+        - "Describes extracting before version from base ref (main) via git show"
+        - "Describes extracting after version from PR head ref via git show"
+        - "States that syncs must run sequentially (before then after)"
+        - "Output includes dataset field"
+        - "Output includes T1 and T2 timestamp fields (or null for edge cases)"
+        - "Output includes skill name and eval_yaml_path"
+      scoring_rules: |
+        Score 10 * (passed criteria / total criteria).
+        Truncated responses cap at 3.
+
+  - id: no-eval-yaml-changed
+    input: |
+      You are reviewing a PR (#43) in example-org/skill-repo that only modifies
+      skills/linear-create/SKILL.md. No eval.yaml file was changed.
+
+      Read the eval-runner-sync skill from available_skills, then perform
+      the sync phase for this PR. Report the structured output.
+
+      Do NOT actually run dataset_sync.py.
+    expected_output:
+      behavior: |
+        The agent reads the eval-runner-sync skill, detects that no eval.yaml
+        was modified in the PR, and reports "no sync needed" — skipping the
+        sync entirely per the skill's skip conditions.
+      scoring_type: pass_fail
+      scoring_criteria:
+        - "Correctly identifies that no eval.yaml was changed in the PR"
+        - "Reports 'no sync needed' or equivalent"
+        - "Does not attempt to run dataset_sync.py or extract versions"
+        - "References having read the eval-runner-sync skill"
+      scoring_rules: |
+        Score 10 * (passed criteria / total criteria).
+        Truncated responses cap at 3.
+
+  - id: new-eval-yaml-edge-case
+    input: |
+      You are reviewing a PR (#44) in example-org/skill-repo that adds a new
+      file: skills/c2-offers/eval.yaml. This file does not exist on the base
+      branch (main). The PR head branch is feature/add-c2-eval.
+
+      Read the eval-runner-sync skill from available_skills, then perform
+      the sync phase for this PR. Report the structured output.
+
+      Do NOT actually run dataset_sync.py — simulate and report what you
+      would do.
+    expected_output:
+      behavior: |
+        The agent reads the eval-runner-sync skill, detects the new eval.yaml,
+        attempts to extract the before version from main and finds it doesn't
+        exist. It correctly handles this as a new eval definition: T1 is null,
+        only the "after" version (T2) is synced. The output structure reflects
+        T1: null with T2 having a timestamp.
+      scoring_type: pass_fail
+      scoring_criteria:
+        - "Detects eval.yaml change in the PR"
+        - "Recognizes the before version doesn't exist on base (new eval.yaml)"
+        - "Sets T1 to null"
+        - "Only syncs the after version (T2)"
+        - "Does not treat the missing before version as an error"
+        - "Output structure includes dataset, T1 (null), T2, skill, eval_yaml_path"
+      scoring_rules: |
+        Score 10 * (passed criteria / total criteria).
+        Truncated responses cap at 3.
+
+  - id: sync-failure-handling
+    input: |
+      You are performing the eval-runner-sync phase for a PR that modifies
+      skills/linear-create/eval.yaml. You have extracted both versions and
+      started the sync. The "before" version sync (T1) failed —
+      dataset_sync.py exited with code 1 and the log shows
+      "LANGFUSE_SECRET_KEY not set".
+
+      Read the eval-runner-sync skill from available_skills, then report
+      how you handle this failure and what you would do next.
+
+      Do NOT actually run dataset_sync.py.
+    expected_output:
+      behavior: |
+        The agent reads the eval-runner-sync skill, recognizes the sync
+        failure, and aborts the entire sync phase. It does NOT attempt the
+        "after" (T2) sync. It reports the error, includes the sync log
+        contents, and explains that both timestamps are needed for a valid
+        comparison.
+      scoring_type: pass_fail
+      scoring_criteria:
+        - "Recognizes the sync failure (exit code 1)"
+        - "Aborts the sync phase — does not attempt T2 sync"
+        - "Reports the error and sync log contents"
+        - "Explains that both T1 and T2 are needed for the comparison"
+        - "References having read the eval-runner-sync skill"
+      scoring_rules: |
+        Score 10 * (passed criteria / total criteria).
+        Truncated responses cap at 3.
