@@ -1,6 +1,6 @@
 ---
 name: eval-runner-sync
-description: "Sync phase of the eval runner. Syncs before/after eval.yaml versions to Langfuse and writes manifest files for the execute phase. PR-triggered only — use when a PR modifies eval.yaml in a skill directory."
+description: "Sync phase of the eval runner. Syncs eval.yaml versions to Langfuse and writes manifest files for the execute phase. Use when eval.yaml changes and needs to be synced to Langfuse datasets."
 metadata:
   author: brightfire
   version: "1.1"
@@ -13,28 +13,27 @@ manifest files needed by the execute phase for the 4-variant test matrix.
 
 ## When This Runs
 
-- **Trigger:** PR that includes changes to any `eval.yaml` file in a skill directory
-- **Skip if:** PR only changes SKILL.md or other non-eval files — existing dataset is used as-is
-- **Skip if:** Slack-triggered tests (model A/B only — no skill or eval changes, sync never needed)
+Whenever an `eval.yaml` file changes and needs to be synced to Langfuse. This includes:
+- PRs that modify `eval.yaml`
+- Direct commits to any branch
+- Manual sync requests
+
+If no `eval.yaml` was modified, sync is not needed — the existing dataset is used as-is.
 
 ## Inputs
 
 | Input | Source | Example |
 |-------|--------|---------|
-| Skill name | PR diff (directory containing modified eval.yaml) | `linear-create` |
-| PR head ref | PR metadata | `feature/improve-linear-create` |
-| Base ref | PR metadata (typically `main`) | `main` |
 | eval.yaml path | Relative path within the repo | `skills/linear-create/eval.yaml` |
+| Before ref | Git ref for the previous version (typically `main`) | `main` |
+| After ref | Git ref for the new version (PR branch, commit, etc.) | `feature/improve-linear-create` |
 
 ## Procedure
 
-### 1. Detect eval.yaml changes
+### 1. Identify the eval.yaml to sync
 
-Examine the PR diff for changes to any file named `eval.yaml`. If no eval.yaml
-was modified, skip sync entirely — report "no sync needed" and exit.
-
-Use `gh pr diff <PR-number> --name-only` or equivalent to list changed files,
-then filter for `eval.yaml`.
+Determine which `eval.yaml` file(s) changed and the before/after git refs. If
+no `eval.yaml` was modified, skip sync entirely — report "no sync needed" and exit.
 
 ### 2. Extract both versions of eval.yaml
 
