@@ -44,7 +44,7 @@ class ExpectedOutput(BaseModel):
     behavior: str = Field(description="Prose description of expected agent behavior")
     scoring_type: Literal["pass_fail"] = Field(description="How criteria are evaluated")
     scoring_criteria: list[str] = Field(description="List of yes/no criterion strings")
-    scoring_rules: str | None = Field(default=None, description="Prose scoring instructions for the judge LLM")
+    scoring_rules: str = Field(description="Prose scoring instructions for the judge LLM")
 
     @field_validator("behavior")
     @classmethod
@@ -55,9 +55,7 @@ class ExpectedOutput(BaseModel):
 
     @field_validator("scoring_rules")
     @classmethod
-    def scoring_rules_must_be_non_empty(cls, v: str | None) -> str | None:
-        if v is None:
-            return None
+    def scoring_rules_must_be_non_empty(cls, v: str) -> str:
         if not v.strip():
             raise ValueError("must not be empty or whitespace-only")
         return v
