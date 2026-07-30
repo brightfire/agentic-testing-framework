@@ -6,14 +6,10 @@ Schema definition for eval dataset files used by the agentic-testing-framework. 
 
 Eval files are YAML, containing a dataset name, optional description, and a list of items.
 
-> **Note:** JSON is a subset of YAML, so `yaml.safe_load` (used by `dataset_sync.py`) will technically parse `.json` files too. However, the script and tooling are designed around YAML — use YAML for consistency and to take advantage of multiline block scalars (`|`) for readable prose fields.
-
-```json
-{
-  "dataset": "linear-create-sample-sync",
-  "description": "Sample eval dataset for testing linear-create skill.",
-  "items": [...]
-}
+```yaml
+dataset: linear-create-sample-sync
+description: "Sample eval dataset for testing linear-create skill."
+items: [...]
 ```
 
 | Field | Type | Required | Description |
@@ -28,12 +24,10 @@ Eval files are YAML, containing a dataset name, optional description, and a list
 
 Each item represents a single test case — one prompt to send to the agent under test, with the expected behavior and scoring rules to evaluate the response.
 
-```json
-{
-  "id": "happy-path",
-  "input": "Propose an issue for the following: ...",
-  "expected_output": { ... }
-}
+```yaml
+- id: happy-path
+  input: "Propose an issue for the following: ..."
+  expected_output: { ... }
 ```
 
 | Field | Type | Required | Description |
@@ -48,16 +42,16 @@ Each item represents a single test case — one prompt to send to the agent unde
 
 The `expected_output` object is the core of the eval definition. It tells the harness what the agent should have done and provides explicit rules for scoring so results are reproducible across runs.
 
-```json
-{
-  "behavior": "The agent classifies correctly, writes a tight title...",
-  "scoring_type": "pass_fail",
-  "scoring_criteria": [
-    "Correctly classified as a Bug",
-    "Title is specific and under 80 characters"
-  ],
-  "scoring_rules": "Score 10 * (passed criteria / total criteria).\nTruncated responses cap at 3."
-}
+```yaml
+expected_output:
+  behavior: "The agent classifies correctly, writes a tight title..."
+  scoring_type: pass_fail
+  scoring_criteria:
+    - "Correctly classified as a Bug"
+    - "Title is specific and under 80 characters"
+  scoring_rules: |
+    Score 10 * (passed criteria / total criteria).
+    Truncated responses cap at 3.
 ```
 
 | Field | Type | Required | Description |
@@ -94,16 +88,14 @@ Each criterion is evaluated as a yes/no question. The judge LLM receives the lis
 
 This is the most common scoring type for skill evals.
 
-```json
-{
-  "scoring_type": "pass_fail",
-  "scoring_criteria": [
-    "Correctly classified as a Bug",
-    "Title is specific and under 80 characters",
-    "Uses the Bug description template structure"
-  ],
-  "scoring_rules": "Score 10 * (passed criteria / total criteria)."
-}
+```yaml
+expected_output:
+  scoring_type: pass_fail
+  scoring_criteria:
+    - "Correctly classified as a Bug"
+    - "Title is specific and under 80 characters"
+    - "Uses the Bug description template structure"
+  scoring_rules: "Score 10 * (passed criteria / total criteria)."
 ```
 
 ### Future scoring types
@@ -126,20 +118,18 @@ New types are added by the harness implementing a new judge prompt template for 
 
 By default, all criteria in an item use the item-level `scoring_type`. Individual criteria can override this by providing an object instead of a string:
 
-```json
-{
-  "scoring_type": "pass_fail",
-  "scoring_criteria": [
-    "Correctly classified as a Bug",
-    "Title is specific and under 80 characters",
-    {
-      "scoring_type": "rubric",
-      "description": "Description quality is clear and actionable",
-      "scale": [1, 2, 3, 4, 5]
-    }
-  ],
-  "scoring_rules": "Score 10 * (passed criteria / total criteria). Rubric criterion weighted equally with pass/fail criteria."
-}
+```yaml
+expected_output:
+  scoring_type: pass_fail
+  scoring_criteria:
+    - "Correctly classified as a Bug"
+    - "Title is specific and under 80 characters"
+    - scoring_type: rubric
+      description: "Description quality is clear and actionable"
+      scale: [1, 2, 3, 4, 5]
+  scoring_rules: |
+    Score 10 * (passed criteria / total criteria).
+    Rubric criterion weighted equally with pass/fail criteria.
 ```
 
 In this example, the first two criteria are evaluated as yes/no. The third is evaluated on a 1-5 rubric scale. The `scoring_rules` prose tells the judge LLM how to combine all three into a final score.
@@ -153,26 +143,21 @@ The harness detects per-criterion overrides by checking whether a criterion is a
 The harness and `dataset_sync.py` accept both formats:
 
 **Old format (flat strings):**
-```json
-{
-  "id": "happy-path",
-  "input": "Propose an issue for...",
-  "expected_output": "The agent classifies correctly. Score 10 if all pass..."
-}
+```yaml
+- id: happy-path
+  input: "Propose an issue for..."
+  expected_output: "The agent classifies correctly. Score 10 if all pass..."
 ```
 
 **New format (structured objects):**
-```json
-{
-  "id": "happy-path",
-  "input": "Propose an issue for...",
-  "expected_output": {
-    "behavior": "The agent classifies correctly...",
-    "scoring_type": "pass_fail",
-    "scoring_criteria": [...],
-    "scoring_rules": "Score 10 if all pass..."
-  }
-}
+```yaml
+- id: happy-path
+  input: "Propose an issue for..."
+  expected_output:
+    behavior: "The agent classifies correctly..."
+    scoring_type: pass_fail
+    scoring_criteria: [...]
+    scoring_rules: "Score 10 * (passed criteria / total criteria)."
 ```
 
 When `expected_output` is a string, the harness passes it verbatim to the judge LLM. When it's an object, the harness assembles the judge prompt from the structured fields. Both formats can coexist in the same dataset.
