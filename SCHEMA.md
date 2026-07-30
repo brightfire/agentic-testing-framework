@@ -56,9 +56,9 @@ expected_output:
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `behavior` | string | Yes (structured) | Prose description of what the agent should have done. Provides context to the judge LLM — not parsed programmatically. |
-| `scoring_type` | string | Yes (structured) | How criteria are evaluated. See [Scoring Types](#scoring-types). |
-| `scoring_criteria` | array | Depends on type | List of criteria for evaluation. For `pass_fail`, each entry is a string (a yes/no question). Can also be an object with a `scoring_type` override — see [Per-Criterion Overrides](#per-criterion-overrides). |
+| `behavior` | string | Yes | Prose description of what the agent should have done. Provides context to the judge LLM — not parsed programmatically. |
+| `scoring_type` | string | Yes | How criteria are evaluated. Currently only `pass_fail` is supported. |
+| `scoring_criteria` | array | Yes | List of criteria for evaluation. Each entry is a string (a yes/no question). |
 | `scoring_rules` | string | No | Prose instructions for how to combine criterion results into a final score. Passed **verbatim** to the judge LLM. The harness does not interpret this field — it just slots it into the judge prompt template. This is what keeps scoring reproducible across runs. |
 
 ### Why `scoring_rules` is prose
@@ -82,11 +82,9 @@ This formula self-adjusts to any number of criteria — no need to update scorin
 
 The `scoring_type` field tells the harness how to evaluate each criterion. The harness reads this field first, then knows which other fields to expect and how to build the judge LLM's prompt.
 
-### `pass_fail` (default)
+### `pass_fail` (current, only supported type)
 
 Each criterion is evaluated as a yes/no question. The judge LLM receives the list of criteria and the `scoring_rules`, evaluates the agent's response against each criterion, and produces a final score.
-
-This is the most common scoring type for skill evals.
 
 ```yaml
 expected_output:
@@ -98,43 +96,7 @@ expected_output:
   scoring_rules: "Score 10 * (passed criteria / total criteria)."
 ```
 
-### Future scoring types
-
-The schema is designed to accommodate additional scoring types without structural changes:
-
-| Type | Description | Criteria format |
-|------|-------------|-----------------|
-| `pass_fail` | Yes/no checklist (current) | List of strings |
-| `rubric` | Judge assigns a score from a defined range | List of strings as qualitative descriptors |
-| `similarity` | Score based on semantic/string similarity to `behavior` | No criteria needed |
-| `exact_match` | Deterministic check — output must match `behavior` exactly | No criteria needed |
-| `custom` | Evaluator code handles it | Passthrough — harness doesn't interpret |
-
-New types are added by the harness implementing a new judge prompt template for that type. The schema doesn't need to change.
-
----
-
-## Per-Criterion Overrides
-
-By default, all criteria in an item use the item-level `scoring_type`. Individual criteria can override this by providing an object instead of a string:
-
-```yaml
-expected_output:
-  scoring_type: pass_fail
-  scoring_criteria:
-    - "Correctly classified as a Bug"
-    - "Title is specific and under 80 characters"
-    - scoring_type: rubric
-      description: "Description quality is clear and actionable"
-      scale: [1, 2, 3, 4, 5]
-  scoring_rules: |
-    Score 10 * (passed criteria / total criteria).
-    Rubric criterion weighted equally with pass/fail criteria.
-```
-
-In this example, the first two criteria are evaluated as yes/no. The third is evaluated on a 1-5 rubric scale. The `scoring_rules` prose tells the judge LLM how to combine all three into a final score.
-
-The harness detects per-criterion overrides by checking whether a criterion is a string or an object. For objects, it reads the criterion's `scoring_type` and builds the judge prompt accordingly. For strings, it uses the item-level default.
+Additional scoring types (e.g., `rubric`, `similarity`, `exact_match`, `custom`) may be added in the future. The `scoring_type` field is designed to be extensible — new types will be documented here as they are implemented.
 
 ---
 
