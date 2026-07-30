@@ -3,7 +3,7 @@
   "description": "Sample eval dataset for testing linear-create skill — bug classification, project matching, and missing-info detection.",
   "items": [
     {
-      "id": "meta-listing-timeout",
+      "id": "happy-path",
       "input": "Propose an issue for the following: the Meta listing import in Clinical Media keeps timing out when we try to sync more than 500 listings at once. It just hangs and eventually fails with a 504. This is blocking us from doing bulk imports for large advertisers.  Do NOT create the issue.",
       "expected_output": "The agent classifies correctly, writes a tight title, uses the Bug description template, checks projects, matches to \"Meta Ads Integration\", presents confirmation. No clarifying questions needed.\n\nScoring criteria (score each YES or NO):\n1. Correctly classified as a Bug\n2. Title is specific and under 80 characters\n3. Uses the Bug description template structure\n4. Project matched to \"Meta Ads Integration\"\n5. Confirmation summary presented before creation\n6. No unnecessary clarifying questions asked\n\nScore: 10 if all YES, 8.5 if 5/6, 7 if 4/6, 5 if 3/6, 3 if 2/6, 1.5 if 1/6, 0 if 0/6. Truncated responses cap at 3."
     },
