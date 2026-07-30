@@ -6,7 +6,7 @@ Evaluation harness for testing OpenClaw agent skills via Langfuse datasets.
 
 - `src/eval_harness.py` — Runs batch evaluations: sends dataset item prompts to an OpenClaw agent, records traces and scores in Langfuse
 - `src/eval_report.py` — Aggregates and reports on experiment scores, with per-item breakdowns and comparison support
-- `src/dataset_sync.py` — Syncs an eval.yaml file to a Langfuse dataset (upsert by id, archive removed items, returns version timestamp)
+- `src/dataset_sync.py` — Syncs an eval.yaml file to a Langfuse dataset (upsert by id, archive removed items, optionally writes a per-item manifest with timestamps)
 
 ## Setup
 
@@ -50,7 +50,12 @@ python src/dataset_sync.py --file skills/linear-create/eval.yaml
 python src/dataset_sync.py --file skills/linear-create/eval.yaml --dry-run
 ```
 
-The script prints a version timestamp (ISO-8601 UTC) as its final output line on success. Use this with `get_dataset(version=<timestamp>)` to pin experiment runs to the exact dataset state.
+The script can optionally write a JSON manifest file with per-item timestamps (from Langfuse server responses). Pass this to the eval harness to pin experiment runs to the exact dataset state.
+
+```bash
+# Sync and write a manifest file
+python src/dataset_sync.py --file skills/linear-create/eval.yaml --output-manifest manifest.json
+```
 
 ### Generate a report
 
@@ -104,4 +109,4 @@ python src/eval_report.py --dataset linear-skill-evaluation --per-item
 | `--file` | Path to the eval.yaml file to sync (required) |
 | `--langfuse-host` | Langfuse host URL (default: http://10.18.32.57:3000) |
 | `--dry-run` | Parse and show sync plan without write calls (read-only GET for archive preview if credentials available) |
-| `--dry-run` | Parse and show sync plan without write calls |
+| `--output-manifest` | Write a JSON manifest file (per-item timestamps) at the given path after sync |
