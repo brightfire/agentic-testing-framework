@@ -50,13 +50,3 @@ python src/dataset_sync.py --file <path-to-eval.yaml> [options]
 | 0 | Success (all items synced, manifest written if requested) |
 | 1 | Failure (missing env vars, file not found, YAML parse error, item failures, or manifest write failure) |
 
-## eval.yaml Schema (DEV-321)
-
-```yaml
-dataset: <langfuse-dataset-name>
-description: <optional dataset description>
-items:
-  - id: <unique-string-id>
-    input: <prompt text sent to the agent>
-    expected_output: <what a correct response looks like>
-```
