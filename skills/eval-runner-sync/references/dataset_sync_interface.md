@@ -15,8 +15,8 @@ python src/dataset_sync.py --file <path-to-eval.yaml> [options]
 |------|----------|---------|-------------|
 | `--file` | Yes | — | Path to the eval.yaml file to sync |
 | `--langfuse-host` | No | `http://localhost:3000` | Langfuse host URL |
-| `--dry-run` | No | `False` | Parse and show sync plan without write calls |
-| `--output-manifest` | No | — | Path to write a JSON manifest file with per-item timestamps |
+| `--dry-run` | No | `False` | Parse and show what would be synced without API calls |
+| `--output-manifest` | No | — | Write a JSON manifest file (per-item timestamps) at the given path after sync |
 
 ### Environment Variables
 
@@ -27,26 +27,49 @@ python src/dataset_sync.py --file <path-to-eval.yaml> [options]
 
 ## Output
 
-- **stdout/stderr:** Log lines with item-level operation counts (upserted/archived/failed)
-- **Manifest file** (when `--output-manifest` is provided): JSON file with this structure:
+- **stderr:** Log lines in format `[ISO-timestamp] [LEVEL] message` — includes item-level operations (created/updated/archived) and progress
+- **stdout:** The **last line** is the version timestamp in ISO-8601 UTC format (e.g. `2026-07-29T15:51:00.000000Z`). All other stdout is empty.
+- This separation is deliberate — capture stdout for programmatic use of the timestamp, stderr for human/log review.
 
-```json
-{
-  "dataset": "<langfuse-dataset-name>",
-  "synced_at": "<ISO-8601 UTC timestamp>",
-  "items": [
-    {
-      "id": "<namespaced-api-id>",
-      "timestamp": "<ISO-8601 UTC server timestamp>"
-    }
-  ]
-}
-```
+### Manifest File
+
+When `--output-manifest <path>` is passed, a JSON file is written containing
+per-item timestamps from Langfuse server responses. This can be passed to the
+eval harness to pin experiment runs to exact dataset state.
 
 ## Exit Codes
 
 | Code | Meaning |
 |------|---------|
-| 0 | Success (all items synced, manifest written if requested) |
-| 1 | Failure (missing env vars, file not found, YAML parse error, item failures, or manifest write failure) |
+| 0 | Success (version timestamp printed to stdout) |
+| 1 | Failure (missing env vars, file not found, YAML parse error, or item operation failures) |
 
+Note: `--dry-run` always exits 0 without making API calls.
+
+## What It Does
+
+1. Parses eval.yaml — reads `dataset` name and `items[]` (id, input, expected_output)
+2. Fetches existing ACTIVE dataset items from Langfuse
+3. Upserts all items from eval.yaml by id (POST `/api/public/dataset-items` with custom id — upsert on conflict)
+4. Archives items in Langfuse but not in eval.yaml (POST with `status: ARCHIVED`)
+5. Waits 2 seconds for server-side processing
+6. Reads the latest `updatedAt` timestamp from dataset items — this is the version timestamp
+7. Prints version timestamp to stdout
+
+## eval.yaml Schema (DEV-321)
+
+```yaml
+dataset: <langfuse-dataset-name>
+items:
+  - id: <unique-string-id>
+    input: <prompt text sent to the agent>
+    expected_output: <what a correct response looks like>
+```
+
+## Version Timestamp Usage
+
+The version timestamp pins experiment runs to exact dataset state:
+- `get_dataset(version=<timestamp>)` returns the dataset as it was at that point
+- Enables concurrent test runs without interference
+- T1 = before eval version, T2 = after eval version
+- Both are passed to the execute phase for the 4-variant test matrix
