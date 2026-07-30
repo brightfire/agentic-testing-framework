@@ -24,17 +24,11 @@ Always. Sync runs to ensure Langfuse has a current version of the eval dataset, 
 
 ## Procedure
 
-### 1. Verify the agentic-testing-framework environment
-
-Ensure the venv exists and dependencies are installed:
+### 1. Activate the agentic-testing-framework venv
 
 ```bash
 cd ~/repos/agentic-testing-framework
-if [ ! -d .venv ]; then
-  python3 -m venv .venv
-fi
 source .venv/bin/activate
-pip install -q -r requirements.txt
 ```
 
 ### 2. Identify the eval.yaml to sync
@@ -144,5 +138,6 @@ to the execute phase for the 4-variant test matrix:
 - **Script location:** `~/repos/agentic-testing-framework/src/dataset_sync.py` — this is in the agentic-testing-framework repo, not in the skill directory.
 - **Sequential sync:** Run before and after syncs sequentially, not in parallel. Concurrent syncs to the same dataset can interleave item timestamps.
 - **Same dataset name:** Both before and after versions should reference the same Langfuse dataset name (the `dataset:` field in eval.yaml). If they differ, flag it — that's unusual and may indicate a dataset rename.
-- **Env vars:** The sync script will exit 1 if `LANGFUSE_PUBLIC_KEY` or `LANGFUSE_SECRET_KEY` are not set. Verify these are available before starting.
+- **Env vars:** The sync script will exit 1 if `LANGFUSE_PUBLIC_KEY` or `LANGFUSE_SECRET_KEY` are not set. Source from `~/.openclaw/secrets/langfuse.env` if available.
+- **Python deps:** Ensure the agentic-testing-framework venv has up-to-date dependencies. Run `pip install -r requirements.txt` from the repo root if sync fails with import errors.
 - **Manifest write failure:** If the script cannot write the manifest file (e.g., permission denied), it exits non-zero. Always check the exit code, not just stdout.
