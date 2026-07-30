@@ -24,11 +24,24 @@ Always. Sync runs to ensure Langfuse has a current version of the eval dataset, 
 
 ## Procedure
 
-### 1. Identify the eval.yaml to sync
+### 1. Verify the agentic-testing-framework environment
+
+Ensure the venv exists and dependencies are installed:
+
+```bash
+cd ~/repos/agentic-testing-framework
+if [ ! -d .venv ]; then
+  python3 -m venv .venv
+fi
+source .venv/bin/activate
+pip install -q -r requirements.txt
+```
+
+### 2. Identify the eval.yaml to sync
 
 Determine which `eval.yaml` file(s) to sync and the before/after git refs.
 
-### 2. Extract both versions of eval.yaml
+### 3. Extract both versions of eval.yaml
 
 Use `git show` to extract each version to a temp file. This avoids modifying
 the working tree and works regardless of current checkout state.
@@ -54,7 +67,7 @@ dataset state as baseline).
 If `git show <pr-head-ref>:<eval-yaml-path>` fails, the eval was removed.
 Skip after sync. This is unusual — flag it for human review rather than proceeding.
 
-### 3. Sync each version to Langfuse
+### 4. Sync each version to Langfuse
 
 Run `dataset_sync.py` for each version that exists. Run sequentially —
 concurrent syncs to the same dataset can interleave item timestamps.
@@ -63,6 +76,7 @@ concurrent syncs to the same dataset can interleave item timestamps.
 - `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` environment variables must be set
 - Source from `~/.openclaw/secrets/langfuse.env` if available
 - Langfuse host must be reachable (default: `http://10.18.32.57:3000`)
+- The agentic-testing-framework venv must be initialized with dependencies installed
 
 ```bash
 # Sync the "before" version → writes manifest with per-item timestamps
@@ -84,7 +98,7 @@ The `--output-manifest` flag writes a JSON file containing:
 The sync script logs progress to stdout/stderr. Check the exit code to confirm
 success — exit 0 means all items synced, exit 1 means failures occurred.
 
-### 4. Verify sync results
+### 5. Verify sync results
 
 Read the sync script's stdout/stderr output for item-level operation counts:
 
@@ -101,7 +115,7 @@ cat "$TMPDIR/manifest-after.json" | python -m json.tool | head -5
 If either sync exited non-zero, check the logs for failed items and flag the
 error before proceeding to the execute phase.
 
-### 5. Clean up temp files
+### 6. Clean up temp files
 
 ```bash
 rm -f "$TMPDIR/eval-before.yaml" "$TMPDIR/eval-after.yaml"
@@ -131,5 +145,4 @@ to the execute phase for the 4-variant test matrix:
 - **Sequential sync:** Run before and after syncs sequentially, not in parallel. Concurrent syncs to the same dataset can interleave item timestamps.
 - **Same dataset name:** Both before and after versions should reference the same Langfuse dataset name (the `dataset:` field in eval.yaml). If they differ, flag it — that's unusual and may indicate a dataset rename.
 - **Env vars:** The sync script will exit 1 if `LANGFUSE_PUBLIC_KEY` or `LANGFUSE_SECRET_KEY` are not set. Verify these are available before starting.
-- **Python deps:** The agentic-testing-framework requires `langfuse`, `requests`, `pyyaml`, `pydantic` — ensure the venv or system Python has these installed. Check `~/repos/agentic-testing-framework/requirements.txt`.
 - **Manifest write failure:** If the script cannot write the manifest file (e.g., permission denied), it exits non-zero. Always check the exit code, not just stdout.
