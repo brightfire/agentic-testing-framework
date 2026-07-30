@@ -6,6 +6,7 @@ Evaluation harness for testing OpenClaw agent skills via Langfuse datasets.
 
 - `src/eval_harness.py` — Runs batch evaluations: sends dataset item prompts to an OpenClaw agent, records traces and scores in Langfuse
 - `src/eval_report.py` — Aggregates and reports on experiment scores, with per-item breakdowns and comparison support
+- `src/dataset_sync.py` — Syncs an eval.yaml file to a Langfuse dataset (upsert by id, archive removed items, returns version timestamp)
 
 ## Setup
 
@@ -34,6 +35,22 @@ python src/eval_harness.py \
   --experiment-concurrency 5 \
   --item-concurrency 3
 ```
+
+### eval.yaml schema
+
+See `src/schema.py` for the authoritative schema definition (Pydantic v2 models with field descriptions and validation rules).
+
+### Sync an eval.yaml to Langfuse
+
+```bash
+# Sync items from an eval.yaml file to a Langfuse dataset
+python src/dataset_sync.py --file skills/linear-create/eval.yaml
+
+# Dry run (parse and show sync plan without write calls)
+python src/dataset_sync.py --file skills/linear-create/eval.yaml --dry-run
+```
+
+The script prints a version timestamp (ISO-8601 UTC) as its final output line on success. Use this with `get_dataset(version=<timestamp>)` to pin experiment runs to the exact dataset state.
 
 ### Generate a report
 
@@ -66,7 +83,6 @@ python src/eval_report.py --dataset linear-skill-evaluation --per-item
 | `--item-concurrency` | Parallel items within an experiment (default: 2) |
 | `--langfuse-host` | Langfuse host URL (default: http://10.18.32.57:3000) |
 | `--agent` | OpenClaw agent ID (default: main) |
-| `--model` | Model override (e.g. `anthropic/claude-opus-4-8`) |
 | `--item-id` | Run only a specific dataset item by ID (partial match) |
 
 ### eval_report.py
@@ -80,3 +96,12 @@ python src/eval_report.py --dataset linear-skill-evaluation --per-item
 | `--per-item` | Show per-item aggregation |
 | `--compare` | Compare two batches by prefix (2 args) |
 | `--langfuse-host` | Langfuse host URL |
+
+### dataset_sync.py
+
+| Flag | Description |
+|------|-------------|
+| `--file` | Path to the eval.yaml file to sync (required) |
+| `--langfuse-host` | Langfuse host URL (default: http://10.18.32.57:3000) |
+| `--dry-run` | Parse and show sync plan without write calls (read-only GET for archive preview if credentials available) |
+| `--dry-run` | Parse and show sync plan without write calls |
