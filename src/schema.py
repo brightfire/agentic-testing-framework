@@ -94,6 +94,13 @@ class EvalItem(BaseModel):
         description="Expected behavior and scoring rules (string or object)"
     )
 
+    @field_validator("expected_output")
+    @classmethod
+    def validate_expected_output(cls, v: Union[str, "ExpectedOutput"]) -> Union[str, "ExpectedOutput"]:
+        if isinstance(v, str) and not v.strip():
+            raise ValueError("expected_output must not be empty or whitespace-only")
+        return v
+
     @field_validator("id")
     @classmethod
     def validate_id(cls, v: str) -> str:
