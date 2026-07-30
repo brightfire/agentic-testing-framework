@@ -54,7 +54,7 @@ The `expected_output` object is the core of the eval definition. It tells the ha
     "Correctly classified as a Bug",
     "Title is specific and under 80 characters"
   ],
-  "scoring_rules": "Score 10 if all criteria pass.\nSubtract 1.5 for each failed criterion.\nTruncated responses cap at 3."
+  "scoring_rules": "Score 10 * (passed criteria / total criteria).\nTruncated responses cap at 3."
 }
 ```
 
@@ -74,10 +74,11 @@ The judge LLM needs explicit instructions on how to score. Without them, the sam
 Example:
 
 ```
-Score 10 if all criteria pass.
-Subtract 1.5 for each failed criterion.
+Score 10 * (passed criteria / total criteria).
 Truncated responses cap at 3.
 ```
+
+This formula self-adjusts to any number of criteria — no need to update scoring rules when criteria are added or removed.
 
 ---
 
@@ -99,7 +100,7 @@ This is the most common scoring type for skill evals.
     "Title is specific and under 80 characters",
     "Uses the Bug description template structure"
   ],
-  "scoring_rules": "Score 10 if all criteria pass.\nSubtract 1.5 for each failed criterion."
+  "scoring_rules": "Score 10 * (passed criteria / total criteria)."
 }
 ```
 
@@ -135,7 +136,7 @@ By default, all criteria in an item use the item-level `scoring_type`. Individua
       "scale": [1, 2, 3, 4, 5]
     }
   ],
-  "scoring_rules": "Score 10 if all pass/fail criteria pass and rubric >= 4.\nSubtract 1.5 for each failed pass/fail criterion.\nRubric scores below 3 reduce final score by 2."
+  "scoring_rules": "Score 10 * (passed criteria / total criteria). Rubric criterion weighted equally with pass/fail criteria."
 }
 ```
 
@@ -197,8 +198,7 @@ items:
         - "Correctly classified as a Bug"
         - "Title is specific and under 80 characters"
       scoring_rules: |
-        Score 10 if all criteria pass.
-        Subtract 1.5 for each failed criterion.
+        Score 10 * (passed criteria / total criteria).
         Truncated responses cap at 3.
 ```
 
