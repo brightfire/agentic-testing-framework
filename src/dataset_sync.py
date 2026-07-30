@@ -254,9 +254,14 @@ def get_server_version_timestamp(date_header, response_body=None):
 
 
 def write_manifest(output_path, dataset_name, manifest_items, sync_start):
-    """Write the sync manifest JSON file if --output-manifest was provided."""
+    """Write the sync manifest JSON file if --output-manifest was provided.
+
+    Returns True on success or if no output path was given, False on write
+    failure. Callers should check the return value when --output-manifest was
+    explicitly requested and exit non-zero on failure.
+    """
     if not output_path:
-        return
+        return True
     manifest = {
         "dataset": dataset_name,
         "synced_at": sync_start.strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -267,8 +272,10 @@ def write_manifest(output_path, dataset_name, manifest_items, sync_start):
             json.dump(manifest, f, indent=2)
             f.write("\n")
         log(f"Manifest written to {output_path}")
+        return True
     except OSError as e:
         log(f"Failed to write manifest to {output_path}: {e}", "ERROR")
+        return False
 
 
 def try_dry_run_archive_preview(langfuse_host, auth_header, dataset_name, yaml_ids):
@@ -319,7 +326,7 @@ def main():
     )
     parser.add_argument(
         "--output-manifest", default=None, metavar="PATH",
-        help="Write a JSON manifest file at this path after sync (per-item timestamps and status)",
+        help="Write a JSON manifest file at this path after sync (per-item timestamps)",
     )
     args = parser.parse_args()
 
@@ -404,7 +411,8 @@ def main():
             write_manifest(args.output_manifest, dataset_name, manifest_items, sync_start)
             sys.exit(1)
         log("Nothing to archive — dataset is in sync.", "INFO")
-        write_manifest(args.output_manifest, dataset_name, manifest_items, sync_start)
+        if not write_manifest(args.output_manifest, dataset_name, manifest_items, sync_start):
+            sys.exit(1)
         return
 
     log(f"Plan: archive {len(to_archive_active)} items (from post-upsert snapshot)")
@@ -440,7 +448,8 @@ def main():
     log(f"Archived:  {archived}")
     log(f"Failed:    {failed}")
 
-    write_manifest(args.output_manifest, dataset_name, manifest_items, sync_start)
+    if not write_manifest(args.output_manifest, dataset_name, manifest_items, sync_start):
+        sys.exit(1)
 
     sys.exit(0 if failed == 0 else 1)
 
