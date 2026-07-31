@@ -31,7 +31,6 @@ items:
         - "Output includes skill name and eval_yaml_path"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
-        Truncated responses cap at 3.
 
   - id: no-eval-yaml-changed
     input: |
@@ -56,7 +55,6 @@ items:
         - "References having read the eval-runner-sync skill"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
-        Truncated responses cap at 3.
 
   - id: new-eval-yaml-edge-case
     input: |
@@ -87,7 +85,6 @@ items:
         - "Output structure includes dataset, T1 (null), T2, skill, eval_yaml_path"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
-        Truncated responses cap at 3.
 
   - id: sync-failure-handling
     input: |
@@ -118,4 +115,3 @@ items:
         - "References having read the eval-runner-sync skill"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
-        Truncated responses cap at 3.
