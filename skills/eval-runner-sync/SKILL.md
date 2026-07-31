@@ -60,7 +60,7 @@ concurrent syncs to the same dataset can interleave version timestamps.
 ```bash
 # Sync the "before" version → captures T1 + manifest
 # stdout = version timestamp (last line), stderr = sync log with item counts
-T1=$(python ~/repos/agentic-testing-framework/src/dataset_sync.py \
+T1=$(~/repos/agentic-testing-framework/.venv/bin/python ~/repos/agentic-testing-framework/src/dataset_sync.py \
   --file "$WORK_DIR/eval-before.yaml" \
   --output-manifest "$WORK_DIR/manifest-before.json" 2>"$WORK_DIR/sync-before.log")
 
@@ -68,7 +68,7 @@ T1=$(python ~/repos/agentic-testing-framework/src/dataset_sync.py \
 [ -z "$T1" ] && { echo "T1 sync failed"; cat "$WORK_DIR/sync-before.log"; rm -rf "$WORK_DIR"; exit 1; }
 
 # Sync the "after" version → captures T2 + manifest
-T2=$(python ~/repos/agentic-testing-framework/src/dataset_sync.py \
+T2=$(~/repos/agentic-testing-framework/.venv/bin/python ~/repos/agentic-testing-framework/src/dataset_sync.py \
   --file "$WORK_DIR/eval-after.yaml" \
   --output-manifest "$WORK_DIR/manifest-after.json" 2>"$WORK_DIR/sync-after.log")
 
@@ -128,7 +128,7 @@ Pass these to the execute phase:
 ## Gotchas
 
 - **Same dataset name:** Both before and after versions should reference the same Langfuse dataset name (the `dataset:` field in eval.yaml). If they differ, flag it — that's unusual and may indicate a dataset rename.
-- **Python deps:** The agentic-testing-framework requires `langfuse`, `requests`, `pyyaml` — ensure the venv or system Python has these installed. Check `~/repos/agentic-testing-framework/requirements.txt`.
+- **Python deps:** The agentic-testing-framework requires `langfuse`, `requests`, `pyyaml`, `pydantic` — check `~/repos/agentic-testing-framework/requirements.txt`. Use the venv at `~/repos/agentic-testing-framework/.venv` if it exists. If no venv exists, create one (`python3 -m venv ~/repos/agentic-testing-framework/.venv`) and install deps (`~/repos/agentic-testing-framework/.venv/bin/pip install -r ~/repos/agentic-testing-framework/requirements.txt`). Always activate the venv before running `dataset_sync.py`.
 - **Sync failure behavior:** If the "before" sync (T1) fails, abort the entire sync phase — the execute phase needs both timestamps to produce a valid comparison. Report the error and the sync log contents. Do not attempt the "after" sync if T1 failed. (The validation step in the procedure handles this programmatically.)
 
 ## References
