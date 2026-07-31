@@ -271,7 +271,7 @@ def write_manifest(output_path, dataset_name, manifest_items, sync_start):
         with open(output_path, "w") as f:
             json.dump(manifest, f, indent=2)
             f.write("\n")
-        log(f"Manifest written to {output_path}")
+        print(output_path, flush=True)
         return True
     except OSError as e:
         log(f"Failed to write manifest to {output_path}: {e}", "ERROR")
