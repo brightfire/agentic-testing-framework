@@ -25,7 +25,6 @@ items:
         - "No unnecessary clarifying questions asked"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
-        Truncated responses cap at 3.
 
   - id: tab-character-url-breakage
     input: |
@@ -53,7 +52,6 @@ items:
         - "No unnecessary clarifying questions asked"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
-        Truncated responses cap at 3.
 
   - id: missing-info-detection
     input: |
