@@ -1,22 +1,22 @@
-dataset: eval-runner-sync
-description: "Eval dataset for the eval-runner-sync skill — tests version extraction, sync sequencing, and edge case handling within the agentic-testing-framework repo."
+dataset: eval-runner
+description: "Eval dataset for the eval-runner skill — tests version extraction, sync sequencing, and edge case handling within the agentic-testing-framework repo."
 
 items:
   - id: happy-path-sync
     input: |
-      You are performing the eval-runner-sync phase for a PR in
+      You are performing the eval-runner phase for a PR in
       brightfire/agentic-testing-framework. The PR modifies
-      skills/eval-runner-sync/eval.yaml on branch claw/vash/update-eval-items.
+      skills/eval-runner/eval.yaml on branch claw/vash/update-eval-items.
       The base branch is main.
 
-      Read the eval-runner-sync skill from available_skills, then perform
+      Read the eval-runner skill from available_skills, then perform
       the sync phase for this PR. Report the structured output.
 
       Do NOT actually run dataset_sync.py — simulate the sync and report
       what you would do and what output structure you would produce.
     expected_output:
       behavior: |
-        The agent reads the eval-runner-sync skill, extracts both versions
+        The agent reads the eval-runner skill, extracts both versions
         of eval.yaml via git show into a mktemp working directory, runs
         dataset_sync.py sequentially (before then after) with
         --output-manifest for each, and produces the structured output
@@ -35,19 +35,19 @@ items:
 
   - id: new-eval-yaml-edge-case
     input: |
-      You are performing the eval-runner-sync phase for a PR in
+      You are performing the eval-runner phase for a PR in
       brightfire/agentic-testing-framework. The PR adds a new file:
-      skills/eval-runner-sync/eval.yaml. This file does not exist on the
+      skills/eval-runner/eval.yaml. This file does not exist on the
       base branch (main). The PR head branch is claw/vash/add-eval-yaml.
 
-      Read the eval-runner-sync skill from available_skills, then perform
+      Read the eval-runner skill from available_skills, then perform
       the sync phase for this PR. Report the structured output.
 
       Do NOT actually run dataset_sync.py — simulate and report what you
       would do.
     expected_output:
       behavior: |
-        The agent reads the eval-runner-sync skill, attempts to extract the
+        The agent reads the eval-runner skill, attempts to extract the
         before version from main and finds it doesn't exist. It correctly
         handles this as a new eval definition: manifest_before is null, only
         the after version is synced. The output structure reflects
@@ -64,20 +64,20 @@ items:
 
   - id: sync-failure-handling
     input: |
-      You are performing the eval-runner-sync phase for a PR in
+      You are performing the eval-runner phase for a PR in
       brightfire/agentic-testing-framework, which modifies
-      skills/eval-runner-sync/eval.yaml. You have extracted both versions and
+      skills/eval-runner/eval.yaml. You have extracted both versions and
       started the sync. The "before" version sync failed —
       dataset_sync.py exited with code 1 and the output shows
       "LANGFUSE_SECRET_KEY not set".
 
-      Read the eval-runner-sync skill from available_skills, then report
+      Read the eval-runner skill from available_skills, then report
       how you handle this failure and what you would do next.
 
       Do NOT actually run dataset_sync.py.
     expected_output:
       behavior: |
-        The agent reads the eval-runner-sync skill, recognizes the sync
+        The agent reads the eval-runner skill, recognizes the sync
         failure from the non-zero exit code, and aborts the entire sync
         phase. It does NOT attempt the after sync. It reports the error
         from the script output and explains that the before sync must
@@ -88,6 +88,6 @@ items:
         - "Aborts the sync phase — does not attempt the after sync"
         - "Reports the error from the script output"
         - "Does not attempt the after sync after the before sync failed"
-        - "References having read the eval-runner-sync skill"
+        - "References having read the eval-runner skill"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
