@@ -43,20 +43,10 @@ eval harness to pin experiment runs to exact dataset state.
 
 | Code | Meaning |
 |------|---------|
-| 0 | Success (version timestamp printed to stdout) |
+| 0 | Success (manifest file path printed to stdout) |
 | 1 | Failure (missing env vars, file not found, YAML parse error, or item operation failures) |
 
 Note: `--dry-run` always exits 0 without making API calls.
-
-## What It Does
-
-1. Parses eval.yaml — reads `dataset` name and `items[]` (id, input, expected_output)
-2. Fetches existing ACTIVE dataset items from Langfuse
-3. Upserts all items from eval.yaml by id (POST `/api/public/dataset-items` with custom id — upsert on conflict)
-4. Archives items in Langfuse but not in eval.yaml (POST with `status: ARCHIVED`)
-5. Waits 2 seconds for server-side processing
-6. Reads the latest `updatedAt` timestamp from dataset items — this is the version timestamp
-7. Prints version timestamp to stdout
 
 ## eval.yaml Schema (DEV-321)
 
@@ -68,11 +58,11 @@ items:
     expected_output: <what a correct response looks like>
 ```
 
-## Version Timestamp Usage
+## Manifest File Usage
 
 Manifest files contain per-item server timestamps from Langfuse. These are
 passed to the execute phase to pin experiment runs to exact dataset state:
 - `get_dataset(version=<timestamp>)` returns the dataset as it was at that point
 - Enables concurrent test runs without interference
-- manifest_before pins the "before" dataset state
-- manifest_after pins the "after" dataset state
+- `manifest_before` pins the "before" dataset state
+- `manifest_after` pins the "after" dataset state
