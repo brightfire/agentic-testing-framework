@@ -1,9 +1,9 @@
 ---
 name: eval-runner-sync
-description: "Sync phase of the eval runner. Syncs before/after eval.yaml versions to Langfuse and captures version timestamps for the execute phase."
+description: "Use when a PR modifies an eval.yaml file in a skill directory and the changes need to be synced to Langfuse. Syncs before/after versions sequentially and captures manifest paths for the execute phase. SKIP if no eval.yaml was changed in the PR diff."
 metadata:
   author: brightfire
-  version: "1.3"
+  version: "1.4"
 ---
 
 # Eval Runner — Sync Phase
@@ -11,10 +11,23 @@ metadata:
 First phase of the eval runner. Syncs eval definitions to Langfuse and captures
 version timestamps needed by the execute phase.
 
+## When This Runs
+
+**Trigger:** A PR modifies an `eval.yaml` file in a skill directory.
+
+**Skip conditions:**
+- No `eval.yaml` file was changed in the PR — skip sync entirely. The existing
+  Langfuse dataset is used as-is.
+- The PR only modifies `SKILL.md`, `references/`, or other non-eval files —
+  skip sync.
+
+**How to detect:** Use `gh pr diff --name-only` or equivalent to check if any
+file matching `**/eval.yaml` was modified in the PR.
+
 ## Inputs
 
 | Input | Source | Example |
-|-------|--------|---------|
+|-------|--------|--------|
 | Skill name | PR diff (directory containing modified eval.yaml) | `linear-create` |
 | PR head ref | PR metadata | `feature/improve-linear-create` |
 | Base ref | PR metadata (typically `main`) | `main` |
@@ -58,50 +71,46 @@ concurrent syncs to the same dataset can interleave version timestamps.
 - Langfuse host must be reachable (default: `http://localhost:3000`)
 
 ```bash
-# Sync the "before" version → manifest path is last line of stdout
-# All log output goes to stdout; manifest path is printed last
-~/repos/agentic-testing-framework/.venv/bin/python ~/repos/agentic-testing-framework/src/dataset_sync.py \
+# Sync the "before" version → captures T1 + manifest
+# stdout = version timestamp (last line), stderr = sync log with item counts
+T1=$(python ~/repos/agentic-testing-framework/src/dataset_sync.py \
   --file "$WORK_DIR/eval-before.yaml" \
-  --output-manifest "$WORK_DIR/manifest-before.json" > "$WORK_DIR/sync-before.log" 2>&1
-MANIFEST_BEFORE=$(tail -1 "$WORK_DIR/sync-before.log")
+  --output-manifest "$WORK_DIR/manifest-before.json" 2>"$WORK_DIR/sync-before.log")
 
-# Verify — abort if manifest path is empty (sync failed or manifest not written)
-[ -z "$MANIFEST_BEFORE" ] && { echo "T1 sync failed"; cat "$WORK_DIR/sync-before.log"; rm -rf "$WORK_DIR"; exit 1; }
+# Verify T1 — abort if empty (sync failed silently, missing stdout, etc.)
+[ -z "$T1" ] && { echo "T1 sync failed"; cat "$WORK_DIR/sync-before.log"; rm -rf "$WORK_DIR"; exit 1; }
 
-# Sync the "after" version → manifest path is last line of stdout
-~/repos/agentic-testing-framework/.venv/bin/python ~/repos/agentic-testing-framework/src/dataset_sync.py \
+# Sync the "after" version → captures T2 + manifest
+T2=$(python ~/repos/agentic-testing-framework/src/dataset_sync.py \
   --file "$WORK_DIR/eval-after.yaml" \
-  --output-manifest "$WORK_DIR/manifest-after.json" > "$WORK_DIR/sync-after.log" 2>&1
-MANIFEST_AFTER=$(tail -1 "$WORK_DIR/sync-after.log")
+  --output-manifest "$WORK_DIR/manifest-after.json" 2>"$WORK_DIR/sync-after.log")
 
-# Verify — abort if manifest path is empty
-[ -z "$MANIFEST_AFTER" ] && { echo "T2 sync failed"; cat "$WORK_DIR/sync-after.log"; rm -rf "$WORK_DIR"; exit 1; }
+# Verify T2 — abort if empty
+[ -z "$T2" ] && { echo "T2 sync failed"; cat "$WORK_DIR/sync-after.log"; rm -rf "$WORK_DIR"; exit 1; }
 ```
 
-**Important:** The sync script logs all progress to stdout and prints the
-manifest file path as the **last line of stdout** when `--output-manifest`
-is passed. Redirect all stdout to a log file, then extract the manifest
-path with `tail -1`. The manifest JSON contains per-item server
-timestamps — these are passed to the execute phase to pin experiment
-runs to exact dataset state.
+**Important:** The sync script prints log output to stderr and the version
+timestamp as the **last line of stdout**. The `$(...)` capture gets stdout
+(T1/T2); the `2>` redirect saves stderr (sync logs with item counts) for
+verification in the next step. The `--output-manifest` flag writes a JSON
+file with per-item server timestamps — these manifests are passed to the
+execute phase to pin experiment runs to exact dataset state.
 
 For the full CLI interface — arguments, environment variables, exit codes,
 and output format — see [`references/dataset_sync_interface.md`](references/dataset_sync_interface.md).
 
 ### Verify sync
 
-Read the stdout log output to verify item-level operations completed
-successfully. The manifest file should also exist at the captured path.
+Read the sync log files to verify item-level operations completed successfully:
 
-Check for:
-- Items upserted (created/updated)
+- Items created
+- Items updated
 - Items archived
-- Manifest file exists and is valid JSON
 
 ```bash
-# Verify manifest files exist and are valid JSON
-[ -f "$MANIFEST_BEFORE" ] && python3 -c "import json; json.load(open('$MANIFEST_BEFORE'))" && echo "manifest-before OK"
-[ -f "$MANIFEST_AFTER" ] && python3 -c "import json; json.load(open('$MANIFEST_AFTER'))" && echo "manifest-after OK"
+# Example: grep for operation counts in the sync logs
+grep -E 'created|updated|archived' "$WORK_DIR/sync-before.log"
+grep -E 'created|updated|archived' "$WORK_DIR/sync-after.log"
 ```
 
 ### Clean up temp files
@@ -116,19 +125,23 @@ Return a structured result for the execute phase:
 
 ```
 dataset: <langfuse-dataset-name from eval.yaml>
+T1: <before-version-timestamp or null>  (created: X, updated: Y, archived: Z)
+T2: <after-version-timestamp or null>   (created: X, updated: Y, archived: Z)
 skill: <skill-name>
 eval_yaml_path: <path within repo>
-manifest_before: <path or null>
-manifest_after: <path>
+manifest_before: $WORK_DIR/manifest-before.json
+manifest_after: $WORK_DIR/manifest-after.json
 ```
 
-Manifest files are JSON containing per-item server timestamps. Pass these
-to the execute phase to pin experiment runs to exact dataset state.
+Both timestamps are ISO-8601 UTC strings (e.g. `2026-07-29T15:51:00.000000Z`).
+Pass these to the execute phase:
+- T1 pins the "before" dataset state (skill v1 + model A, skill v1 + model B)
+- T2 pins the "after" dataset state (skill v2 + model A, skill v2 + model B)
 
 ## Gotchas
 
 - **Same dataset name:** Both before and after versions should reference the same Langfuse dataset name (the `dataset:` field in eval.yaml). If they differ, flag it — that's unusual and may indicate a dataset rename.
-- **Python deps:** The agentic-testing-framework requires `langfuse`, `requests`, `pyyaml`, `pydantic` — check `~/repos/agentic-testing-framework/requirements.txt`. Use the venv at `~/repos/agentic-testing-framework/.venv` if it exists. If no venv exists, create one (`python3 -m venv ~/repos/agentic-testing-framework/.venv`) and install deps (`~/repos/agentic-testing-framework/.venv/bin/pip install -r ~/repos/agentic-testing-framework/requirements.txt`). Always activate the venv before running `dataset_sync.py`.
+- **Python deps:** The agentic-testing-framework requires `langfuse`, `requests`, `pyyaml` — ensure the venv or system Python has these installed. Check `~/repos/agentic-testing-framework/requirements.txt`.
 - **Sync failure behavior:** If the "before" sync (T1) fails, abort the entire sync phase — the execute phase needs both timestamps to produce a valid comparison. Report the error and the sync log contents. Do not attempt the "after" sync if T1 failed. (The validation step in the procedure handles this programmatically.)
 
 ## References
