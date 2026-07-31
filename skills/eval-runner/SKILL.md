@@ -1,6 +1,6 @@
 ---
 name: eval-runner
-description: "Use when running eval tests — syncs eval definitions to Langfuse, prepares the eval environment, and orchestrates variant runs. Currently covers the sync phase; additional phases to be added."
+description: "Use when running eval tests — syncs eval definitions to Langfuse, prepares the eval environment, and orchestrates variant runs."
 metadata:
   author: brightfire
   version: "2.0"
