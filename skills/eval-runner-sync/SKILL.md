@@ -3,7 +3,7 @@ name: eval-runner-sync
 description: "Sync phase of the eval runner. Syncs before/after eval.yaml versions to Langfuse and captures version timestamps for the execute phase."
 metadata:
   author: brightfire
-  version: "1.2"
+  version: "1.3"
 ---
 
 # Eval Runner — Sync Phase
@@ -28,11 +28,14 @@ Use `git show` to extract each version to a temp file. This avoids modifying
 the working tree and works regardless of current checkout state.
 
 ```bash
+# Create a working directory for temp files (collision-safe)
+WORK_DIR=$(mktemp -d /tmp/eval-sync.XXXXXX)
+
 # Before version (from base branch, typically main)
-git show <base-ref>:<eval-yaml-path> > /tmp/eval-before.yaml
+git show <base-ref>:<eval-yaml-path> > "$WORK_DIR/eval-before.yaml"
 
 # After version (from PR head branch)
-git show <pr-head-ref>:<eval-yaml-path> > /tmp/eval-after.yaml
+git show <pr-head-ref>:<eval-yaml-path> > "$WORK_DIR/eval-after.yaml"
 ```
 
 **Edge case — new eval.yaml (no before version):**
@@ -58,13 +61,19 @@ concurrent syncs to the same dataset can interleave version timestamps.
 # Sync the "before" version → captures T1 + manifest
 # stdout = version timestamp (last line), stderr = sync log with item counts
 T1=$(python ~/repos/agentic-testing-framework/src/dataset_sync.py \
-  --file /tmp/eval-before.yaml \
-  --output-manifest /tmp/manifest-before.json 2>/tmp/sync-before.log)
+  --file "$WORK_DIR/eval-before.yaml" \
+  --output-manifest "$WORK_DIR/manifest-before.json" 2>"$WORK_DIR/sync-before.log")
+
+# Verify T1 — abort if empty (sync failed silently, missing stdout, etc.)
+[ -z "$T1" ] && { echo "T1 sync failed"; cat "$WORK_DIR/sync-before.log"; rm -rf "$WORK_DIR"; exit 1; }
 
 # Sync the "after" version → captures T2 + manifest
 T2=$(python ~/repos/agentic-testing-framework/src/dataset_sync.py \
-  --file /tmp/eval-after.yaml \
-  --output-manifest /tmp/manifest-after.json 2>/tmp/sync-after.log)
+  --file "$WORK_DIR/eval-after.yaml" \
+  --output-manifest "$WORK_DIR/manifest-after.json" 2>"$WORK_DIR/sync-after.log")
+
+# Verify T2 — abort if empty
+[ -z "$T2" ] && { echo "T2 sync failed"; cat "$WORK_DIR/sync-after.log"; rm -rf "$WORK_DIR"; exit 1; }
 ```
 
 **Important:** The sync script prints log output to stderr and the version
@@ -87,14 +96,14 @@ Read the sync log files to verify item-level operations completed successfully:
 
 ```bash
 # Example: grep for operation counts in the sync logs
-grep -E 'created|updated|archived' /tmp/sync-before.log
-grep -E 'created|updated|archived' /tmp/sync-after.log
+grep -E 'created|updated|archived' "$WORK_DIR/sync-before.log"
+grep -E 'created|updated|archived' "$WORK_DIR/sync-after.log"
 ```
 
 ### Clean up temp files
 
 ```bash
-rm -f /tmp/eval-before.yaml /tmp/eval-after.yaml /tmp/sync-before.log /tmp/sync-after.log
+rm -rf "$WORK_DIR"
 ```
 
 ## Output
@@ -107,8 +116,8 @@ T1: <before-version-timestamp or null>  (created: X, updated: Y, archived: Z)
 T2: <after-version-timestamp or null>   (created: X, updated: Y, archived: Z)
 skill: <skill-name>
 eval_yaml_path: <path within repo>
-manifest_before: /tmp/manifest-before.json
-manifest_after: /tmp/manifest-after.json
+manifest_before: $WORK_DIR/manifest-before.json
+manifest_after: $WORK_DIR/manifest-after.json
 ```
 
 Both timestamps are ISO-8601 UTC strings (e.g. `2026-07-29T15:51:00.000000Z`).
@@ -120,7 +129,7 @@ Pass these to the execute phase:
 
 - **Same dataset name:** Both before and after versions should reference the same Langfuse dataset name (the `dataset:` field in eval.yaml). If they differ, flag it — that's unusual and may indicate a dataset rename.
 - **Python deps:** The agentic-testing-framework requires `langfuse`, `requests`, `pyyaml` — ensure the venv or system Python has these installed. Check `~/repos/agentic-testing-framework/requirements.txt`.
-- **Sync failure behavior:** If the "before" sync (T1) fails, abort the entire sync phase — the execute phase needs both timestamps to produce a valid comparison. Report the error and the sync log contents. Do not attempt the "after" sync if T1 failed.
+- **Sync failure behavior:** If the "before" sync (T1) fails, abort the entire sync phase — the execute phase needs both timestamps to produce a valid comparison. Report the error and the sync log contents. Do not attempt the "after" sync if T1 failed. (The validation step in the procedure handles this programmatically.)
 
 ## References
 
