@@ -12,14 +12,21 @@ The eval runner orchestrates eval test phases. Each phase is a section below.
 
 ## Variant Inference
 
-The skill determines which skill versions to set up based on the trigger context:
+The skill determines what to test based on the request, not the trigger source. Two independent dimensions:
 
-- **Explicit variant specs provided** → use them as-is
-- **PR referenced, no explicit specs** → two variants: `main@<base-hash>` + `<pr-head>@<head-hash>`
-- **No PR, model A/B request** → single variant: `main@<hash>`
-- **No PR, commit comparison request** → two variants: `<commit-a>@<hash-a>` + `<commit-b>@<hash-b>` (user specifies the two commits)
+**Skill versions** (what skill code to test):
+- **PR referenced, no explicit skill specs** → default to skill A/B: `main@<base-hash>` + `<pr-head>@<head-hash>`
+- **Request names specific commits** → use those commits as skill variants
+- **Request says "just the PR version" or similar** → single skill variant: `<pr-head>@<hash>`
+- **Explicit skill variant specs provided** → use them
 
-This inference happens at the skill level before the phases run. The env setup phase receives the resolved list of (git ref, label) pairs and handles the mechanics.
+**Models** (what models to run each skill variant against):
+- **Request mentions model comparison** → model A/B dimension added
+- **No model mention** → single model (whatever the agent default is)
+
+The model dimension is orthogonal — it multiplies with the skill variants. The execute phase handles the full matrix (e.g., 2 skill variants × 2 models = 4 runs).
+
+This inference happens at the skill level before the phases run. The env setup phase receives the resolved list of (git ref, label) pairs for skill versions and handles the mechanics of creating suffixed copies.
 
 ## Pre-flight Checks
 
