@@ -22,7 +22,7 @@ version timestamps needed by the execute phase for the 4-variant test matrix.
 
 ## Procedure
 
-### 1. Extract both versions of eval.yaml
+### Extract both versions of eval.yaml
 
 Use `git show` to extract each version to a temp file. This avoids modifying
 the working tree and works regardless of current checkout state.
@@ -44,7 +44,7 @@ phase should handle this (fewer variants, use current dataset state as baseline)
 If `git show <pr-head-ref>:<eval-yaml-path>` fails, the eval was removed.
 Skip T2 sync. This is unusual — flag it for human review rather than proceeding.
 
-### 2. Sync each version to Langfuse
+### Sync each version to Langfuse
 
 Run `dataset_sync.py` for each version that exists. Run sequentially —
 concurrent syncs to the same dataset can interleave version timestamps.
@@ -68,12 +68,12 @@ T2=$(python ~/repos/agentic-testing-framework/src/dataset_sync.py \
 **Important:** The sync script prints log output to stderr and the version
 timestamp as the **last line of stdout**. The `$(...)` capture gets stdout
 (T1/T2); the `2>` redirect saves stderr (sync logs with item counts) for
-parsing in step 3.
+parsing in the next step.
 
 For the full CLI interface — arguments, environment variables, exit codes,
 and output format — see [`references/dataset_sync_interface.md`](references/dataset_sync_interface.md).
 
-### 3. Parse sync confirmation
+### Parse sync confirmation
 
 Read the sync log files to extract item-level operation counts per version:
 
@@ -87,7 +87,7 @@ grep -E 'created|updated|archived' /tmp/sync-before.log
 grep -E 'created|updated|archived' /tmp/sync-after.log
 ```
 
-### 4. Clean up temp files
+### Clean up temp files
 
 ```bash
 rm -f /tmp/eval-before.yaml /tmp/eval-after.yaml /tmp/sync-before.log /tmp/sync-after.log
