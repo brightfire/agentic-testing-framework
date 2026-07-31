@@ -27,14 +27,16 @@ python src/dataset_sync.py --file <path-to-eval.yaml> [options]
 
 ## Output
 
-- **stderr:** Log lines in format `[ISO-timestamp] [LEVEL] message` — includes item-level operations (created/updated/archived) and progress
-- **stdout:** The **last line** is the version timestamp in ISO-8601 UTC format (e.g. `2026-07-29T15:51:00.000000Z`). All other stdout is empty.
-- This separation is deliberate — capture stdout for programmatic use of the timestamp, stderr for human/log review.
+- **stdout:** Sync progress logs. When `--output-manifest <path>` is passed,
+  the **last line of stdout** is the manifest file path (for programmatic
+  capture). All other lines are human-readable log output.
+- **stderr:** Empty (logs go to stdout).
 
 ### Manifest File
 
 When `--output-manifest <path>` is passed, a JSON file is written containing
-per-item timestamps from Langfuse server responses. This can be passed to the
+per-item timestamps from Langfuse server responses. The script prints the
+manifest path as the last line of stdout. This file is passed to the
 eval harness to pin experiment runs to exact dataset state.
 
 ## Exit Codes
@@ -68,8 +70,9 @@ items:
 
 ## Version Timestamp Usage
 
-The version timestamp pins experiment runs to exact dataset state:
+Manifest files contain per-item server timestamps from Langfuse. These are
+passed to the execute phase to pin experiment runs to exact dataset state:
 - `get_dataset(version=<timestamp>)` returns the dataset as it was at that point
 - Enables concurrent test runs without interference
-- T1 = before eval version, T2 = after eval version
-- Both are passed to the execute phase for the 4-variant test matrix
+- manifest_before pins the "before" dataset state
+- manifest_after pins the "after" dataset state
