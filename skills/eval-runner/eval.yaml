@@ -1,5 +1,5 @@
 dataset: eval-runner
-description: "Eval dataset for the eval-runner skill — tests version extraction, sync sequencing, and edge case handling within the agentic-testing-framework repo."
+description: "End-to-end evaluation runner for OpenClaw skills — dataset sync, environment setup, variant isolation, and orchestrated eval runs via Langfuse."
 
 items:
   - id: happy-path-sync
