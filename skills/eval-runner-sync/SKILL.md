@@ -1,6 +1,6 @@
 ---
 name: eval-runner-sync
-description: "Sync phase of the eval runner. Syncs before/after eval.yaml versions to Langfuse and captures version timestamps for the execute phase. Always runs when invoked."
+description: "Sync phase of the eval runner. Syncs before/after eval.yaml versions to Langfuse and captures version timestamps for the execute phase."
 metadata:
   author: brightfire
   version: "1.2"
