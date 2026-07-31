@@ -3,13 +3,13 @@ name: eval-runner-sync
 description: "Use when an eval.yaml file needs to be synced to Langfuse — typically as the first phase of an eval run. Syncs before/after versions sequentially and captures manifest paths for the execute phase."
 metadata:
   author: brightfire
-  version: "1.5"
+  version: "1.6"
 ---
 
 # Eval Runner — Sync Phase
 
 First phase of the eval runner. Syncs eval definitions to Langfuse and captures
-version timestamps needed by the execute phase.
+manifest paths needed by the execute phase.
 
 ## Inputs
 
@@ -104,6 +104,7 @@ to the execute phase:
 
 ## Gotchas
 
+- **Sync failure:** If either sync exits non-zero, abort the sync phase — do not proceed to the remaining sync. Report the error from the script output and notify the user. The execute phase needs both manifest files to produce a valid comparison.
 - **Same dataset name:** Both before and after versions should reference the same Langfuse dataset name (the `dataset:` field in eval.yaml). If they differ, flag it — that's unusual and may indicate a dataset rename.
 - **Python deps:** The agentic-testing-framework requires `langfuse`, `requests`, `pyyaml` — ensure the venv or system Python has these installed. Check `~/repos/agentic-testing-framework/requirements.txt`.
 
