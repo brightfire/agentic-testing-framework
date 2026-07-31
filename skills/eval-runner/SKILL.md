@@ -146,21 +146,20 @@ For each variant spec:
      collision prevention).
 3. **Copy all skill files** into the suffixed directory (preserving
    subdirectory structure — references/, scripts/, etc.).
-4. **Rewrite the `name:` field** in the copied `SKILL.md` frontmatter to
+4. **Check for self-references in the skill body** — After copying the
+   skill files but before rewriting the name field, scan the copied
+   `SKILL.md` body (everything below the frontmatter `---` delimiter) for
+   any occurrence of the original skill name. Use the same whole-word regex:
+   `(?<![a-z0-9-])<skill-name>(?![a-z0-9-])` (case-insensitive).
+   - If the skill name appears anywhere in the body text **outside** of the
+     `name:` and `description:` frontmatter fields, **abort**. Report which
+     line(s) contain self-references, explain that skills should not
+     self-reference by name in their body text, and tell the user to fix the
+     source skill. Do not proceed with the run.
+   - If no self-references are found, continue to the next step.
+5. **Rewrite the `name:` field** in the copied `SKILL.md` frontmatter to
    match the suffixed directory name (e.g., `linear-create` →
    `linear-create-main-a1b2c3d`).
-5. **Rewrite self-references in the SKILL.md body** — replace the original
-   skill name with the suffixed name using **whole-word matching** where
-   word boundaries are: whitespace, string start/end, or any character that
-   is NOT `[a-z0-9-]` (so hyphens and alphanumerics continue the name,
-   everything else is a boundary). This ensures `linear-create` gets
-   replaced but `linear-create-boo` does not. In regex:
-   `(?<![a-z0-9-])linear-create(?![a-z0-9-])` (case-insensitive to also
-   catch `Linear-Create` etc.).
-   - IMPORTANT: Do NOT rewrite the skill name inside the `name:` field line
-     itself again (that's already handled in step 4). Only rewrite body text
-     references. A simple approach: rewrite all occurrences in the full file,
-     then re-set the `name:` field to the correct suffixed value.
 
 ### Sync Integration
 
@@ -202,7 +201,7 @@ Structured JSON for the execute phase:
 
 At the END of the run (after execute phase completes), clean up only the
 suffixed dirs THIS run created. Do not touch other dirs in eval-skills/.
-Cleanup is the responsibility of the full eval-runner flow, not the env setup
+Cleanup is the responsibility of the full eval flow, not the env setup
 phase alone — env setup creates, the orchestrator cleans up after execute.
 
 ### Gotchas
@@ -214,11 +213,12 @@ phase alone — env setup creates, the orchestrator cleans up after execute.
    skill should NOT attempt to restart the gateway. If the dir is missing or
    not in config, report the issue and stop.
 
-2. **Self-reference rewriting** — Must use whole-word matching with regex
-   `(?<![a-z0-9-])` lookbehind and `(?![a-z0-9-])` lookahead (case-insensitive).
-   A naive string replace would corrupt names like `linear-create-boo` into
-   `linear-create-main-a1b2c3d-boo`. The `name:` field in frontmatter is
-   handled separately (set to exact suffixed value).
+2. **Self-references in skill bodies** — Skills should not reference
+   themselves by name in their body text. The env setup phase only rewrites
+   the `name:` field in frontmatter — body text is left untouched. If a
+   skill name appears in the body (outside frontmatter fields), env setup
+   aborts with a message indicating which lines need fixing. Fix
+   self-references at the source skill before re-running.
 
 3. **Do not clean up other runs' dirs** — Only clean up dirs created by THIS
    run. Other eval runs may be active concurrently.
