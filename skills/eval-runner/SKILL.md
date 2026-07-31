@@ -10,6 +10,30 @@ metadata:
 
 The eval runner orchestrates eval test phases. Each phase is a section below.
 
+## Pre-flight Checks
+
+Before anything else, verify that all variant skills are safe to test.
+Self-references in skill bodies would break the eval (the suffixed copy would
+reference the original name, not itself), so check early — there's no reason
+to sync anything to Langfuse if we can't run the variants.
+
+### Procedure
+
+For each variant spec:
+
+1. **Fetch the SKILL.md** from the git ref: `git show <ref>:<skill-path>/SKILL.md`.
+2. **Extract the body** — everything below the frontmatter `---` delimiter.
+3. **Scan for self-references** using the whole-word regex:
+   `(?<![a-z0-9-])<skill-name>(?![a-z0-9-])` (case-insensitive).
+   - The skill name is the `name:` field from the frontmatter.
+   - Check only the body text — the `name:` and `description:` frontmatter
+     fields are excluded from this check.
+4. **If any self-reference is found**, **abort the entire run** — do not
+   proceed to sync or env setup. Report which skill(s) and line(s) contain
+   self-references, and tell the user to fix the source skill before
+   re-running.
+5. **If all variants pass**, proceed to the Sync Phase.
+
 ## Sync Phase
 
 First phase of the eval runner. Syncs eval definitions to Langfuse and captures
@@ -146,18 +170,7 @@ For each variant spec:
      collision prevention).
 3. **Copy all skill files** into the suffixed directory (preserving
    subdirectory structure — references/, scripts/, etc.).
-4. **Check for self-references in the skill body** — After copying the
-   skill files but before rewriting the name field, scan the copied
-   `SKILL.md` body (everything below the frontmatter `---` delimiter) for
-   any occurrence of the original skill name. Use the same whole-word regex:
-   `(?<![a-z0-9-])<skill-name>(?![a-z0-9-])` (case-insensitive).
-   - If the skill name appears anywhere in the body text **outside** of the
-     `name:` and `description:` frontmatter fields, **abort**. Report which
-     line(s) contain self-references, explain that skills should not
-     self-reference by name in their body text, and tell the user to fix the
-     source skill. Do not proceed with the run.
-   - If no self-references are found, continue to the next step.
-5. **Rewrite the `name:` field** in the copied `SKILL.md` frontmatter to
+4. **Rewrite the `name:` field** in the copied `SKILL.md` frontmatter to
    match the suffixed directory name (e.g., `linear-create` →
    `linear-create-main-a1b2c3d`).
 
@@ -214,11 +227,11 @@ phase alone — env setup creates, the orchestrator cleans up after execute.
    not in config, report the issue and stop.
 
 2. **Self-references in skill bodies** — Skills should not reference
-   themselves by name in their body text. The env setup phase only rewrites
-   the `name:` field in frontmatter — body text is left untouched. If a
-   skill name appears in the body (outside frontmatter fields), env setup
-   aborts with a message indicating which lines need fixing. Fix
-   self-references at the source skill before re-running.
+   themselves by name in their body text. This is checked during the
+   pre-flight phase (before sync) — if any variant's SKILL.md body contains
+   the skill name outside of frontmatter fields, the entire run aborts
+   before syncing to Langfuse. Fix self-references at the source skill
+   before re-running.
 
 3. **Do not clean up other runs' dirs** — Only clean up dirs created by THIS
    run. Other eval runs may be active concurrently.
