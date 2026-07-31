@@ -12,7 +12,7 @@ The eval runner orchestrates eval test phases. Each phase is a section below.
 
 ## Variant Inference
 
-The skill determines what to test based on the request, not the trigger source. Two independent dimensions:
+The skill determines what to test based on the request, not the trigger source. Three independent dimensions:
 
 **Skill versions** (what skill code to test):
 - **PR referenced, no explicit skill specs** → default to skill A/B: `main@<base-hash>` + `<pr-head>@<head-hash>`
@@ -24,9 +24,33 @@ The skill determines what to test based on the request, not the trigger source. 
 - **Request mentions model comparison** → model A/B dimension added
 - **No model mention** → single model (whatever the agent default is)
 
-The model dimension is orthogonal — it multiplies with the skill variants. The execute phase handles the full matrix (e.g., 2 skill variants × 2 models = 4 runs).
+**Dataset items** (which eval cases to run):
+- **No items specified** → all items in the eval.yaml
+- **Specific item(s) named** → only those items (by id)
+
+The model and dataset dimensions are orthogonal — they multiply with the skill variants. The execute phase handles the full matrix (e.g., 2 skill variants × 2 models = 4 runs).
 
 This inference happens at the skill level before the phases run. The env setup phase receives the resolved list of (git ref, label) pairs for skill versions and handles the mechanics of creating suffixed copies.
+
+## Confirmation
+
+After inferring variants, the skill presents a summary and waits for user
+confirmation before proceeding. The summary shows:
+
+- Skill variants (name, git ref, short hash)
+- Models to test
+- Dataset items (all or specific ids)
+
+The user can:
+- **Confirm** — proceed to pre-flight checks
+- **Adjust** — modify any dimension (add/remove skill variants, change models, change dataset items) and re-confirm
+- **Cancel** — abort the run
+
+Only after confirmation does the skill proceed to pre-flight checks and the phases.
+
+If the user says "run same test again" or "re-run the previous eval", the skill
+skips variant inference and confirmation, reusing the previous variant spec
+directly. It proceeds straight to pre-flight checks.
 
 ## Pre-flight Checks
 
@@ -163,8 +187,12 @@ can run variants in isolation.
 
 For each variant spec:
 
-1. **Fetch the skill** from the git ref: `git show <ref>:<skill-path>/SKILL.md`
-   and all files in the skill directory.
+1. **Fetch the latest** — If the git ref is a branch or PR head (not a fixed
+   commit hash), always `git fetch origin <ref>` first to ensure you have the
+   latest state. This handles the test → iterate → retest scenario where the
+   branch has been updated since the last run. Then fetch the skill from the
+   (now up-to-date) git ref: `git show <ref>:<skill-path>/SKILL.md` and all
+   files in the skill directory.
 2. **Create suffixed directory** in
    `~/.openclaw/workspace/eval-skills/<skill-name>-<label>-<7char-hash>/`.
    - The 7-char hash is the short hash of the git ref being fetched (for
