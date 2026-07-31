@@ -10,6 +10,17 @@ metadata:
 
 The eval runner orchestrates eval test phases. Each phase is a section below.
 
+## Variant Inference
+
+The skill determines which skill versions to set up based on the trigger context:
+
+- **Explicit variant specs provided** → use them as-is
+- **PR referenced, no explicit specs** → two variants: `main@<base-hash>` + `<pr-head>@<head-hash>`
+- **No PR, model A/B request** → single variant: `main@<hash>`
+- **No PR, commit comparison request** → two variants: `<commit-a>@<hash-a>` + `<commit-b>@<hash-b>` (user specifies the two commits)
+
+This inference happens at the skill level before the phases run. The env setup phase receives the resolved list of (git ref, label) pairs and handles the mechanics.
+
 ## Pre-flight Checks
 
 Before anything else, verify that all variant skills are safe to test.
@@ -139,24 +150,7 @@ to the execute phase:
 ## Environment Setup Phase
 
 Second phase of the eval runner. Prepares the eval environment so the harness
-can run variants in isolation. The skill is **directable** — the caller
-specifies which variants to set up, not hardcoded to trigger type.
-
-### Variant Specification (Input)
-
-The caller provides a list of variant specs. Each spec has:
-
-- A **git ref** to fetch the skill from (e.g. `main`, `feature/improve-skill`, `commit-abc123`)
-- A **label** for the suffix (e.g. `main`, `pr-123`, `commit-abc123`)
-
-Common patterns:
-
-| Pattern | Variants | Example |
-|---------|----------|--------|
-| PR default | Two copies (before + after) | `[main@hash, pr-123@hash]` |
-| PR re-run after updates | Single copy (updated only) | `[pr-123@hash]` |
-| Model A/B | Single copy (models vary in execute) | `[main@hash]` |
-| Arbitrary commit comparison | Two arbitrary refs | `[commit-abc@hash, commit-def@hash]` |
+can run variants in isolation.
 
 ### Procedure
 
@@ -174,48 +168,13 @@ For each variant spec:
    match the suffixed directory name (e.g., `linear-create` →
    `linear-create-main-a1b2c3d`).
 
-### Sync Integration
-
-The sync phase always runs before env setup (even for single-variant runs) to
-ensure the Langfuse dataset matches current `eval.yaml` on main. The sync phase
-output (manifest paths) is passed through to the execute phase alongside the
-suffix-to-variant mapping.
-
 ### Output
 
-Structured JSON for the execute phase:
+List of suffixed directories created in `~/.openclaw/workspace/eval-skills/`, each with:
 
-```json
-{
-  "skill": "<original-skill-name>",
-  "variants": [
-    {
-      "label": "main",
-      "suffix": "linear-create-main-a1b2c3d",
-      "dir": "~/.openclaw/workspace/eval-skills/linear-create-main-a1b2c3d",
-      "git_ref": "main",
-      "git_hash": "<full-hash>"
-    },
-    {
-      "label": "pr-123",
-      "suffix": "linear-create-pr-123-e5f6g7h",
-      "dir": "~/.openclaw/workspace/eval-skills/linear-create-pr-123-e5f6g7h",
-      "git_ref": "feature/improve-skill",
-      "git_hash": "<full-hash>"
-    }
-  ],
-  "manifest_before": "<path-or-null>",
-  "manifest_after": "<path-or-null>",
-  "trigger_type": "pr | slack | manual"
-}
-```
-
-### Cleanup (Gotcha)
-
-At the END of the run (after execute phase completes), clean up only the
-suffixed dirs THIS run created. Do not touch other dirs in eval-skills/.
-Cleanup is the responsibility of the full eval flow, not the env setup
-phase alone — env setup creates, the orchestrator cleans up after execute.
+- Suffixed skill name (e.g., `linear-create-main-a1b2c3d`)
+- Directory path
+- Git ref and label it was created from
 
 ### Gotchas
 
@@ -233,19 +192,16 @@ phase alone — env setup creates, the orchestrator cleans up after execute.
    before syncing to Langfuse. Fix self-references at the source skill
    before re-running.
 
-3. **Do not clean up other runs' dirs** — Only clean up dirs created by THIS
-   run. Other eval runs may be active concurrently.
-
-4. **Skill names are normalized** — OpenClaw normalizes skill names to
+3. **Skill names are normalized** — OpenClaw normalizes skill names to
    `[a-z0-9-]` (lowercase, hyphens only). Suffixed names must stay within
    this charset. No dots, underscores, or uppercase.
 
-5. **Concurrent runs** — The 7-char git hash in the suffix prevents directory
+4. **Concurrent runs** — The 7-char git hash in the suffix prevents directory
    collisions between concurrent runs testing different commits. If a
    collision still occurs (same ref, same hash), the run should detect the
    dir already exists and skip re-copying.
 
-6. **Copying subdirectories** — Skills may have subdirectories (references/,
+5. **Copying subdirectories** — Skills may have subdirectories (references/,
    scripts/, templates/, etc.). Copy the entire skill directory structure, not
    just SKILL.md. Internal relative paths in the skill body (e.g.,
    `references/foo.md`) work because the structure is preserved.
