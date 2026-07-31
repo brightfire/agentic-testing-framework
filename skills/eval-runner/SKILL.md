@@ -1,12 +1,16 @@
 ---
-name: eval-runner-sync
-description: "Use when an eval.yaml file needs to be synced to Langfuse — typically as the first phase of an eval run. Syncs before/after versions sequentially and captures manifest paths for the execute phase."
+name: eval-runner
+description: "Use when running eval tests — syncs eval definitions to Langfuse, prepares the eval environment, and orchestrates variant runs. Currently covers the sync phase; additional phases to be added."
 metadata:
   author: brightfire
-  version: "1.6"
+  version: "2.0"
 ---
 
-# Eval Runner — Sync Phase
+# Eval Runner
+
+The eval runner orchestrates eval test phases. Each phase is a section below.
+
+## Sync Phase
 
 First phase of the eval runner. Syncs eval definitions to Langfuse and captures
 manifest paths needed by the execute phase.
