@@ -58,30 +58,32 @@ concurrent syncs to the same dataset can interleave version timestamps.
 - Langfuse host must be reachable (default: `http://localhost:3000`)
 
 ```bash
-# Sync the "before" version → writes manifest to stdout
-# stdout (last line) = manifest path, stderr = empty (logs go to stdout)
-MANIFEST_BEFORE=$(~/repos/agentic-testing-framework/.venv/bin/python ~/repos/agentic-testing-framework/src/dataset_sync.py \
+# Sync the "before" version → manifest path is last line of stdout
+# All log output goes to stdout; manifest path is printed last
+~/repos/agentic-testing-framework/.venv/bin/python ~/repos/agentic-testing-framework/src/dataset_sync.py \
   --file "$WORK_DIR/eval-before.yaml" \
-  --output-manifest "$WORK_DIR/manifest-before.json" 2>"$WORK_DIR/sync-before.log")
+  --output-manifest "$WORK_DIR/manifest-before.json" > "$WORK_DIR/sync-before.log" 2>&1
+MANIFEST_BEFORE=$(tail -1 "$WORK_DIR/sync-before.log")
 
 # Verify — abort if manifest path is empty (sync failed or manifest not written)
 [ -z "$MANIFEST_BEFORE" ] && { echo "T1 sync failed"; cat "$WORK_DIR/sync-before.log"; rm -rf "$WORK_DIR"; exit 1; }
 
-# Sync the "after" version → writes manifest to stdout
-MANIFEST_AFTER=$(~/repos/agentic-testing-framework/.venv/bin/python ~/repos/agentic-testing-framework/src/dataset_sync.py \
+# Sync the "after" version → manifest path is last line of stdout
+~/repos/agentic-testing-framework/.venv/bin/python ~/repos/agentic-testing-framework/src/dataset_sync.py \
   --file "$WORK_DIR/eval-after.yaml" \
-  --output-manifest "$WORK_DIR/manifest-after.json" 2>"$WORK_DIR/sync-after.log")
+  --output-manifest "$WORK_DIR/manifest-after.json" > "$WORK_DIR/sync-after.log" 2>&1
+MANIFEST_AFTER=$(tail -1 "$WORK_DIR/sync-after.log")
 
 # Verify — abort if manifest path is empty
 [ -z "$MANIFEST_AFTER" ] && { echo "T2 sync failed"; cat "$WORK_DIR/sync-after.log"; rm -rf "$WORK_DIR"; exit 1; }
 ```
 
-**Important:** The sync script logs progress to stdout and prints the
+**Important:** The sync script logs all progress to stdout and prints the
 manifest file path as the **last line of stdout** when `--output-manifest`
-is passed. The `$(...)` capture gets the manifest path; the `2>` redirect
-saves stderr (empty in practice — logs go to stdout). The manifest JSON
-contains per-item server timestamps — these are passed to the execute
-phase to pin experiment runs to exact dataset state.
+is passed. Redirect all stdout to a log file, then extract the manifest
+path with `tail -1`. The manifest JSON contains per-item server
+timestamps — these are passed to the execute phase to pin experiment
+runs to exact dataset state.
 
 For the full CLI interface — arguments, environment variables, exit codes,
 and output format — see [`references/dataset_sync_interface.md`](references/dataset_sync_interface.md).
