@@ -9,7 +9,7 @@ metadata:
 # Eval Runner — Sync Phase
 
 First phase of the eval runner. Syncs eval definitions to Langfuse and captures
-version timestamps needed by the execute phase for the 4-variant test matrix.
+version timestamps needed by the execute phase.
 
 ## Inputs
 
@@ -106,7 +106,7 @@ eval_yaml_path: <path within repo>
 ```
 
 Both timestamps are ISO-8601 UTC strings (e.g. `2026-07-29T15:51:00.000000Z`).
-Pass these to the execute phase for the 4-variant test matrix:
+Pass these to the execute phase:
 - T1 pins the "before" dataset state (skill v1 + model A, skill v1 + model B)
 - T2 pins the "after" dataset state (skill v2 + model A, skill v2 + model B)
 
