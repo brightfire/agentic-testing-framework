@@ -55,27 +55,31 @@ concurrent syncs to the same dataset can interleave version timestamps.
 - Langfuse host must be reachable (default: `http://localhost:3000`)
 
 ```bash
-# Sync the "before" version → captures T1
+# Sync the "before" version → captures T1 + manifest
 # stdout = version timestamp (last line), stderr = sync log with item counts
 T1=$(python ~/repos/agentic-testing-framework/src/dataset_sync.py \
-  --file /tmp/eval-before.yaml 2>/tmp/sync-before.log)
+  --file /tmp/eval-before.yaml \
+  --output-manifest /tmp/manifest-before.json 2>/tmp/sync-before.log)
 
-# Sync the "after" version → captures T2
+# Sync the "after" version → captures T2 + manifest
 T2=$(python ~/repos/agentic-testing-framework/src/dataset_sync.py \
-  --file /tmp/eval-after.yaml 2>/tmp/sync-after.log)
+  --file /tmp/eval-after.yaml \
+  --output-manifest /tmp/manifest-after.json 2>/tmp/sync-after.log)
 ```
 
 **Important:** The sync script prints log output to stderr and the version
 timestamp as the **last line of stdout**. The `$(...)` capture gets stdout
 (T1/T2); the `2>` redirect saves stderr (sync logs with item counts) for
-parsing in the next step.
+verification in the next step. The `--output-manifest` flag writes a JSON
+file with per-item server timestamps — these manifests are passed to the
+execute phase to pin experiment runs to exact dataset state.
 
 For the full CLI interface — arguments, environment variables, exit codes,
 and output format — see [`references/dataset_sync_interface.md`](references/dataset_sync_interface.md).
 
-### Parse sync confirmation
+### Verify sync
 
-Read the sync log files to extract item-level operation counts per version:
+Read the sync log files to verify item-level operations completed successfully:
 
 - Items created
 - Items updated
@@ -103,6 +107,8 @@ T1: <before-version-timestamp or null>  (created: X, updated: Y, archived: Z)
 T2: <after-version-timestamp or null>   (created: X, updated: Y, archived: Z)
 skill: <skill-name>
 eval_yaml_path: <path within repo>
+manifest_before: /tmp/manifest-before.json
+manifest_after: /tmp/manifest-after.json
 ```
 
 Both timestamps are ISO-8601 UTC strings (e.g. `2026-07-29T15:51:00.000000Z`).
