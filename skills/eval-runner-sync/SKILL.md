@@ -1,21 +1,15 @@
 ---
 name: eval-runner-sync
-description: "Sync phase of the eval runner. Syncs before/after eval.yaml versions to Langfuse and captures version timestamps for the execute phase. PR-triggered only — use when a PR modifies eval.yaml in a skill directory."
+description: "Sync phase of the eval runner. Syncs before/after eval.yaml versions to Langfuse and captures version timestamps for the execute phase. Always runs when invoked."
 metadata:
   author: brightfire
-  version: "1.1"
+  version: "1.2"
 ---
 
 # Eval Runner — Sync Phase
 
 First phase of the eval runner. Syncs eval definitions to Langfuse and captures
 version timestamps needed by the execute phase for the 4-variant test matrix.
-
-## When This Runs
-
-- **Trigger:** PR that includes changes to any `eval.yaml` file in a skill directory
-- **Skip if:** PR only changes SKILL.md or other non-eval files — existing dataset is used as-is
-- **Skip if:** Slack-triggered tests (model A/B only — no skill or eval changes, sync never needed)
 
 ## Inputs
 
@@ -28,15 +22,7 @@ version timestamps needed by the execute phase for the 4-variant test matrix.
 
 ## Procedure
 
-### 1. Detect eval.yaml changes
-
-Examine the PR diff for changes to any file named `eval.yaml`. If no eval.yaml
-was modified, skip sync entirely — report "no sync needed" and exit.
-
-Use `gh pr diff <PR-number> --name-only` or equivalent to list changed files,
-then filter for `eval.yaml`.
-
-### 2. Extract both versions of eval.yaml
+### 1. Extract both versions of eval.yaml
 
 Use `git show` to extract each version to a temp file. This avoids modifying
 the working tree and works regardless of current checkout state.
@@ -58,7 +44,7 @@ phase should handle this (fewer variants, use current dataset state as baseline)
 If `git show <pr-head-ref>:<eval-yaml-path>` fails, the eval was removed.
 Skip T2 sync. This is unusual — flag it for human review rather than proceeding.
 
-### 3. Sync each version to Langfuse
+### 2. Sync each version to Langfuse
 
 Run `dataset_sync.py` for each version that exists. Run sequentially —
 concurrent syncs to the same dataset can interleave version timestamps.
@@ -82,12 +68,12 @@ T2=$(python ~/repos/agentic-testing-framework/src/dataset_sync.py \
 **Important:** The sync script prints log output to stderr and the version
 timestamp as the **last line of stdout**. The `$(...)` capture gets stdout
 (T1/T2); the `2>` redirect saves stderr (sync logs with item counts) for
-parsing in step 4.
+parsing in step 3.
 
 For the full CLI interface — arguments, environment variables, exit codes,
 and output format — see [`references/dataset_sync_interface.md`](references/dataset_sync_interface.md).
 
-### 4. Parse sync confirmation
+### 3. Parse sync confirmation
 
 Read the sync log files to extract item-level operation counts per version:
 
@@ -101,7 +87,7 @@ grep -E 'created|updated|archived' /tmp/sync-before.log
 grep -E 'created|updated|archived' /tmp/sync-after.log
 ```
 
-### 5. Clean up temp files
+### 4. Clean up temp files
 
 ```bash
 rm -f /tmp/eval-before.yaml /tmp/eval-after.yaml /tmp/sync-before.log /tmp/sync-after.log
