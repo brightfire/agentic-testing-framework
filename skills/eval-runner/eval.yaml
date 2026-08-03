@@ -74,9 +74,9 @@ items:
       - Base branch: main
       - Files changed: skills/eval-runner/SKILL.md
 
-      Prior runs: baseline (before/main) experiments for this dataset
-      already exist in Langfuse for both glm-5.2 and claude-sonnet-4-6,
-      created 2 days ago.
+      Prior runs: 2 baseline (before/main) experiments already exist in
+      Langfuse for this dataset — one for glm-5.2 and one for
+      claude-sonnet-4-6, both created 2 days ago.
 
       User request: "Test this PR against openrouter/z-ai/glm-5.2 and
       anthropic/claude-sonnet-4-6."
@@ -84,20 +84,136 @@ items:
       behavior: |
         The agent reads the eval-runner skill, runs variant inference
         with the model dimension, runs the baseline recency check and
-        finds recent baseline experiments for both models. It skips
-        the baseline variant — only the after (PR head) variant is
-        included. The confirmation summary shows 1 skill variant × 2
-        models = 2 runs, with baseline status "already tested, skipping."
+        finds 2 recent baseline experiments — one per model. It skips
+        the baseline variant for both models — only the after (PR head)
+        variant is included. The confirmation summary shows 1 skill
+        variant × 2 models = 2 runs, with baseline status "already
+        tested, skipping" for both models.
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Variant Inference
         - "Inference: identifies two models — glm-5.2 and claude-sonnet-4-6"
-        - "Inference: runs baseline recency check — finds recent baseline experiments for both models"
-        - "Inference: skips baseline variant — only after (PR head) is included"
+        - "Inference: runs baseline recency check — finds 2 separate baseline experiments (one per model)"
+        - "Inference: skips baseline variant for both models — only after (PR head) is included"
         - "Inference: recognizes the reduced matrix is 1 skill variant × 2 models = 2 runs (not 4)"
         # Phase: Confirmation
         - "Confirmation: presents summary showing only after variant, both models, total run count (2)"
-        - "Confirmation: notes baseline status as 'already tested, skipping'"
+        - "Confirmation: notes baseline status as 'already tested, skipping' for both models"
+        - "Confirmation: waits for user confirmation — does not proceed to any further phase"
+      scoring_rules: |
+        Score 10 * (passed criteria / total criteria).
+
+  - id: model-comparison-after-pr-eval
+    input: |
+      PR context:
+      - Repo: brightfire/agentic-testing-framework
+      - PR branch: claw/vash/improve-eval-runner
+      - Base branch: main
+      - Files changed: skills/eval-runner/SKILL.md
+
+      Prior runs: A previous PR eval was already completed using
+      openrouter/z-ai/glm-5.2 as the single model. Baseline (before/main)
+      experiment exists in Langfuse for glm-5.2 only, created 1 day ago.
+      No baseline experiment exists for claude-sonnet-4-6.
+
+      User request: "Now test this PR against glm-5.2 and
+      claude-sonnet-4-6."
+    expected_output:
+      behavior: |
+        The agent reads the eval-runner skill, runs variant inference
+        with the model dimension, and runs the baseline recency check.
+        It finds a baseline experiment for glm-5.2 (skip baseline) but
+        no baseline for claude-sonnet-4-6 (include baseline). The
+        confirmation summary shows: after×glm-5.2, after×claude-sonnet-4-6,
+        before×claude-sonnet-4-6 = 3 runs. Baseline status notes glm-5.2
+        as "already tested" and claude-sonnet-4-6 as "no prior baseline."
+      scoring_type: pass_fail
+      scoring_criteria:
+        # Phase: Variant Inference
+        - "Inference: identifies two models — glm-5.2 and claude-sonnet-4-6"
+        - "Inference: runs baseline recency check — finds baseline for glm-5.2 only, not for claude-sonnet-4-6"
+        - "Inference: skips baseline for glm-5.2 (already tested)"
+        - "Inference: includes baseline for claude-sonnet-4-6 (no prior baseline)"
+        - "Inference: recognizes the matrix is 3 runs: after×glm-5.2, after×claude-sonnet-4-6, before×claude-sonnet-4-6"
+        # Phase: Confirmation
+        - "Confirmation: presents summary showing after variant for both models plus before variant for claude-sonnet-4-6 only"
+        - "Confirmation: shows total run count (3)"
+        - "Confirmation: notes baseline status per model — glm-5.2 skipped, claude-sonnet-4-6 included"
+        - "Confirmation: waits for user confirmation — does not proceed to any further phase"
+      scoring_rules: |
+        Score 10 * (passed criteria / total criteria).
+
+  - id: model-b-only-after-pr-eval
+    input: |
+      PR context:
+      - Repo: brightfire/agentic-testing-framework
+      - PR branch: claw/vash/improve-eval-runner
+      - Base branch: main
+      - Files changed: skills/eval-runner/SKILL.md
+
+      Prior runs: A previous PR eval was already completed using
+      openrouter/z-ai/glm-5.2 as the single model. Baseline (before/main)
+      experiment exists in Langfuse for glm-5.2 only, created 1 day ago.
+      No baseline experiment exists for claude-sonnet-4-6.
+
+      User request: "Now test this PR against claude-sonnet-4-6."
+    expected_output:
+      behavior: |
+        The agent reads the eval-runner skill, runs variant inference
+        with a single model (claude-sonnet-4-6), and runs the baseline
+        recency check. It finds no baseline experiment for
+        claude-sonnet-4-6, so the baseline variant is included. The
+        confirmation summary shows: before×claude-sonnet-4-6,
+        after×claude-sonnet-4-6 = 2 runs. Baseline status notes
+        claude-sonnet-4-6 as "no prior baseline."
+      scoring_type: pass_fail
+      scoring_criteria:
+        # Phase: Variant Inference
+        - "Inference: identifies single model — claude-sonnet-4-6"
+        - "Inference: runs baseline recency check — finds no baseline experiment for claude-sonnet-4-6"
+        - "Inference: includes baseline variant for claude-sonnet-4-6 (no prior baseline)"
+        - "Inference: recognizes the matrix is 2 runs: before×claude-sonnet-4-6, after×claude-sonnet-4-6"
+        # Phase: Confirmation
+        - "Confirmation: presents summary showing both before and after variants for claude-sonnet-4-6"
+        - "Confirmation: shows total run count (2)"
+        - "Confirmation: notes baseline status as 'no prior baseline' for claude-sonnet-4-6"
+        - "Confirmation: waits for user confirmation — does not proceed to any further phase"
+      scoring_rules: |
+        Score 10 * (passed criteria / total criteria).
+
+  - id: model-ab-baseline-missing
+    input: |
+      PR context:
+      - Repo: brightfire/agentic-testing-framework
+      - PR branch: claw/vash/improve-eval-runner
+      - Base branch: main
+      - Files changed: skills/eval-runner/SKILL.md
+
+      Prior runs: A previous eval was run as a re-run (after variant
+      only, no baseline). No baseline (before/main) experiments exist
+      in Langfuse for this dataset for any model.
+
+      User request: "Test this PR against glm-5.2 and claude-sonnet-4-6."
+    expected_output:
+      behavior: |
+        The agent reads the eval-runner skill, runs variant inference
+        with the model dimension, and runs the baseline recency check.
+        It finds no baseline experiments for either model, so the
+        baseline variant is included for both. The confirmation summary
+        shows the full 2×2 matrix: before×glm-5.2, before×claude-sonnet-4-6,
+        after×glm-5.2, after×claude-sonnet-4-6 = 4 runs. Baseline status
+        notes "no prior baseline" for both models.
+      scoring_type: pass_fail
+      scoring_criteria:
+        # Phase: Variant Inference
+        - "Inference: identifies two models — glm-5.2 and claude-sonnet-4-6"
+        - "Inference: runs baseline recency check — finds no baseline experiments for either model"
+        - "Inference: includes baseline variant for both models"
+        - "Inference: recognizes the full matrix is 2 skill variants × 2 models = 4 runs"
+        # Phase: Confirmation
+        - "Confirmation: presents summary showing both skill variants for both models"
+        - "Confirmation: shows total run count (4)"
+        - "Confirmation: notes baseline status as 'no prior baseline' for both models"
         - "Confirmation: waits for user confirmation — does not proceed to any further phase"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
