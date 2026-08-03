@@ -15,14 +15,15 @@ The eval runner orchestrates eval test phases. Each phase is a section below.
 The skill determines what to test based on the request, not the trigger source. Three independent dimensions:
 
 **Skill versions** (what skill code to test):
-- **PR referenced, no explicit skill specs** → default to skill A/B: `main@<base-hash>` + `<pr-head>@<head-hash>`
-- **Request names specific commits** → use those commits as skill variants
-- **Request says "just the PR version" or similar** → single skill variant: `<pr-head>@<hash>`
-- **Explicit skill variant specs provided** → use them
+- **PR referenced, no explicit skill specs** → default to skill A/B: base branch (e.g., `main@<base-hash>`) + PR head branch (e.g., `<pr-branch>@<head-hash>`). The variant label is the branch name.
+- **Request names specific commits** → use those commits as skill variants. The variant label is the commit hash.
+- **Request says "just the PR version" or similar** → single skill variant: `<pr-branch>@<hash>`. The variant label is the PR branch name.
+- **Explicit skill variant specs provided** → use them. The variant label is the branch name or commit hash provided.
 
-Variants are identified by their git hash in experiment names — no label field.
-The inference still determines which hashes to test (base hash + PR head hash),
-but the experiment names use only the hash, not a "before"/"after" label.
+The variant label identifies the source of the variant — the branch name (for
+PR-triggered runs) or commit hash (for explicit specs). This label appears in
+experiment names to distinguish variants, alongside the git hash for precise
+commit identification.
 
 **Models** (what models to run each skill variant against):
 - **Request mentions model comparison** → model A/B dimension added
@@ -40,13 +41,19 @@ whether baseline experiments already exist in Langfuse for this PR's dataset.
 The execute phase creates experiments using the naming convention:
 
 ```
-<dataset-name>__<model-id>__<git-hash>
+<dataset-name>__<model-id>__<variant-label>__<git-hash>
 ```
 
-For example: `linear-create-eval__glm-5.2__a1b2c3d`
+Where `<variant-label>` is the branch name or commit ref that identifies the
+variant source. For example: `linear-create-eval__glm-5.2__main__a1b2c3d`
+(base branch `main`) or `linear-create-eval__glm-5.2__claw-vash-fix-xyz__e5f6g7h`
+(PR head branch `claw/vash/fix-xyz` with slashes normalized to hyphens).
+
+Branch names containing `/` (e.g., `claw/vash/fix-xyz`) have slashes replaced
+with hyphens in experiment names (e.g., `claw-vash-fix-xyz`).
 
 During inference, query Langfuse for experiments matching
-`<dataset-name>__<model-id>__<base-hash>` for each
+`<dataset-name>__<model-id>__<base-branch-name>__<base-hash>` for each
 requested model — using the resolved base commit hash (from the Ref
 Resolution step), not a wildcard. This ensures the baseline matches the
 current base state, even if `main` has advanced within the 7-day window.
@@ -70,8 +77,9 @@ prior baseline runs for 2 models: 1 skill variant (after only) × 2 models =
 
 This inference happens at the skill level before the phases run. The env setup
 phase receives the resolved list of (git ref, label) pairs for skill versions
-and handles the mechanics of creating suffixed copies. The label is used only
-for directory naming in env setup — experiment names use only the git hash.
+and handles the mechanics of creating suffixed copies. The label is used both
+for directory naming in env setup and as the variant-label component in
+experiment names.
 
 ## Confirmation
 
