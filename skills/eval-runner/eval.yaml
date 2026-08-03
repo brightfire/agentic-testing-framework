@@ -15,7 +15,7 @@ items:
       User request: "Run the eval for this PR."
     expected_output:
       behavior: |
-        The agent reads the eval-runner skill, runs variant inference,
+        runs variant inference,
         and presents a confirmation summary. It does NOT proceed to
         pre-flight, sync, or env setup — it waits for the user to
         confirm, adjust, or cancel.
@@ -46,7 +46,7 @@ items:
       anthropic/claude-sonnet-4-6."
     expected_output:
       behavior: |
-        The agent reads the eval-runner skill, runs variant inference
+        runs variant inference
         with the model dimension, and notes that eval.yaml has changed
         in addition to SKILL.md — meaning both before and after eval
         versions will need syncing (two dataset timestamps). It runs
@@ -83,7 +83,7 @@ items:
       anthropic/claude-sonnet-4-6."
     expected_output:
       behavior: |
-        The agent reads the eval-runner skill, runs variant inference
+        runs variant inference
         with the model dimension added, runs the baseline recency
         check (no prior experiments, so baseline is included), and
         presents a confirmation summary showing the full 2×2 matrix
@@ -120,7 +120,7 @@ items:
       anthropic/claude-sonnet-4-6."
     expected_output:
       behavior: |
-        The agent reads the eval-runner skill, runs variant inference
+        runs variant inference
         with the model dimension, runs the baseline recency check and
         finds 2 recent baseline experiments — one per model. It skips
         the baseline variant for both models — only the after (PR head)
@@ -158,7 +158,7 @@ items:
       claude-sonnet-4-6."
     expected_output:
       behavior: |
-        The agent reads the eval-runner skill, runs variant inference
+        runs variant inference
         with the model dimension, and runs the baseline recency check.
         It finds a baseline experiment for glm-5.2 (skip baseline) but
         no baseline for claude-sonnet-4-6 (include baseline). The
@@ -197,7 +197,7 @@ items:
       User request: "Now test this PR against claude-sonnet-4-6."
     expected_output:
       behavior: |
-        The agent reads the eval-runner skill, runs variant inference
+        runs variant inference
         with a single model (claude-sonnet-4-6), and runs the baseline
         recency check. It finds no baseline experiment for
         claude-sonnet-4-6, so the baseline variant is included. The
@@ -234,7 +234,7 @@ items:
       User request: "Test this PR against glm-5.2 and claude-sonnet-4-6."
     expected_output:
       behavior: |
-        The agent reads the eval-runner skill, runs variant inference
+        runs variant inference
         with the model dimension, and runs the baseline recency check.
         It finds no baseline experiments for either model, so the
         baseline variant is included for both. The confirmation summary
@@ -273,7 +273,7 @@ items:
       Proceed with the eval.
     expected_output:
       behavior: |
-        The agent reads the eval-runner skill and executes pre-flight
+        executes pre-flight
         checks, sync (both versions), and env setup (both variants).
         Inference and confirmation are already done — the agent does
         not re-present a confirmation summary.
@@ -310,7 +310,7 @@ items:
       User request: "Re-run the previous eval for this PR."
     expected_output:
       behavior: |
-        The agent reads the eval-runner skill, recognizes the re-run
+        recognizes the re-run
         request, and skips variant inference + confirmation — reusing
         the previous variant spec directly. It proceeds to pre-flight
         checks, then syncs ONLY the after version (PR head) — the
@@ -353,7 +353,7 @@ items:
       Proceed with the eval.
     expected_output:
       behavior: |
-        The agent reads the eval-runner skill and proceeds to pre-flight
+        proceeds to pre-flight
         checks (inference and confirmation already done). Pre-flight
         detects a self-reference — the skill name appearing in the
         SKILL.md body — and aborts the entire run before syncing
@@ -388,7 +388,7 @@ items:
       User request: "Run only the sync phase for this PR."
     expected_output:
       behavior: |
-        The agent reads the eval-runner skill, attempts to extract the
+        attempts to extract the
         before version from main and finds it doesn't exist. It correctly
         handles this as a new eval definition: manifest_before is null,
         only the after version is synced. The output structure reflects
@@ -418,7 +418,7 @@ items:
       User request: "Run only the sync phase for this PR."
     expected_output:
       behavior: |
-        The agent reads the eval-runner skill, recognizes the sync
+        recognizes the sync
         failure from the non-zero exit code, and aborts the sync
         phase. It does NOT attempt the after sync. It reports the
         error from the script output and explains that the before
@@ -431,6 +431,5 @@ items:
         - "Does not proceed to env setup or any subsequent phase"
         - "Reports the error from the script output"
         - "Explains that before sync must succeed before proceeding"
-        - "References having read the eval-runner skill"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
