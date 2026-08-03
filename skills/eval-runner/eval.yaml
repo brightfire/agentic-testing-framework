@@ -7,12 +7,12 @@ items:
   - id: pr-triggered-default-ab
     input: |
       A PR in brightfire/agentic-testing-framework modifies the
-      linear-create skill (skills/linear-create/SKILL.md) on branch
-      claw/vash/improve-linear-create. The base branch is main.
+      eval-runner skill (skills/eval-runner/SKILL.md) on branch
+      claw/vash/improve-eval-runner. The base branch is main.
 
       Read the eval-runner skill from available_skills, then run the
       eval for this PR. The PR has an eval.yaml at
-      skills/linear-create/eval.yaml.
+      skills/eval-runner/eval.yaml.
 
       Simulate all phases — do NOT actually run dataset_sync.py or
       create directories. Report what you would do at each phase and
@@ -57,10 +57,10 @@ items:
 
   - id: model-comparison-request
     input: |
-      A user requests: "Test the linear-create skill comparing
+      A user requests: "Test the eval-runner skill comparing
       openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6.
-      The PR is on branch claw/vash/improve-linear-create, base is main.
-      The eval.yaml is at skills/linear-create/eval.yaml."
+      The PR is on branch claw/vash/improve-eval-runner, base is main.
+      The eval.yaml is at skills/eval-runner/eval.yaml."
 
       Read the eval-runner skill from available_skills, then run the
       eval. Simulate all phases — do NOT actually run dataset_sync.py
@@ -105,8 +105,8 @@ items:
 
   - id: rerun-previous-eval
     input: |
-      A user says: "Re-run the previous eval for the linear-create PR
-      on claw/vash/improve-linear-create."
+      A user says: "Re-run the previous eval for the eval-runner PR
+      on claw/vash/improve-eval-runner."
 
       The previous run used skill A/B (main vs PR head), single model,
       all dataset items. Read the eval-runner skill from available_skills
@@ -148,12 +148,12 @@ items:
   - id: self-reference-abort
     input: |
       A PR in brightfire/agentic-testing-framework modifies the
-      linear-create skill on branch claw/vash/improve-linear-create.
+      eval-runner skill on branch claw/vash/improve-eval-runner.
       The base branch is main. The eval.yaml is at
-      skills/linear-create/eval.yaml.
+      skills/eval-runner/eval.yaml.
 
-      The linear-create skill's SKILL.md body contains the text
-      "the linear-create skill will match projects" — it references
+      The eval-runner skill's SKILL.md body contains the text
+      "the eval-runner skill will sync datasets" — it references
       its own skill name.
 
       Read the eval-runner skill from available_skills, then run the
@@ -163,7 +163,7 @@ items:
       behavior: |
         The agent reads the eval-runner skill, runs variant inference
         (skill A/B), presents confirmation, and proceeds to pre-flight
-        checks. Pre-flight detects the self-reference "linear-create"
+        checks. Pre-flight detects the self-reference "eval-runner"
         in the skill body and aborts the entire run before syncing
         anything to Langfuse or setting up the env. It reports which
         skill and line(s) contain self-references and tells the user
@@ -177,7 +177,7 @@ items:
         # Phase: Pre-flight (abort path)
         - "Pre-flight: fetches SKILL.md from both git refs via git show"
         - "Pre-flight: scans skill body (not frontmatter) for self-references using word-boundary regex"
-        - "Pre-flight: detects 'linear-create' self-reference in the skill body"
+        - "Pre-flight: detects 'eval-runner' self-reference in the skill body"
         - "Pre-flight: aborts the entire run — does not proceed to sync"
         - "Pre-flight: does NOT call dataset_sync.py or Langfuse"
         - "Pre-flight: does NOT create suffixed directories or run env setup"
@@ -192,7 +192,7 @@ items:
     input: |
       You are running the eval-runner for a PR in
       brightfire/agentic-testing-framework. The PR adds a new file:
-      skills/linear-create/eval.yaml. This file does not exist on the
+      skills/eval-runner/eval.yaml. This file does not exist on the
       base branch (main). The PR head branch is claw/vash/add-eval-yaml.
 
       Read the eval-runner skill from available_skills, then perform
@@ -221,7 +221,7 @@ items:
     input: |
       You are running the eval-runner for a PR in
       brightfire/agentic-testing-framework, which modifies
-      skills/linear-create/eval.yaml. You have extracted both versions
+      skills/eval-runner/eval.yaml. You have extracted both versions
       and started the sync. The "before" version sync failed —
       dataset_sync.py exited with code 1 and the output shows
       "LANGFUSE_SECRET_KEY not set".
