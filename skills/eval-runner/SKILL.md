@@ -300,14 +300,6 @@ List of suffixed directories created in `~/.openclaw/workspace/eval-skills/`, ea
    just SKILL.md. Internal relative paths in the skill body (e.g.,
    `references/foo.md`) work because the structure is preserved.
 
-### Cleanup
-
-After the execute and report phases complete (or if the run aborts after
-env setup), remove the suffixed directories created by this run. Track
-which directories were created during the procedure above and `rm -rf` only
-those directories. Do not remove directories created by other concurrent
-runs.
-
 ## Execute Phase
 
 Not yet implemented.
@@ -315,6 +307,14 @@ Not yet implemented.
 ## Report Phase
 
 Not yet implemented.
+
+## Cleanup
+
+After the execute and report phases complete, remove the suffixed
+directories created during Environment Setup. Track which directories were
+created during env setup and `rm -rf` only those. Do not remove directories
+created by other concurrent runs. If the run aborts after env setup (e.g.,
+execute phase failure), cleanup should still run.
 
 ## References
 
