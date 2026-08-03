@@ -20,6 +20,10 @@ The skill determines what to test based on the request, not the trigger source. 
 - **Request says "just the PR version" or similar** → single skill variant: `<pr-head>@<hash>`
 - **Explicit skill variant specs provided** → use them
 
+Variants are identified by their git hash in experiment names — no label field.
+The inference still determines which hashes to test (base hash + PR head hash),
+but the experiment names use only the hash, not a "before"/"after" label.
+
 **Models** (what models to run each skill variant against):
 - **Request mentions model comparison** → model A/B dimension added
 - **No model mention** → single model (whatever the agent default is)
@@ -36,13 +40,13 @@ whether baseline experiments already exist in Langfuse for this PR's dataset.
 The execute phase creates experiments using the naming convention:
 
 ```
-<dataset-name>__<model-id>__<variant-label>__<git-hash>
+<dataset-name>__<model-id>__<git-hash>
 ```
 
-For example: `linear-create-eval__glm-5.2__before__a1b2c3d`
+For example: `linear-create-eval__glm-5.2__a1b2c3d`
 
 During inference, query Langfuse for experiments matching
-`<dataset-name>__<model-id>__before__<base-hash>` for each
+`<dataset-name>__<model-id>__<base-hash>` for each
 requested model — using the resolved base commit hash (from the Ref
 Resolution step), not a wildcard. This ensures the baseline matches the
 current base state, even if `main` has advanced within the 7-day window.
@@ -66,7 +70,8 @@ prior baseline runs for 2 models: 1 skill variant (after only) × 2 models =
 
 This inference happens at the skill level before the phases run. The env setup
 phase receives the resolved list of (git ref, label) pairs for skill versions
-and handles the mechanics of creating suffixed copies.
+and handles the mechanics of creating suffixed copies. The label is used only
+for directory naming in env setup — experiment names use only the git hash.
 
 ## Confirmation
 
