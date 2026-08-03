@@ -124,7 +124,7 @@ class EvalFile(BaseModel):
     Fields:
         dataset: Langfuse dataset name. Must not contain ``:`` (used for
             namespaced Langfuse item IDs).
-        description: Optional human-readable description of the dataset.
+        description: Human-readable description of the dataset.
         items: List of eval test cases. Item IDs must be unique within
             the dataset.
 
@@ -136,7 +136,7 @@ class EvalFile(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     dataset: str = Field(description="Langfuse dataset name")
-    description: str | None = Field(default=None, description="Human-readable description")
+    description: str = Field(description="Human-readable description of the dataset")
     items: list[EvalItem] = Field(description="List of eval test cases")
 
     @field_validator("dataset")
@@ -150,11 +150,9 @@ class EvalFile(BaseModel):
 
     @field_validator("description")
     @classmethod
-    def strip_description(cls, v: str | None) -> str | None:
-        if v is None:
-            return None
+    def strip_description(cls, v: str) -> str:
         if not v.strip():
-            return None
+            raise ValueError("description must not be empty or whitespace-only")
         return v.strip()
 
     @model_validator(mode="after")

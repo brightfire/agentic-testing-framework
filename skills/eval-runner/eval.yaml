@@ -1,5 +1,7 @@
 dataset: eval-runner
 
+description: "End-to-end evaluation runner for OpenClaw skills — dataset sync, environment setup, variant isolation, and orchestrated eval runs via Langfuse."
+
 items:
   # ─── Inference + confirmation (stops at confirmation gate) ──────────
 
