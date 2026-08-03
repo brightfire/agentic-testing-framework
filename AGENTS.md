@@ -61,36 +61,18 @@ Prose fields (behavior, input context, prior runs) should wrap at ~180 character
 **No "reads the skill" in expected output.**
 The agent reading the skill is implicit in every eval run. Do not state it in behavior descriptions or include it as a scoring criterion.
 
-## SKILL.md Format
+## Eval-Specific Skill Notes
 
-```yaml
----
-name: <skill-name>
-description: "Use when <trigger condition> — <brief summary of what it does>"
-metadata:
-  author: brightfire
-  version: "<semver>"
----
-```
-
-- Skill name must be `[a-z0-9-]` (lowercase, hyphens only)
-- Sections use `##` headers for phases
-- Subdirectories (references/, scripts/) are preserved when the skill is copied for eval isolation
+- Subdirectories (references/, scripts/) are preserved when a skill is copied for eval isolation
 - Self-references in the skill body (the skill name appearing outside frontmatter) will cause pre-flight abort — skills must not reference themselves by name
 
 ## Development
-
-### Branch Naming
-
-- `claw/vash/<short-description>` for all work
-- Create branches from `main`
-- One PR per logical change
 
 ### PR Workflow
 
 1. Branch from `main`
 2. Make changes
-3. `gh pr create` (or `gh api -X POST repos/brightfire/agentic-testing-framework/pulls` if token issues arise)
+3. Create a PR
 4. Do not merge — leave that for the human
 
 ### Running Tests
