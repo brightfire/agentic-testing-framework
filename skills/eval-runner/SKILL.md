@@ -36,13 +36,13 @@ whether baseline experiments already exist in Langfuse for this PR's dataset.
 The execute phase creates experiments using the naming convention:
 
 ```
-<dataset-name>__<skill-name>__<variant-label>__<model-id>__<git-hash>
+<dataset-name>__<skill-name>__<model-id>__<variant-label>__<git-hash>
 ```
 
-For example: `linear-create-eval__linear-create__before__glm-5.2__a1b2c3d`
+For example: `linear-create-eval__linear-create__glm-5.2__before__a1b2c3d`
 
 During inference, query Langfuse for experiments matching
-`<dataset-name>__<skill-name>__before__<model-id>__<base-hash>` for each
+`<dataset-name>__<skill-name>__<model-id>__before__<base-hash>` for each
 requested model — using the resolved base commit hash (from the Ref
 Resolution step), not a wildcard. This ensures the baseline matches the
 current base state, even if `main` has advanced within the 7-day window.
