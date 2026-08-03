@@ -15,15 +15,14 @@ The eval runner orchestrates eval test phases. Each phase is a section below.
 The skill determines what to test based on the request, not the trigger source. Three independent dimensions:
 
 **Skill versions** (what skill code to test):
-- **PR referenced, no explicit skill specs** → default to skill A/B: base branch (e.g., `main@<base-hash>`) + PR head (e.g., `<pr-branch>@<head-hash>`). The variant label is `main` (base branch name) for the base and `pr-<number>` (e.g., `pr-123`) for the PR head.
+- **PR referenced, no explicit skill specs** → default to skill A/B: base branch (e.g., `main@<base-hash>`) + PR head (e.g., `<pr-branch>@<head-hash>`). The variant label is `main` (base
+  branch name) for the base and `pr-<number>` (e.g., `pr-123`) for the PR head.
 - **Request names specific commits** → use those commits as skill variants. The variant label is the commit hash.
 - **Request says "just the PR version" or similar** → single skill variant: `<pr-branch>@<hash>`. The variant label is `pr-<number>` (e.g., `pr-123`).
 - **Explicit skill variant specs provided** → use them. The variant label is the branch name or commit hash provided.
 
-The variant label identifies the source of the variant — the PR number (for
-PR head variants), the base branch name (for the base variant), or commit hash
-(for explicit specs). This label appears in experiment names to distinguish
-variants, alongside the git hash for precise commit identification.
+The variant label identifies the source of the variant — the PR number (for PR head variants), the base branch name (for the base variant), or commit hash (for explicit specs). This label
+appears in experiment names to distinguish variants, alongside the git hash for precise commit identification.
 
 **Models** (what models to run each skill variant against):
 - **Request mentions model comparison** → model A/B dimension added
@@ -35,64 +34,43 @@ variants, alongside the git hash for precise commit identification.
 
 ### Baseline Recency Check
 
-**Baseline recency check** (PR-triggered only):
-Before adding the baseline (before/main) variant to the run matrix, check
-whether baseline experiments already exist in Langfuse for this PR's dataset.
-The execute phase creates experiments using the naming convention:
+**Baseline recency check** (PR-triggered only): Before adding the baseline (before/main) variant to the run matrix, check whether baseline experiments already exist in Langfuse for this
+PR's dataset.  The execute phase creates experiments using the naming convention:
 
 ```
 <dataset-name>__<model-id>__<variant-label>__<git-hash>
 ```
 
-Where `<variant-label>` identifies the variant source — the base branch
-name (e.g., `main`), the PR number (e.g., `pr-123`), or a commit ref (for
-explicit specs). For example: `linear-create-eval__glm-5.2__main__a1b2c3d`
-(base branch `main`) or `linear-create-eval__glm-5.2__pr-123__e5f6g7h`
-(PR head, PR number as label).
+Where `<variant-label>` identifies the variant source — the base branch name (e.g., `main`), the PR number (e.g., `pr-123`), or a commit ref (for explicit specs). For example:
+`linear-create-eval__glm-5.2__main__a1b2c3d` (base branch `main`) or `linear-create-eval__glm-5.2__pr-123__e5f6g7h` (PR head, PR number as label).
 
-For explicit variant specs using branch names containing `/` (e.g.,
-`claw/vash/fix-xyz`), slashes are replaced with hyphens in experiment names
-(e.g., `claw-vash-fix-xyz`).
+For explicit variant specs using branch names containing `/` (e.g., `claw/vash/fix-xyz`), slashes are replaced with hyphens in experiment names (e.g., `claw-vash-fix-xyz`).
 
-During inference, query Langfuse for experiments matching
-`<dataset-name>__<model-id>__<base-branch-name>__<base-hash>` for each
-requested model — using the resolved base commit hash (from the Ref
-Resolution step), not a wildcard. This ensures the baseline matches the
-current base state, even if `main` has advanced within the 7-day window.
-If experiments exist for all requested models within a recent window
-(default: 7 days), skip the baseline variant — only test the after (PR
-head) variant. The confirmation summary notes "baseline already tested,
-skipping."
+During inference, query Langfuse for experiments matching `<dataset-name>__<model-id>__<base-branch-name>__<base-hash>` for each requested model — using the resolved base commit hash
+(from the Ref Resolution step), not a wildcard. This ensures the baseline matches the current base state, even if `main` has advanced within the 7-day window.  If experiments exist for all
+requested models within a recent window (default: 7 days), skip the baseline variant — only test the after (PR head) variant. The confirmation summary notes "baseline already tested, skipping."
 
-If baseline experiments are missing for any requested model, or are older
-than the window, include the baseline variant for those models only.
+If baseline experiments are missing for any requested model, or are older than the window, include the baseline variant for those models only.
 
 This check does NOT apply to:
 - First-time PR runs (no prior experiments exist)
 - Explicit "re-run baseline" requests from the user
 - Non-PR triggers (direct skill vs model comparisons with no PR context)
 
-The model and dataset dimensions are orthogonal — they multiply with the
-remaining skill variants after the baseline check. For example, a PR with
-prior baseline runs for 2 models: 1 skill variant (after only) × 2 models =
-2 runs instead of 4.
+The model and dataset dimensions are orthogonal — they multiply with the remaining skill variants after the baseline check. For example, a PR with prior baseline runs for 2 models:
+1 skill variant (after only) × 2 models = 2 runs instead of 4.
 
-This inference happens at the skill level before the phases run. The env setup
-phase receives the resolved list of (git ref, label) pairs for skill versions
-and handles the mechanics of creating suffixed copies. The label is used both
-for directory naming in env setup and as the variant-label component in
-experiment names.
+This inference happens at the skill level before the phases run. The env setup phase receives the resolved list of (git ref, label) pairs for skill versions and handles the mechanics of
+creating suffixed copies. The label is used both for directory naming in env setup and as the variant-label component in experiment names.
 
 ## Confirmation
 
-After inferring variants, the skill presents a summary and waits for user
-confirmation before proceeding. The summary shows:
+After inferring variants, the skill presents a summary and waits for user confirmation before proceeding. The summary shows:
 
 - Skill variants (name, git ref, short hash)
 - Models to test
 - Dataset items (all or specific ids)
-- Baseline status: whether baseline is included or skipped (with reason —
-  "already tested within 7 days" or "no prior runs found")
+- Baseline status: whether baseline is included or skipped (with reason — "already tested within 7 days" or "no prior runs found")
 
 The user can:
 - **Confirm** — proceed to pre-flight checks
@@ -100,63 +78,46 @@ The user can:
 
 Only after confirmation does the skill proceed to pre-flight checks and the phases.
 
-If the user says "run same test again" or "re-run the previous eval", the skill
-skips variant inference and confirmation, reusing the previous variant spec
-directly. It proceeds straight to pre-flight checks. The baseline recency check
-still applies — the rerun does not re-test the baseline unless the user
-explicitly requests it ("re-run including baseline") or the previous run's
-baseline experiments are missing.
+If the user says "run same test again" or "re-run the previous eval", the skill skips variant inference and confirmation, reusing the previous variant spec directly. It proceeds straight to
+pre-flight checks. The baseline recency check still applies — the rerun does not re-test the baseline unless the user explicitly requests it ("re-run including baseline") or the previous
+run's baseline experiments are missing.
 
-If the user explicitly requests a single phase (e.g., "run only the sync
-phase"), skip the confirmation gate and proceed directly to pre-flight
-checks for that phase.
+If the user explicitly requests a single phase (e.g., "run only the sync phase"), skip the confirmation gate and proceed directly to pre-flight checks for that phase.
 
 ## Ref Resolution
 
-Before pre-flight checks, pin all git refs to commit hashes so subsequent
-phases use a fixed snapshot:
+Before pre-flight checks, pin all git refs to commit hashes so subsequent phases use a fixed snapshot:
 
-1. For each variant spec, if the git ref is a branch name (not a commit
-   hash), resolve it: `git fetch origin <ref> && git rev-parse origin/<ref>`
-   (or `git ls-remote origin <ref>`).
+1. For each variant spec, if the git ref is a branch name (not a commit hash), resolve it: `git fetch origin <ref> && git rev-parse origin/<ref>` (or `git ls-remote origin <ref>`).
 2. Replace the branch ref with the resolved commit hash in the variant spec.
-3. All subsequent phases (pre-flight, sync, env setup) use the pinned commit
-   hash — never the branch name.
+3. All subsequent phases (pre-flight, sync, env setup) use the pinned commit hash — never the branch name.
 
 ## Pre-flight Checks
 
-Before anything else, verify that all variant skills are safe to test.
-Self-references in skill bodies would break the eval (the suffixed copy would
-reference the original name, not itself), so check early — there's no reason
-to sync anything to Langfuse if we can't run the variants.
+Before anything else, verify that all variant skills are safe to test.  Self-references in skill bodies would break the eval (the suffixed copy would reference the original name, not itself),
+so check early — there's no reason to sync anything to Langfuse if we can't run the variants.
 
 ### Procedure
 
 Before checking variants, verify the eval environment:
 
-1. **Check eval-skills configuration** — `~/.openclaw/workspace/eval-skills/`
-   must exist AND be listed in `skills.load.extraDirs` in the gateway config.
-   If not, report the issue and stop — do not proceed to sync or env setup.
+1. **Check eval-skills configuration** — `~/.openclaw/workspace/eval-skills/` must exist AND be listed in `skills.load.extraDirs` in the gateway config.  If not, report the issue and stop
+   — do not proceed to sync or env setup.
 
 For each variant spec:
 
 1. **Fetch the SKILL.md** from the git ref: `git show <ref>:<skill-path>/SKILL.md`.
 2. **Extract the body** — everything below the frontmatter `---` delimiter.
-3. **Scan for self-references** using the whole-word regex:
-   `(?<![a-z0-9-])<skill-name>(?![a-z0-9-])` (case-insensitive).
+3. **Scan for self-references** using the whole-word regex: `(?<![a-z0-9-])<skill-name>(?![a-z0-9-])` (case-insensitive).
    - The skill name is the `name:` field from the frontmatter.
-   - Check only the body text — the `name:` and `description:` frontmatter
-     fields are excluded from this check.
-4. **If any self-reference is found**, **abort the entire run** — do not
-   proceed to sync or env setup. Report which skill(s) and line(s) contain
-   self-references, and tell the user to fix the source skill before
-   re-running.
+   - Check only the body text — the `name:` and `description:` frontmatter fields are excluded from this check.
+4. **If any self-reference is found**, **abort the entire run** — do not proceed to sync or env setup. Report which skill(s) and line(s) contain self-references, and tell the user to fix
+   the source skill before re-running.
 5. **If all variants pass**, proceed to the Sync Phase.
 
 ## Sync Phase
 
-First phase of the eval runner. Syncs eval definitions to Langfuse and captures
-manifest paths needed by the execute phase.
+First phase of the eval runner. Syncs eval definitions to Langfuse and captures manifest paths needed by the execute phase.
 
 ## Inputs
 
@@ -171,12 +132,9 @@ manifest paths needed by the execute phase.
 
 ### Extract both versions of eval.yaml
 
-For re-runs (when the user says "re-run the previous eval"), skip the before
-version extraction and sync — only extract and sync the after (PR head)
-version. The baseline has not changed.
+For re-runs (when the user says "re-run the previous eval"), skip the before version extraction and sync — only extract and sync the after (PR head) version. The baseline has not changed.
 
-Use `git show` to extract each version to a temp file. This avoids modifying
-the working tree and works regardless of current checkout state.
+Use `git show` to extract each version to a temp file. This avoids modifying the working tree and works regardless of current checkout state.
 
 ```bash
 # Create a working directory for temp files (collision-safe)
@@ -189,21 +147,15 @@ git show <base-ref>:<eval-yaml-path> > "$WORK_DIR/eval-before.yaml"
 git show <pr-head-ref>:<eval-yaml-path> > "$WORK_DIR/eval-after.yaml"
 ```
 
-**Edge case — new eval.yaml (no before version):**
-If `git show <base-ref>:<eval-yaml-path>` fails (file doesn't exist on main),
-this is a new eval definition. Skip the before sync. `manifest_before` is `null`
-— the execute phase should handle this (fewer variants, use current dataset state
-as baseline).
+**Edge case — new eval.yaml (no before version):** If `git show <base-ref>:<eval-yaml-path>` fails (file doesn't exist on main), this is a new eval definition. Skip the before
+sync. `manifest_before` is `null` — the execute phase should handle this (fewer variants, use current dataset state as baseline).
 
-**Edge case — deleted eval.yaml (no after version):**
-If `git show <pr-head-ref>:<eval-yaml-path>` fails, the eval was removed.
-Skip the after sync. This is unusual — flag it for human review rather than
-proceeding.
+**Edge case — deleted eval.yaml (no after version):** If `git show <pr-head-ref>:<eval-yaml-path>` fails, the eval was removed.  Skip the after sync. This is unusual — flag it for human
+review rather than proceeding.
 
 ### Sync each version to Langfuse
 
-Run `dataset_sync.py` for each version that exists. Run sequentially —
-concurrent syncs to the same dataset can interleave version timestamps.
+Run `dataset_sync.py` for each version that exists. Run sequentially — concurrent syncs to the same dataset can interleave version timestamps.
 
 **Prerequisites:**
 - `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` environment variables must be set
@@ -222,13 +174,10 @@ python ~/repos/agentic-testing-framework/src/dataset_sync.py \
   --output-manifest "$WORK_DIR/manifest-after.json"
 ```
 
-The script prints sync progress logs to stdout, with the manifest file path as
-the **last line of stdout**. The `--output-manifest` flag writes a JSON file
-with per-item server timestamps — these manifests are passed to the execute
-phase to pin experiment runs to exact dataset state.
+The script prints sync progress logs to stdout, with the manifest file path as the **last line of stdout**. The `--output-manifest` flag writes a JSON file with per-item server timestamps
+— these manifests are passed to the execute phase to pin experiment runs to exact dataset state.
 
-For the full CLI interface — arguments, environment variables, exit codes,
-and output format — see [`references/dataset_sync_interface.md`](references/dataset_sync_interface.md).
+For the full CLI interface — arguments, environment variables, exit codes, and output format — see [`references/dataset_sync_interface.md`](references/dataset_sync_interface.md).
 
 ### Clean up temp files
 
@@ -248,41 +197,34 @@ manifest_before: <path to manifest-before.json or null>
 manifest_after: <path to manifest-after.json or null>
 ```
 
-The manifest files contain per-item server timestamps from Langfuse. Pass these
-to the execute phase:
+The manifest files contain per-item server timestamps from Langfuse. Pass these to the execute phase:
 - `manifest_before` pins the "before" dataset state (skill v1 + model A, skill v1 + model B)
 - `manifest_after` pins the "after" dataset state (skill v2 + model A, skill v2 + model B)
 
 ## Gotchas
 
-- **Sync failure:** If either sync exits non-zero, abort the sync phase — do not proceed to the remaining sync. Report the error from the script output and notify the user. The execute phase needs both manifest files to produce a valid comparison.
-- **Same dataset name:** Both before and after versions should reference the same Langfuse dataset name (the `dataset:` field in eval.yaml). If they differ, flag it — that's unusual and may indicate a dataset rename.
-- **Python deps:** The agentic-testing-framework requires `langfuse`, `requests`, `pyyaml` — ensure the venv or system Python has these installed. Check `~/repos/agentic-testing-framework/requirements.txt`.
+- **Sync failure:** If either sync exits non-zero, abort the sync phase — do not proceed to the remaining sync. Report the error from the script output and notify the user. The execute
+  phase needs both manifest files to produce a valid comparison.
+- **Same dataset name:** Both before and after versions should reference the same Langfuse dataset name (the `dataset:` field in eval.yaml). If they differ, flag it — that's unusual and
+  may indicate a dataset rename.
+- **Python deps:** The agentic-testing-framework requires `langfuse`, `requests`, `pyyaml` — ensure the venv or system Python has these installed. Check
+  `~/repos/agentic-testing-framework/requirements.txt`.
 
 ## Environment Setup Phase
 
-Second phase of the eval runner. Prepares the eval environment so the harness
-can run variants in isolation.
+Second phase of the eval runner. Prepares the eval environment so the harness can run variants in isolation.
 
 ### Procedure
 
 For each variant spec:
 
-1. **Fetch the latest** — If the git ref is a branch or PR head (not a fixed
-   commit hash), always `git fetch origin <ref>` first to ensure you have the
-   latest state. This handles the test → iterate → retest scenario where the
-   branch has been updated since the last run. Then fetch the skill from the
-   (now up-to-date) git ref: `git show <ref>:<skill-path>/SKILL.md` and all
+1. **Fetch the latest** — If the git ref is a branch or PR head (not a fixed commit hash), always `git fetch origin <ref>` first to ensure you have the latest state. This handles the test
+   → iterate → retest scenario where the branch has been updated since the last run. Then fetch the skill from the (now up-to-date) git ref: `git show <ref>:<skill-path>/SKILL.md` and all
    files in the skill directory.
-2. **Create suffixed directory** in
-   `~/.openclaw/workspace/eval-skills/<skill-name>-<label>-<7char-hash>/`.
-   - The 7-char hash is the short hash of the git ref being fetched (for
-     collision prevention).
-3. **Copy all skill files** into the suffixed directory (preserving
-   subdirectory structure — references/, scripts/, etc.).
-4. **Rewrite the `name:` field** in the copied `SKILL.md` frontmatter to
-   match the suffixed directory name (e.g., `linear-create` →
-   `linear-create-main-a1b2c3d`).
+2. **Create suffixed directory** in `~/.openclaw/workspace/eval-skills/<skill-name>-<label>-<7char-hash>/`.
+   - The 7-char hash is the short hash of the git ref being fetched (for collision prevention).
+3. **Copy all skill files** into the suffixed directory (preserving subdirectory structure — references/, scripts/, etc.).
+4. **Rewrite the `name:` field** in the copied `SKILL.md` frontmatter to match the suffixed directory name (e.g., `linear-create` → `linear-create-main-a1b2c3d`).
 
 ### Output
 
@@ -294,28 +236,18 @@ List of suffixed directories created in `~/.openclaw/workspace/eval-skills/`, ea
 
 ### Gotchas
 
-1. **eval-skills dir configuration** — Checked during pre-flight (above) —
-   the eval-skills dir must exist and be in `skills.load.extraDirs`. Adding
-   a new extraDir requires a gateway restart — the skill should NOT attempt
-   to restart the gateway.
+1. **eval-skills dir configuration** — Checked during pre-flight (above) — the eval-skills dir must exist and be in `skills.load.extraDirs`. Adding a new extraDir requires a gateway restart
+   — the skill should NOT attempt to restart the gateway.
 
-2. **Self-references in skill bodies** — Checked during the pre-flight
-   phase (above). If any are found, the run aborts before env setup.
-   Fix self-references at the source skill before re-running.
+2. **Self-references in skill bodies** — Checked during the pre-flight phase (above). If any are found, the run aborts before env setup.  Fix self-references at the source skill before re-running.
 
-3. **Skill names are normalized** — OpenClaw normalizes skill names to
-   `[a-z0-9-]` (lowercase, hyphens only). Suffixed names must stay within
-   this charset. No dots, underscores, or uppercase.
+3. **Skill names are normalized** — OpenClaw normalizes skill names to `[a-z0-9-]` (lowercase, hyphens only). Suffixed names must stay within this charset. No dots, underscores, or uppercase.
 
-4. **Concurrent runs** — The 7-char git hash in the suffix prevents directory
-   collisions between concurrent runs testing different commits. If a
-   collision still occurs (same ref, same hash), the run should detect the
-   dir already exists and skip re-copying.
+4. **Concurrent runs** — The 7-char git hash in the suffix prevents directory collisions between concurrent runs testing different commits. If a collision still occurs (same ref, same hash),
+   the run should detect the dir already exists and skip re-copying.
 
-5. **Copying subdirectories** — Skills may have subdirectories (references/,
-   scripts/, templates/, etc.). Copy the entire skill directory structure, not
-   just SKILL.md. Internal relative paths in the skill body (e.g.,
-   `references/foo.md`) work because the structure is preserved.
+5. **Copying subdirectories** — Skills may have subdirectories (references/, scripts/, templates/, etc.). Copy the entire skill directory structure, not just SKILL.md. Internal relative
+   paths in the skill body (e.g., `references/foo.md`) work because the structure is preserved.
 
 ## Execute Phase
 
@@ -327,11 +259,8 @@ Not yet implemented.
 
 ## Cleanup
 
-After the execute and report phases complete, remove the suffixed
-directories created during Environment Setup. Track which directories were
-created during env setup and `rm -rf` only those. Do not remove directories
-created by other concurrent runs. If the run aborts after env setup (e.g.,
-execute phase failure), cleanup should still run.
+After the execute and report phases complete, remove the suffixed directories created during Environment Setup. Track which directories were created during env setup and `rm -rf` only
+those. Do not remove directories created by other concurrent runs. If the run aborts after env setup (e.g., execute phase failure), cleanup should still run.
 
 ## References
 
