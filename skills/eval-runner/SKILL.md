@@ -34,8 +34,8 @@ appears in experiment names to distinguish variants, alongside the git hash for 
 
 ### Baseline Recency Check
 
-**Baseline recency check** (PR-triggered only): Before adding the baseline (before/main) variant to the run matrix, check whether baseline experiments already exist in Langfuse for this
-PR's dataset.  The execute phase creates experiments using the naming convention:
+**Baseline recency check**: Before adding any variant to the run matrix, check whether matching experiment results already exist in Langfuse for this dataset.  The execute phase creates
+experiments using the naming convention:
 
 ```
 <dataset-name>__<model-id>__<variant-label>__<git-hash>
@@ -46,18 +46,16 @@ Where `<variant-label>` identifies the variant source — the base branch name (
 
 For explicit variant specs using branch names containing `/` (e.g., `claw/vash/fix-xyz`), slashes are replaced with hyphens in experiment names (e.g., `claw-vash-fix-xyz`).
 
-During inference, query Langfuse for experiments matching `<dataset-name>__<model-id>__<base-branch-name>__<base-hash>` for each requested model — using the resolved base commit hash
-(from the Ref Resolution step), not a wildcard. This ensures the baseline matches the current base state, even if `main` has advanced within the 7-day window.  If experiments exist for all
-requested models within a recent window (default: 7 days), skip the baseline variant — only test the after (PR head) variant. The confirmation summary notes "baseline already tested, skipping."
+During inference, query Langfuse for experiments matching `<dataset-name>__<model-id>__<variant-label>__<git-hash>` for each requested model and each variant — using the resolved commit hash
+(from the Ref Resolution step), not a wildcard. This ensures results match the current state, even if the base branch has advanced within the 7-day window.  If experiments exist for a
+variant within a recent window (default: 7 days), that variant can be reused — skip running it again. The confirmation summary notes which variants are being reused and from when.
 
-If baseline experiments are missing for any requested model, or are older than the window, include the baseline variant for those models only.
+If matching experiments are missing for any requested model or variant, or are older than the window, include those variants in the run.
 
-This check does NOT apply to:
-- First-time PR runs (no prior experiments exist)
-- Explicit "re-run baseline" requests from the user
-- Non-PR triggers (direct skill vs model comparisons with no PR context)
+The check still runs for first-time runs (no prior experiments exist — nothing to reuse) and explicit re-run requests (the user is asking to re-run, so prior results are ignored unless
+the user says otherwise). These aren't exclusions from the check — they're cases where the check finds nothing to reuse.
 
-The model and dataset dimensions are orthogonal — they multiply with the remaining skill variants after the baseline check. For example, a PR with prior baseline runs for 2 models:
+The model and dataset dimensions are orthogonal — they multiply with the remaining skill variants after the recency check. For example, a PR with prior baseline runs for 2 models:
 1 skill variant (after only) × 2 models = 2 runs instead of 4.
 
 This inference happens at the skill level before the phases run. The env setup phase receives the resolved list of (git ref, label) pairs for skill versions and handles the mechanics of
@@ -71,16 +69,18 @@ After inferring variants, the skill presents a summary and waits for user confir
 - Models to test
 - Dataset items (all or specific ids)
 - Baseline status: whether baseline is included or skipped (with reason — "already tested within 7 days" or "no prior runs found")
+- Reused variants: whenever prior experiment results are being reused, the summary must clearly state which variants are being reused and from when (experiment creation date). The user
+  can choose to override and force a re-run of any reused variant.
 
 The user can:
 - **Confirm** — proceed to pre-flight checks
-- **Adjust** — modify any dimension (add/remove skill variants, change models, change dataset items, force baseline re-test) and re-confirm
+- **Adjust** — modify any dimension (add/remove skill variants, change models, change dataset items, force re-test of any variant including reused ones) and re-confirm
 
 Only after confirmation does the skill proceed to pre-flight checks and the phases.
 
 If the user says "run same test again" or "re-run the previous eval", the skill skips variant inference and confirmation, reusing the previous variant spec directly. It proceeds straight to
-pre-flight checks. The baseline recency check still applies — the rerun does not re-test the baseline unless the user explicitly requests it ("re-run including baseline") or the previous
-run's baseline experiments are missing.
+pre-flight checks. The recency check still applies — the rerun reuses prior results for any variant with matching experiments within the recency window, unless the user explicitly requests
+a full re-run ("re-run everything") or matching experiments are missing.
 
 If the user explicitly requests a single phase (e.g., "run only the sync phase"), skip the confirmation gate and proceed directly to pre-flight checks for that phase.
 
