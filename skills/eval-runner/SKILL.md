@@ -1,6 +1,6 @@
 ---
 name: eval-runner
-description: "Use when running eval tests — syncs eval definitions to Langfuse, prepares the eval environment, and orchestrates variant runs."
+description: "Use when running eval tests — syncs eval definitions to Langfuse, prepares the eval environment, and orchestrates variant runs. SKIP for one-off Langfuse dataset syncs or ad-hoc eval runs not tied to a PR or skill comparison."
 metadata:
   author: brightfire
   version: "2.1"
@@ -254,12 +254,9 @@ List of suffixed directories created in `~/.openclaw/workspace/eval-skills/`, ea
    skill should NOT attempt to restart the gateway. If the dir is missing or
    not in config, report the issue and stop.
 
-2. **Self-references in skill bodies** — Skills should not reference
-   themselves by name in their body text. This is checked during the
-   pre-flight phase (before sync) — if any variant's SKILL.md body contains
-   the skill name outside of frontmatter fields, the entire run aborts
-   before syncing to Langfuse. Fix self-references at the source skill
-   before re-running.
+2. **Self-references in skill bodies** — Checked during the pre-flight
+   phase (above). If any are found, the run aborts before env setup.
+   Fix self-references at the source skill before re-running.
 
 3. **Skill names are normalized** — OpenClaw normalizes skill names to
    `[a-z0-9-]` (lowercase, hyphens only). Suffixed names must stay within
