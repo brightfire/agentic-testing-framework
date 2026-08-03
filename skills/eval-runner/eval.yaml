@@ -15,8 +15,7 @@ items:
       User request: "Run the eval for this PR."
     expected_output:
       behavior: |
-        The agent runs variant inference and presents a confirmation summary. It does NOT proceed to pre-flight, sync,
-        or env setup — it waits for the user to confirm or adjust.
+        The agent runs variant inference and presents a confirmation summary. It does NOT proceed to pre-flight, sync, or env setup — it waits for the user to confirm or adjust.
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Variant Inference
@@ -42,9 +41,8 @@ items:
       User request: "Test this PR against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6."
     expected_output:
       behavior: |
-        The agent runs variant inference with the model dimension added, runs the baseline recency check (no prior
-        experiments, so baseline is included), and presents a confirmation summary showing the full 2×2 matrix (2 skill
-        variants × 2 models = 4 runs). It waits for confirmation — no further phases run.
+        The agent runs variant inference with the model dimension added, runs the baseline recency check (no prior experiments, so baseline is included), and presents a
+        confirmation summary showing the full 2×2 matrix (2 skill variants × 2 models = 4 runs). It waits for confirmation — no further phases run.
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Variant Inference
@@ -54,8 +52,7 @@ items:
         - "Inference: recognizes the full matrix is 2 skill variants × 2 models = 4 runs"
         - "Inference: selects all dataset items (none specifically named)"
         # Phase: Confirmation
-        - "Confirmation: presents summary showing skill variants, model dimension, total run count (4), and baseline
-        status"
+        - "Confirmation: presents summary showing skill variants, model dimension, total run count (4), and baseline status"
         - "Confirmation: waits for user confirmation — does not proceed to any further phase"
         - "Confirmation: does not run pre-flight, sync, or env setup"
       scoring_rules: |
@@ -69,16 +66,14 @@ items:
       - Base branch: main
       - Files changed: skills/eval-runner/SKILL.md
 
-      Prior runs: 2 baseline (before/main) experiments already exist in Langfuse for this dataset — one for glm-5.2 and
-      one for claude-sonnet-4-6, both created 2 days ago.
+      Prior runs: 2 baseline (before/main) experiments already exist in Langfuse for this dataset — one for glm-5.2 and one for claude-sonnet-4-6, both created 2 days ago.
 
       User request: "Test this PR against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6."
     expected_output:
       behavior: |
-        The agent runs variant inference with the model dimension, runs the baseline recency check and finds 2 recent
-        baseline experiments — one per model. It skips the baseline variant for both models — only the after (PR head)
-        variant is included. The confirmation summary shows 1 skill variant × 2 models = 2 runs, with baseline status
-        "already tested, skipping" for both models.
+        The agent runs variant inference with the model dimension, runs the baseline recency check and finds 2 recent baseline experiments — one per model. It skips the baseline
+        variant for both models — only the after (PR head) variant is included. The confirmation summary shows 1 skill variant × 2 models = 2 runs, with baseline status "already
+        tested, skipping" for both models.
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Variant Inference
@@ -101,17 +96,15 @@ items:
       - Base branch: main
       - Files changed: skills/eval-runner/SKILL.md
 
-      Prior runs: A previous PR eval was already completed using openrouter/z-ai/glm-5.2 as the single model. Baseline
-      (before/main) experiment exists in Langfuse for glm-5.2 only, created 1 day ago. No baseline experiment exists for
-      claude-sonnet-4-6.
+      Prior runs: A previous PR eval was already completed using openrouter/z-ai/glm-5.2 as the single model. Baseline (before/main) experiment exists in Langfuse for glm-5.2 only,
+      created 1 day ago. No baseline experiment exists for claude-sonnet-4-6.
 
       User request: "Now test this PR against glm-5.2 and claude-sonnet-4-6."
     expected_output:
       behavior: |
-        The agent runs variant inference with the model dimension, and runs the baseline recency check. It finds a
-        baseline experiment for glm-5.2 (skip baseline) but no baseline for claude-sonnet-4-6 (include baseline). The
-        confirmation summary shows: after×glm-5.2, after×claude-sonnet-4-6, before×claude-sonnet-4-6 = 3 runs. Baseline
-        status notes glm-5.2 as "already tested" and claude-sonnet-4-6 as "no prior baseline."
+        The agent runs variant inference with the model dimension, and runs the baseline recency check. It finds a baseline experiment for glm-5.2 (skip baseline) but no baseline
+        for claude-sonnet-4-6 (include baseline). The confirmation summary shows: after×glm-5.2, after×claude-sonnet-4-6, before×claude-sonnet-4-6 = 3 runs. Baseline status notes
+        glm-5.2 as "already tested" and claude-sonnet-4-6 as "no prior baseline."
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Variant Inference
@@ -121,8 +114,7 @@ items:
         - "Inference: includes baseline for claude-sonnet-4-6 (no prior baseline)"
         - "Inference: recognizes the matrix is 3 runs: after×glm-5.2, after×claude-sonnet-4-6, before×claude-sonnet-4-6"
         # Phase: Confirmation
-        - "Confirmation: presents summary showing after variant for both models plus before variant for
-        claude-sonnet-4-6 only"
+        - "Confirmation: presents summary showing after variant for both models plus before variant for claude-sonnet-4-6 only"
         - "Confirmation: shows total run count (3)"
         - "Confirmation: notes baseline status per model — glm-5.2 skipped, claude-sonnet-4-6 included"
         - "Confirmation: waits for user confirmation — does not proceed to any further phase"
@@ -137,17 +129,15 @@ items:
       - Base branch: main
       - Files changed: skills/eval-runner/SKILL.md
 
-      Prior runs: A previous PR eval was already completed using openrouter/z-ai/glm-5.2 as the single model. Baseline
-      (before/main) experiment exists in Langfuse for glm-5.2 only, created 1 day ago. No baseline experiment exists for
-      claude-sonnet-4-6.
+      Prior runs: A previous PR eval was already completed using openrouter/z-ai/glm-5.2 as the single model. Baseline (before/main) experiment exists in Langfuse for glm-5.2 only,
+      created 1 day ago. No baseline experiment exists for claude-sonnet-4-6.
 
       User request: "Now test this PR against claude-sonnet-4-6."
     expected_output:
       behavior: |
-        The agent runs variant inference with a single model (claude-sonnet-4-6), and runs the baseline recency check.
-        It finds no baseline experiment for claude-sonnet-4-6, so the baseline variant is included. The confirmation
-        summary shows: before×claude-sonnet-4-6, after×claude-sonnet-4-6 = 2 runs. Baseline status notes
-        claude-sonnet-4-6 as "no prior baseline."
+        The agent runs variant inference with a single model (claude-sonnet-4-6), and runs the baseline recency check. It finds no baseline experiment for claude-sonnet-4-6, so the
+        baseline variant is included. The confirmation summary shows: before×claude-sonnet-4-6, after×claude-sonnet-4-6 = 2 runs. Baseline status notes claude-sonnet-4-6 as "no
+        prior baseline."
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Variant Inference
@@ -171,16 +161,14 @@ items:
       - Base branch: main
       - Files changed: skills/eval-runner/SKILL.md
 
-      Prior runs: A previous eval was run as a re-run (after variant only, no baseline). No baseline (before/main)
-      experiments exist in Langfuse for this dataset for any model.
+      Prior runs: A previous eval was run as a re-run (after variant only, no baseline). No baseline (before/main) experiments exist in Langfuse for this dataset for any model.
 
       User request: "Test this PR against glm-5.2 and claude-sonnet-4-6."
     expected_output:
       behavior: |
-        The agent runs variant inference with the model dimension, and runs the baseline recency check. It finds no
-        baseline experiments for either model, so the baseline variant is included for both. The confirmation summary
-        shows the full 2×2 matrix: before×glm-5.2, before×claude-sonnet-4-6, after×glm-5.2, after×claude-sonnet-4-6 = 4
-        runs. Baseline status notes "no prior baseline" for both models.
+        The agent runs variant inference with the model dimension, and runs the baseline recency check. It finds no baseline experiments for either model, so the baseline variant
+        is included for both. The confirmation summary shows the full 2×2 matrix: before×glm-5.2, before×claude-sonnet-4-6, after×glm-5.2, after×claude-sonnet-4-6 = 4 runs.
+        Baseline status notes "no prior baseline" for both models.
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Variant Inference
@@ -207,24 +195,20 @@ items:
       User request: "Test this PR against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6."
     expected_output:
       behavior: |
-        The agent runs variant inference with the model dimension, and notes that eval.yaml has changed in addition to
-        SKILL.md — meaning both before and after eval versions will need syncing (two dataset timestamps). It runs the
-        baseline recency check (no prior experiments, baseline included for both models). The confirmation summary shows
-        the full 2×2 matrix (2 skill variants × 2 models = 4 runs) and notes that eval.yaml changed, so both eval
-        versions will be synced. It waits for confirmation — no further phases run.
+        The agent runs variant inference with the model dimension, and notes that eval.yaml has changed in addition to SKILL.md — meaning both before and after eval versions will
+        need syncing (two dataset timestamps). It runs the baseline recency check (no prior experiments, baseline included for both models). The confirmation summary shows the full
+        2×2 matrix (2 skill variants × 2 models = 4 runs) and notes that eval.yaml changed, so both eval versions will be synced. It waits for confirmation — no further phases run.
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Variant Inference
         - "Inference: identifies skill A/B — main (before) vs PR head (after)"
         - "Inference: identifies two models — glm-5.2 and claude-sonnet-4-6"
-        - "Inference: detects that eval.yaml is in the changed files — both before and after eval versions will need
-        syncing"
+        - "Inference: detects that eval.yaml is in the changed files — both before and after eval versions will need syncing"
         - "Inference: runs baseline recency check — no prior experiments found, baseline included for both models"
         - "Inference: recognizes the full matrix is 2 skill variants × 2 models = 4 runs"
         - "Inference: selects all dataset items (none specifically named)"
         # Phase: Confirmation
-        - "Confirmation: presents summary showing skill variants, model dimension, total run count (4), and baseline
-        status"
+        - "Confirmation: presents summary showing skill variants, model dimension, total run count (4), and baseline status"
         - "Confirmation: notes that eval.yaml changed — both eval versions will be synced (two dataset timestamps)"
         - "Confirmation: waits for user confirmation — does not proceed to any further phase"
       scoring_rules: |
@@ -240,14 +224,13 @@ items:
       - Base branch: main
       - Files changed: skills/eval-runner/SKILL.md
 
-      Inference completed: skill A/B (main vs PR head), single model (agent default), all dataset items. Baseline
-      included (no prior runs). User has confirmed the summary.
+      Inference completed: skill A/B (main vs PR head), single model (agent default), all dataset items. Baseline included (no prior runs). User has confirmed the summary.
 
       Proceed with the eval.
     expected_output:
       behavior: |
-        The agent executes pre-flight checks, sync (both versions), and env setup (both variants). Inference and
-        confirmation are already done — the agent does not re-present a confirmation summary.
+        The agent executes pre-flight checks, sync (both versions), and env setup (both variants). Inference and confirmation are already done — the agent does not re-present a
+        confirmation summary.
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Pre-flight
@@ -281,10 +264,8 @@ items:
       User request: "Re-run the previous eval for this PR."
     expected_output:
       behavior: |
-        The agent recognizes the re-run request, and skips variant inference + confirmation — reusing the previous
-        variant spec directly. It proceeds to pre-flight checks, then syncs ONLY the after version (PR head) — the
-        baseline has not changed and does not need re-syncing or re-testing. It then sets up the env for the after
-        variant.
+        The agent recognizes the re-run request, and skips variant inference + confirmation — reusing the previous variant spec directly. It proceeds to pre-flight checks, then
+        syncs ONLY the after version (PR head) — the baseline has not changed and does not need re-syncing or re-testing. It then sets up the env for the after variant.
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Variant Inference (skipped)
@@ -321,10 +302,9 @@ items:
       Proceed with the eval.
     expected_output:
       behavior: |
-        The agent proceeds to pre-flight checks (inference and confirmation already done). Pre-flight detects a
-        self-reference — the skill name appearing in the SKILL.md body — and aborts the entire run before syncing
-        anything to Langfuse or setting up the env. It reports which skill and line(s) contain self-references and tells
-        the user to fix the source skill before re-running.
+        The agent proceeds to pre-flight checks (inference and confirmation already done). Pre-flight detects a self-reference — the skill name appearing in the SKILL.md body — and
+        aborts the entire run before syncing anything to Langfuse or setting up the env. It reports which skill and line(s) contain self-references and tells the user to fix the
+        source skill before re-running.
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Pre-flight (abort path)
@@ -352,9 +332,8 @@ items:
       User request: "Run only the sync phase for this PR."
     expected_output:
       behavior: |
-        The agent attempts to extract the before version from main and finds it doesn't exist. It correctly handles this
-        as a new eval definition: manifest_before is null, only the after version is synced. The output structure
-        reflects manifest_before: null with manifest_after having a path.
+        The agent attempts to extract the before version from main and finds it doesn't exist. It correctly handles this as a new eval definition: manifest_before is null, only the
+        after version is synced. The output structure reflects manifest_before: null with manifest_after having a path.
       scoring_type: pass_fail
       scoring_criteria:
         - "Recognizes the before version doesn't exist on base (new eval.yaml)"
@@ -373,15 +352,13 @@ items:
       - Base branch: main
       - Files changed: skills/eval-runner/eval.yaml
 
-      During sync, the "before" version sync failed — dataset_sync.py exited with code 1 and the output shows
-      "LANGFUSE_SECRET_KEY not set".
+      During sync, the "before" version sync failed — dataset_sync.py exited with code 1 and the output shows "LANGFUSE_SECRET_KEY not set".
 
       User request: "Run only the sync phase for this PR."
     expected_output:
       behavior: |
-        The agent recognizes the sync failure from the non-zero exit code, and aborts the sync phase. It does NOT
-        attempt the after sync. It reports the error from the script output and explains that the before sync must
-        succeed before proceeding to the after sync or any subsequent phases.
+        The agent recognizes the sync failure from the non-zero exit code, and aborts the sync phase. It does NOT attempt the after sync. It reports the error from the script
+        output and explains that the before sync must succeed before proceeding to the after sync or any subsequent phases.
       scoring_type: pass_fail
       scoring_criteria:
         - "Recognizes the sync failure (exit code 1)"
