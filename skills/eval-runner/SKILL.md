@@ -28,6 +28,8 @@ The skill determines what to test based on the request, not the trigger source. 
 - **No items specified** → all items in the eval.yaml
 - **Specific item(s) named** → only those items (by id)
 
+### Baseline Recency Check
+
 **Baseline recency check** (PR-triggered only):
 Before adding the baseline (before/main) variant to the run matrix, check
 whether baseline experiments already exist in Langfuse for this PR's dataset.
