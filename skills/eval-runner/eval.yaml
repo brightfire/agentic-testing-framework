@@ -10,7 +10,7 @@ items:
       - Repo: brightfire/agentic-testing-framework
       - PR branch: claw/vash/improve-eval-runner
       - Base branch: main
-      - Files changed: skills/eval-runner/SKILL.md, skills/eval-runner/eval.yaml
+      - Files changed: skills/eval-runner/SKILL.md
 
       User request: "Run the eval for this PR."
     expected_output:
@@ -30,6 +30,44 @@ items:
         - "Confirmation: presents summary with skill variants, model, dataset items, and baseline status"
         - "Confirmation: waits for user confirmation — does not proceed to any further phase"
         - "Confirmation: does not run pre-flight, sync, or env setup"
+      scoring_rules: |
+        Score 10 * (passed criteria / total criteria).
+
+  - id: skill-and-eval-changed-model-ab
+    input: |
+      PR context:
+      - Repo: brightfire/agentic-testing-framework
+      - PR branch: claw/vash/improve-eval-runner
+      - Base branch: main
+      - Files changed: skills/eval-runner/SKILL.md,
+        skills/eval-runner/eval.yaml
+
+      User request: "Test this PR against openrouter/z-ai/glm-5.2 and
+      anthropic/claude-sonnet-4-6."
+    expected_output:
+      behavior: |
+        The agent reads the eval-runner skill, runs variant inference
+        with the model dimension, and notes that eval.yaml has changed
+        in addition to SKILL.md — meaning both before and after eval
+        versions will need syncing (two dataset timestamps). It runs
+        the baseline recency check (no prior experiments, baseline
+        included for both models). The confirmation summary shows the
+        full 2×2 matrix (2 skill variants × 2 models = 4 runs) and
+        notes that eval.yaml changed, so both eval versions will be
+        synced. It waits for confirmation — no further phases run.
+      scoring_type: pass_fail
+      scoring_criteria:
+        # Phase: Variant Inference
+        - "Inference: identifies skill A/B — main (before) vs PR head (after)"
+        - "Inference: identifies two models — glm-5.2 and claude-sonnet-4-6"
+        - "Inference: detects that eval.yaml is in the changed files — both before and after eval versions will need syncing"
+        - "Inference: runs baseline recency check — no prior experiments found, baseline included for both models"
+        - "Inference: recognizes the full matrix is 2 skill variants × 2 models = 4 runs"
+        - "Inference: selects all dataset items (none specifically named)"
+        # Phase: Confirmation
+        - "Confirmation: presents summary showing skill variants, model dimension, total run count (4), and baseline status"
+        - "Confirmation: notes that eval.yaml changed — both eval versions will be synced (two dataset timestamps)"
+        - "Confirmation: waits for user confirmation — does not proceed to any further phase"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
 
