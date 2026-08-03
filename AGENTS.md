@@ -93,4 +93,4 @@ These can be sourced from `~/.openclaw/secrets/langfuse.env`.
 
 ### Schema Changes
 
-`src/schema.py` is the authoritative source for the eval.yaml format. If you change the schema, update `schema.py` first, then update any affected eval.yaml files. The schema uses `extra="forbid"` — unknown fields are rejected at all levels.
+`src/schema.py` is the authoritative source for the eval.yaml format. If you change the schema, update `schema.py` first, then update any affected eval.yaml files, and update relevant documentation (SKILL.md references, samples, etc.) if the change affects consumers. The schema uses `extra="forbid"` — unknown fields are rejected at all levels.
