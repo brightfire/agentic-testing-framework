@@ -28,9 +28,39 @@ The skill determines what to test based on the request, not the trigger source. 
 - **No items specified** → all items in the eval.yaml
 - **Specific item(s) named** → only those items (by id)
 
-The model and dataset dimensions are orthogonal — they multiply with the skill variants. The execute phase handles the full matrix (e.g., 2 skill variants × 2 models = 4 runs).
+**Baseline recency check** (PR-triggered only):
+Before adding the baseline (before/main) variant to the run matrix, check
+whether baseline experiments already exist in Langfuse for this PR's dataset.
+The execute phase creates experiments using the naming convention:
 
-This inference happens at the skill level before the phases run. The env setup phase receives the resolved list of (git ref, label) pairs for skill versions and handles the mechanics of creating suffixed copies.
+```
+<dataset-name>__<skill-name>__<variant-label>__<model-id>__<git-hash>
+```
+
+For example: `eval-runner__linear-create__before__glm-5.2__a1b2c3d`
+
+During inference, query Langfuse for experiments matching
+`<dataset-name>__<skill-name>__before__*__*` (the baseline pattern). If
+experiments exist for all requested models within a recent window (default:
+7 days), skip the baseline variant — only test the after (PR head) variant.
+The confirmation summary notes "baseline already tested, skipping."
+
+If baseline experiments are missing for any requested model, or are older
+than the window, include the baseline variant for those models only.
+
+This check does NOT apply to:
+- First-time PR runs (no prior experiments exist)
+- Explicit "re-run baseline" requests from the user
+- Non-PR triggers (direct skill vs model comparisons with no PR context)
+
+The model and dataset dimensions are orthogonal — they multiply with the
+remaining skill variants after the baseline check. For example, a PR with
+prior baseline runs for 2 models: 1 skill variant (after only) × 2 models =
+2 runs instead of 4.
+
+This inference happens at the skill level before the phases run. The env setup
+phase receives the resolved list of (git ref, label) pairs for skill versions
+and handles the mechanics of creating suffixed copies.
 
 ## Confirmation
 
@@ -40,17 +70,22 @@ confirmation before proceeding. The summary shows:
 - Skill variants (name, git ref, short hash)
 - Models to test
 - Dataset items (all or specific ids)
+- Baseline status: whether baseline is included or skipped (with reason —
+  "already tested within 7 days" or "no prior runs found")
 
 The user can:
 - **Confirm** — proceed to pre-flight checks
-- **Adjust** — modify any dimension (add/remove skill variants, change models, change dataset items) and re-confirm
+- **Adjust** — modify any dimension (add/remove skill variants, change models, change dataset items, force baseline re-test) and re-confirm
 - **Cancel** — abort the run
 
 Only after confirmation does the skill proceed to pre-flight checks and the phases.
 
 If the user says "run same test again" or "re-run the previous eval", the skill
 skips variant inference and confirmation, reusing the previous variant spec
-directly. It proceeds straight to pre-flight checks.
+directly. It proceeds straight to pre-flight checks. The baseline recency check
+still applies — the rerun does not re-test the baseline unless the user
+explicitly requests it ("re-run including baseline") or the previous run's
+baseline experiments are missing.
 
 ## Pre-flight Checks
 
