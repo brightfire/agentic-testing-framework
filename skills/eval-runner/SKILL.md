@@ -37,13 +37,17 @@ The execute phase creates experiments using the naming convention:
 <dataset-name>__<skill-name>__<variant-label>__<model-id>__<git-hash>
 ```
 
-For example: `eval-runner__linear-create__before__glm-5.2__a1b2c3d`
+For example: `linear-create-eval__linear-create__before__glm-5.2__a1b2c3d`
 
 During inference, query Langfuse for experiments matching
-`<dataset-name>__<skill-name>__before__*__*` (the baseline pattern). If
-experiments exist for all requested models within a recent window (default:
-7 days), skip the baseline variant — only test the after (PR head) variant.
-The confirmation summary notes "baseline already tested, skipping."
+`<dataset-name>__<skill-name>__before__<model-id>__<base-hash>` for each
+requested model — using the resolved base commit hash (from the Ref
+Resolution step), not a wildcard. This ensures the baseline matches the
+current base state, even if `main` has advanced within the 7-day window.
+If experiments exist for all requested models within a recent window
+(default: 7 days), skip the baseline variant — only test the after (PR
+head) variant. The confirmation summary notes "baseline already tested,
+skipping."
 
 If baseline experiments are missing for any requested model, or are older
 than the window, include the baseline variant for those models only.
@@ -86,6 +90,22 @@ still applies — the rerun does not re-test the baseline unless the user
 explicitly requests it ("re-run including baseline") or the previous run's
 baseline experiments are missing.
 
+If the user explicitly requests a single phase (e.g., "run only the sync
+phase"), skip the confirmation gate and proceed directly to pre-flight
+checks for that phase.
+
+## Ref Resolution
+
+Before pre-flight checks, pin all git refs to commit hashes so subsequent
+phases use a fixed snapshot:
+
+1. For each variant spec, if the git ref is a branch name (not a commit
+   hash), resolve it: `git fetch origin <ref> && git rev-parse origin/<ref>`
+   (or `git ls-remote origin <ref>`).
+2. Replace the branch ref with the resolved commit hash in the variant spec.
+3. All subsequent phases (pre-flight, sync, env setup) use the pinned commit
+   hash — never the branch name.
+
 ## Pre-flight Checks
 
 Before anything else, verify that all variant skills are safe to test.
@@ -94,6 +114,12 @@ reference the original name, not itself), so check early — there's no reason
 to sync anything to Langfuse if we can't run the variants.
 
 ### Procedure
+
+Before checking variants, verify the eval environment:
+
+1. **Check eval-skills configuration** — `~/.openclaw/workspace/eval-skills/`
+   must exist AND be listed in `skills.load.extraDirs` in the gateway config.
+   If not, report the issue and stop — do not proceed to sync or env setup.
 
 For each variant spec:
 
@@ -127,6 +153,10 @@ manifest paths needed by the execute phase.
 ## Procedure
 
 ### Extract both versions of eval.yaml
+
+For re-runs (when the user says "re-run the previous eval"), skip the before
+version extraction and sync — only extract and sync the after (PR head)
+version. The baseline has not changed.
 
 Use `git show` to extract each version to a temp file. This avoids modifying
 the working tree and works regardless of current checkout state.
@@ -247,12 +277,10 @@ List of suffixed directories created in `~/.openclaw/workspace/eval-skills/`, ea
 
 ### Gotchas
 
-1. **eval-skills dir must be configured** — `~/.openclaw/workspace/eval-skills/`
-   must exist AND be listed in `skills.load.extraDirs` in the gateway config.
-   If it's not configured, the suffixed skills won't appear in the agent's
-   `available_skills`. Adding a new extraDir requires a gateway restart — the
-   skill should NOT attempt to restart the gateway. If the dir is missing or
-   not in config, report the issue and stop.
+1. **eval-skills dir configuration** — Checked during pre-flight (above) —
+   the eval-skills dir must exist and be in `skills.load.extraDirs`. Adding
+   a new extraDir requires a gateway restart — the skill should NOT attempt
+   to restart the gateway.
 
 2. **Self-references in skill bodies** — Checked during the pre-flight
    phase (above). If any are found, the run aborts before env setup.
@@ -271,6 +299,14 @@ List of suffixed directories created in `~/.openclaw/workspace/eval-skills/`, ea
    scripts/, templates/, etc.). Copy the entire skill directory structure, not
    just SKILL.md. Internal relative paths in the skill body (e.g.,
    `references/foo.md`) work because the structure is preserved.
+
+### Cleanup
+
+After the execute and report phases complete (or if the run aborts after
+env setup), remove the suffixed directories created by this run. Track
+which directories were created during the procedure above and `rm -rf` only
+those directories. Do not remove directories created by other concurrent
+runs.
 
 ## Execute Phase
 
