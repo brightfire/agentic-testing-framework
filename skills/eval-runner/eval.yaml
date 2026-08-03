@@ -2,55 +2,210 @@ dataset: eval-runner
 description: "End-to-end evaluation runner for OpenClaw skills — dataset sync, environment setup, variant isolation, and orchestrated eval runs via Langfuse."
 
 items:
-  - id: happy-path-sync
+  # ─── End-to-end use cases ───────────────────────────────────────────
+
+  - id: pr-triggered-default-ab
     input: |
-      You are performing the eval-runner phase for a PR in
-      brightfire/agentic-testing-framework. The PR modifies
-      skills/eval-runner/eval.yaml on branch claw/vash/update-eval-items.
-      The base branch is main.
+      A PR in brightfire/agentic-testing-framework modifies the
+      linear-create skill (skills/linear-create/SKILL.md) on branch
+      claw/vash/improve-linear-create. The base branch is main.
+
+      Read the eval-runner skill from available_skills, then run the
+      eval for this PR. The PR has an eval.yaml at
+      skills/linear-create/eval.yaml.
+
+      Simulate all phases — do NOT actually run dataset_sync.py or
+      create directories. Report what you would do at each phase and
+      the structured output you would produce.
+    expected_output:
+      behavior: |
+        The agent reads the eval-runner skill and executes the full
+        flow: infers skill A/B variants (main vs PR head, single model,
+        all dataset items), presents a confirmation summary, runs
+        pre-flight self-reference checks, syncs both eval.yaml versions
+        to Langfuse sequentially, and sets up the eval environment with
+        suffixed directories for both skill variants.
+      scoring_type: pass_fail
+      scoring_criteria:
+        # Phase: Variant Inference
+        - "Inference: identifies skill A/B — main (before) vs PR head (after)"
+        - "Inference: selects single model (agent default, no model comparison requested)"
+        - "Inference: selects all dataset items (none specifically named)"
+        # Phase: Confirmation
+        - "Confirmation: presents summary with skill variants, model, and dataset items"
+        - "Confirmation: waits for user confirmation before proceeding to pre-flight"
+        # Phase: Pre-flight
+        - "Pre-flight: fetches SKILL.md from both git refs via git show"
+        - "Pre-flight: scans both skill bodies for self-references"
+        - "Pre-flight: passes (no self-references found), proceeds to sync"
+        # Phase: Sync
+        - "Sync: extracts before eval.yaml from base ref (main) via git show"
+        - "Sync: extracts after eval.yaml from PR head ref via git show"
+        - "Sync: runs dataset_sync.py sequentially — before then after"
+        - "Sync: uses --output-manifest for each sync invocation"
+        - "Sync: produces structured output with dataset, skill, eval_yaml_path, manifest_before, manifest_after"
+        # Phase: Env Setup
+        - "Env setup: fetches skill files from both git refs via git show"
+        - "Env setup: creates suffixed directories with 7-char git hash for each variant"
+        - "Env setup: copies all skill files preserving subdirectory structure"
+        - "Env setup: rewrites the name: field in each copied SKILL.md to match suffixed dir name"
+        - "Env setup: lists created suffixed directories with their git ref and label"
+        # Phase: Execute (add criteria when implemented)
+        # Phase: Report (add criteria when implemented)
+      scoring_rules: |
+        Score 10 * (passed criteria / total criteria).
+
+  - id: model-comparison-request
+    input: |
+      A user requests: "Test the linear-create skill comparing
+      openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6.
+      The PR is on branch claw/vash/improve-linear-create, base is main.
+      The eval.yaml is at skills/linear-create/eval.yaml."
+
+      Read the eval-runner skill from available_skills, then run the
+      eval. Simulate all phases — do NOT actually run dataset_sync.py
+      or create directories. Report what you would do at each phase and
+      the structured output you would produce.
+    expected_output:
+      behavior: |
+        The agent reads the eval-runner skill and executes the full
+        flow with a model dimension added: infers skill A/B variants
+        AND two models, presents a confirmation summary showing the
+        2×2 matrix (2 skill variants × 2 models = 4 runs), runs
+        pre-flight checks, syncs both eval.yaml versions, and sets up
+        the eval environment with suffixed directories for both skill
+        variants.
+      scoring_type: pass_fail
+      scoring_criteria:
+        # Phase: Variant Inference
+        - "Inference: identifies skill A/B — main (before) vs PR head (after)"
+        - "Inference: identifies two models — glm-5.2 and claude-sonnet-4-6"
+        - "Inference: recognizes the full matrix is 2 skill variants × 2 models = 4 runs"
+        - "Inference: selects all dataset items (none specifically named)"
+        # Phase: Confirmation
+        - "Confirmation: presents summary showing skill variants AND model dimension"
+        - "Confirmation: shows the total run count (4 runs)"
+        - "Confirmation: waits for user confirmation before proceeding"
+        # Phase: Pre-flight
+        - "Pre-flight: fetches SKILL.md from both git refs"
+        - "Pre-flight: scans both skill bodies for self-references"
+        - "Pre-flight: passes, proceeds to sync"
+        # Phase: Sync
+        - "Sync: extracts both eval.yaml versions via git show"
+        - "Sync: runs dataset_sync.py sequentially with --output-manifest"
+        - "Sync: produces structured output with manifest_before and manifest_after"
+        # Phase: Env Setup
+        - "Env setup: creates suffixed directories for both skill variants"
+        - "Env setup: copies all files and rewrites name: field in each"
+        - "Env setup: notes that execute phase will run 4 combinations (2 skill × 2 model)"
+        # Phase: Execute (add criteria when implemented)
+        # Phase: Report (add criteria when implemented)
+      scoring_rules: |
+        Score 10 * (passed criteria / total criteria).
+
+  - id: rerun-previous-eval
+    input: |
+      A user says: "Re-run the previous eval for the linear-create PR
+      on claw/vash/improve-linear-create."
+
+      The previous run used skill A/B (main vs PR head), single model,
+      all dataset items. Read the eval-runner skill from available_skills
+      and run the eval again.
+
+      Simulate all phases — do NOT actually run dataset_sync.py or
+      create directories. Report what you would do at each phase.
+    expected_output:
+      behavior: |
+        The agent reads the eval-runner skill, recognizes the re-run
+        request, and skips variant inference + confirmation — reusing
+        the previous variant spec directly. It proceeds to pre-flight
+        checks, then syncs ONLY the after version (PR head) — the
+        baseline has not changed and does not need re-syncing or
+        re-testing. It then sets up the env for the after variant.
+      scoring_type: pass_fail
+      scoring_criteria:
+        # Phase: Variant Inference (skipped)
+        - "Inference: skips variant inference — reuses previous variant spec"
+        - "Inference: skips confirmation — proceeds straight to pre-flight"
+        # Phase: Pre-flight
+        - "Pre-flight: fetches SKILL.md from the after git ref (PR head)"
+        - "Pre-flight: scans for self-references, passes"
+        # Phase: Sync
+        - "Sync: syncs ONLY the after version — does not re-sync the before/baseline version"
+        - "Sync: does not re-test the baseline unless user explicitly requests it"
+        - "Sync: uses --output-manifest for the after version sync"
+        # Phase: Env Setup
+        - "Env setup: creates suffixed directory for the after variant only"
+        - "Env setup: does not create a suffixed directory for the baseline/before variant"
+        - "Env setup: copies all files and rewrites name: field"
+        # Phase: Execute (add criteria when implemented)
+        # Phase: Report (add criteria when implemented)
+      scoring_rules: |
+        Score 10 * (passed criteria / total criteria).
+
+  # ─── Pre-flight gate test ───────────────────────────────────────────
+
+  - id: self-reference-abort
+    input: |
+      A PR in brightfire/agentic-testing-framework modifies the
+      linear-create skill on branch claw/vash/improve-linear-create.
+      The base branch is main. The eval.yaml is at
+      skills/linear-create/eval.yaml.
+
+      The linear-create skill's SKILL.md body contains the text
+      "the linear-create skill will match projects" — it references
+      its own skill name.
+
+      Read the eval-runner skill from available_skills, then run the
+      eval for this PR. Simulate all phases — do NOT actually run
+      dataset_sync.py or create directories. Report what you would do.
+    expected_output:
+      behavior: |
+        The agent reads the eval-runner skill, runs variant inference
+        (skill A/B), presents confirmation, and proceeds to pre-flight
+        checks. Pre-flight detects the self-reference "linear-create"
+        in the skill body and aborts the entire run before syncing
+        anything to Langfuse or setting up the env. It reports which
+        skill and line(s) contain self-references and tells the user
+        to fix the source skill before re-running.
+      scoring_type: pass_fail
+      scoring_criteria:
+        # Phase: Variant Inference
+        - "Inference: identifies skill A/B — main vs PR head"
+        # Phase: Confirmation
+        - "Confirmation: presents summary and waits for confirmation"
+        # Phase: Pre-flight (abort path)
+        - "Pre-flight: fetches SKILL.md from both git refs via git show"
+        - "Pre-flight: scans skill body (not frontmatter) for self-references using word-boundary regex"
+        - "Pre-flight: detects 'linear-create' self-reference in the skill body"
+        - "Pre-flight: aborts the entire run — does not proceed to sync"
+        - "Pre-flight: does NOT call dataset_sync.py or Langfuse"
+        - "Pre-flight: does NOT create suffixed directories or run env setup"
+        - "Pre-flight: reports which skill and line(s) contain self-references"
+        - "Pre-flight: tells user to fix the source skill before re-running"
+      scoring_rules: |
+        Score 10 * (passed criteria / total criteria).
+
+  # ─── Phase-targeted edge cases (sync) ────────────────────────────────
+
+  - id: new-eval-yaml
+    input: |
+      You are running the eval-runner for a PR in
+      brightfire/agentic-testing-framework. The PR adds a new file:
+      skills/linear-create/eval.yaml. This file does not exist on the
+      base branch (main). The PR head branch is claw/vash/add-eval-yaml.
 
       Read the eval-runner skill from available_skills, then perform
-      the sync phase for this PR. Report the structured output.
+      ONLY the sync phase for this PR. Report the structured output.
 
       Do NOT actually run dataset_sync.py — simulate the sync and report
       what you would do and what output structure you would produce.
     expected_output:
       behavior: |
-        The agent reads the eval-runner skill, extracts both versions
-        of eval.yaml via git show into a mktemp working directory, runs
-        dataset_sync.py sequentially (before then after) with
-        --output-manifest for each, and produces the structured output
-        format with dataset, skill, eval_yaml_path, manifest_before, and
-        manifest_after fields.
-      scoring_type: pass_fail
-      scoring_criteria:
-        - "Describes extracting before version from base ref (main) via git show"
-        - "Describes extracting after version from PR head ref via git show"
-        - "States that syncs must run sequentially (before then after)"
-        - "Uses --output-manifest flag for each sync invocation"
-        - "Output includes dataset, skill, eval_yaml_path fields"
-        - "Output includes manifest_before and manifest_after file paths"
-      scoring_rules: |
-        Score 10 * (passed criteria / total criteria).
-
-  - id: new-eval-yaml-edge-case
-    input: |
-      You are performing the eval-runner phase for a PR in
-      brightfire/agentic-testing-framework. The PR adds a new file:
-      skills/eval-runner/eval.yaml. This file does not exist on the
-      base branch (main). The PR head branch is claw/vash/add-eval-yaml.
-
-      Read the eval-runner skill from available_skills, then perform
-      the sync phase for this PR. Report the structured output.
-
-      Do NOT actually run dataset_sync.py — simulate and report what you
-      would do.
-    expected_output:
-      behavior: |
         The agent reads the eval-runner skill, attempts to extract the
         before version from main and finds it doesn't exist. It correctly
-        handles this as a new eval definition: manifest_before is null, only
-        the after version is synced. The output structure reflects
+        handles this as a new eval definition: manifest_before is null,
+        only the after version is synced. The output structure reflects
         manifest_before: null with manifest_after having a path.
       scoring_type: pass_fail
       scoring_criteria:
@@ -62,32 +217,35 @@ items:
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
 
-  - id: sync-failure-handling
+  - id: sync-failure-abort
     input: |
-      You are performing the eval-runner phase for a PR in
+      You are running the eval-runner for a PR in
       brightfire/agentic-testing-framework, which modifies
-      skills/eval-runner/eval.yaml. You have extracted both versions and
-      started the sync. The "before" version sync failed —
+      skills/linear-create/eval.yaml. You have extracted both versions
+      and started the sync. The "before" version sync failed —
       dataset_sync.py exited with code 1 and the output shows
       "LANGFUSE_SECRET_KEY not set".
 
       Read the eval-runner skill from available_skills, then report
       how you handle this failure and what you would do next.
 
-      Do NOT actually run dataset_sync.py.
+      Perform ONLY the sync phase — do NOT proceed to env setup or
+      execute. Do NOT actually run dataset_sync.py.
     expected_output:
       behavior: |
         The agent reads the eval-runner skill, recognizes the sync
-        failure from the non-zero exit code, and aborts the entire sync
-        phase. It does NOT attempt the after sync. It reports the error
-        from the script output and explains that the before sync must
-        succeed before proceeding.
+        failure from the non-zero exit code, and aborts the sync
+        phase. It does NOT attempt the after sync. It reports the
+        error from the script output and explains that the before
+        sync must succeed before proceeding to the after sync or
+        any subsequent phases.
       scoring_type: pass_fail
       scoring_criteria:
         - "Recognizes the sync failure (exit code 1)"
         - "Aborts the sync phase — does not attempt the after sync"
+        - "Does not proceed to env setup or any subsequent phase"
         - "Reports the error from the script output"
-        - "Does not attempt the after sync after the before sync failed"
+        - "Explains that before sync must succeed before proceeding"
         - "References having read the eval-runner skill"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
