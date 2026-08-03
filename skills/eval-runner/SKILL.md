@@ -15,15 +15,15 @@ The eval runner orchestrates eval test phases. Each phase is a section below.
 The skill determines what to test based on the request, not the trigger source. Three independent dimensions:
 
 **Skill versions** (what skill code to test):
-- **PR referenced, no explicit skill specs** → default to skill A/B: base branch (e.g., `main@<base-hash>`) + PR head branch (e.g., `<pr-branch>@<head-hash>`). The variant label is the branch name.
+- **PR referenced, no explicit skill specs** → default to skill A/B: base branch (e.g., `main@<base-hash>`) + PR head (e.g., `<pr-branch>@<head-hash>`). The variant label is `main` (base branch name) for the base and `pr-<number>` (e.g., `pr-123`) for the PR head.
 - **Request names specific commits** → use those commits as skill variants. The variant label is the commit hash.
-- **Request says "just the PR version" or similar** → single skill variant: `<pr-branch>@<hash>`. The variant label is the PR branch name.
+- **Request says "just the PR version" or similar** → single skill variant: `<pr-branch>@<hash>`. The variant label is `pr-<number>` (e.g., `pr-123`).
 - **Explicit skill variant specs provided** → use them. The variant label is the branch name or commit hash provided.
 
-The variant label identifies the source of the variant — the branch name (for
-PR-triggered runs) or commit hash (for explicit specs). This label appears in
-experiment names to distinguish variants, alongside the git hash for precise
-commit identification.
+The variant label identifies the source of the variant — the PR number (for
+PR head variants), the base branch name (for the base variant), or commit hash
+(for explicit specs). This label appears in experiment names to distinguish
+variants, alongside the git hash for precise commit identification.
 
 **Models** (what models to run each skill variant against):
 - **Request mentions model comparison** → model A/B dimension added
@@ -44,13 +44,15 @@ The execute phase creates experiments using the naming convention:
 <dataset-name>__<model-id>__<variant-label>__<git-hash>
 ```
 
-Where `<variant-label>` is the branch name or commit ref that identifies the
-variant source. For example: `linear-create-eval__glm-5.2__main__a1b2c3d`
-(base branch `main`) or `linear-create-eval__glm-5.2__claw-vash-fix-xyz__e5f6g7h`
-(PR head branch `claw/vash/fix-xyz` with slashes normalized to hyphens).
+Where `<variant-label>` identifies the variant source — the base branch
+name (e.g., `main`), the PR number (e.g., `pr-123`), or a commit ref (for
+explicit specs). For example: `linear-create-eval__glm-5.2__main__a1b2c3d`
+(base branch `main`) or `linear-create-eval__glm-5.2__pr-123__e5f6g7h`
+(PR head, PR number as label).
 
-Branch names containing `/` (e.g., `claw/vash/fix-xyz`) have slashes replaced
-with hyphens in experiment names (e.g., `claw-vash-fix-xyz`).
+For explicit variant specs using branch names containing `/` (e.g.,
+`claw/vash/fix-xyz`), slashes are replaced with hyphens in experiment names
+(e.g., `claw-vash-fix-xyz`).
 
 During inference, query Langfuse for experiments matching
 `<dataset-name>__<model-id>__<base-branch-name>__<base-hash>` for each
