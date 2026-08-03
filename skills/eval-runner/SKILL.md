@@ -1,6 +1,6 @@
 ---
 name: eval-runner
-description: "Use when running eval tests — syncs eval definitions to Langfuse, prepares the eval environment, and orchestrates variant runs. SKIP for one-off Langfuse dataset syncs or ad-hoc eval runs not tied to a PR or skill comparison."
+description: "Use when running eval tests — syncs eval definitions to Langfuse, prepares the eval environment, and orchestrates variant runs."
 metadata:
   author: brightfire
   version: "2.1"
