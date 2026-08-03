@@ -76,7 +76,6 @@ confirmation before proceeding. The summary shows:
 The user can:
 - **Confirm** — proceed to pre-flight checks
 - **Adjust** — modify any dimension (add/remove skill variants, change models, change dataset items, force baseline re-test) and re-confirm
-- **Cancel** — abort the run
 
 Only after confirmation does the skill proceed to pre-flight checks and the phases.
 

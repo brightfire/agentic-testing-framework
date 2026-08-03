@@ -17,7 +17,7 @@ items:
       behavior: |
         The agent runs variant inference and presents a confirmation
         summary. It does NOT proceed to pre-flight, sync, or env
-        setup — it waits for the user to confirm, adjust, or cancel.
+        setup — it waits for the user to confirm or adjust.
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Variant Inference
