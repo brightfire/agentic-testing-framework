@@ -24,23 +24,7 @@ docs/                 — Eval result snapshots and reference docs
 
 ## eval.yaml Format
 
-The authoritative schema lives in `src/schema.py` (Pydantic v2, `extra="forbid"`). The structure:
-
-```yaml
-dataset: <string, required — Langfuse dataset name, no ":" allowed>
-description: <string, optional — human-readable summary>
-items:
-  - id: <string, required — unique within dataset, no ":" allowed>
-    input: <string, required — prompt text sent to the agent>
-    expected_output:
-      behavior: <string, required — prose describing expected behavior>
-      scoring_type: pass_fail
-      scoring_criteria:
-        - "criterion 1"
-        - "criterion 2"
-      scoring_rules: |
-        Score 10 * (passed criteria / total criteria).
-```
+See `src/schema.py` for the authoritative schema (Pydantic v2, `extra="forbid"`) and `samples/eval-sample.yaml` for a complete example.
 
 ### Authoring Conventions
 
