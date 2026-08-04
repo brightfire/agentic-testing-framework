@@ -106,15 +106,13 @@ items:
     expected_output:
       behavior: |
         The agent runs variant inference and the baseline recency check. It finds that glm-5.2 was already tested in the prior run (skip). Only claude-sonnet-4-6 needs to run —
-        both baseline and PR-head since no prior experiments exist for it. The agent indicates that nothing has changed since the prior run and asks for confirmation to proceed
-        with only the new model (claude-sonnet-4-6).
+        both baseline and PR-head since no prior experiments exist for it. The agent asks for confirmation to proceed with only the new model (claude-sonnet-4-6).
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Variant Inference
         - "Inference: identifies two models — glm-5.2 and claude-sonnet-4-6"
         - "Recency: recognizes glm-5.2 was already tested in the prior run (skip)"
         - "Recency: recognizes claude-sonnet-4-6 has no prior experiments (include both baseline and PR-head)"
-        - "Recency: indicates nothing has changed since the prior run"
         - "Confirmation: asks user to confirm proceeding with only claude-sonnet-4-6"
         - "Recency: recognizes the matrix is 2 runs: pr-42×claude-sonnet-4-6, main×claude-sonnet-4-6"
       scoring_rules: |
@@ -340,14 +338,14 @@ items:
     expected_output:
       behavior: |
         The agent attempts to extract the before version from main and finds it doesn't exist. It correctly handles this as a new eval definition: the manifests list
-        contains only the after variant entry (the before version is missing). Only the after version is synced.
+        contains two entries — the base variant with `manifest: null` (no before version exists) and the after variant with `manifest: <path>`. Only the after version is synced.
       scoring_type: pass_fail
       scoring_criteria:
         - "Recognizes the before version doesn't exist on base (new eval.yaml)"
-        - "manifests list contains only the after variant entry"
+        - "manifests list contains two entries: base variant with manifest: null and after variant with manifest: <path>"
         - "Only syncs the after version"
         - "Does not treat the missing before version as an error"
-        - "Output structure includes dataset, skill, eval_yaml_path, and a manifests list with only the after variant entry (before version missing)"
+        - "Output structure includes dataset, skill, eval_yaml_path, and a manifests list with both entries (base with null manifest, after with manifest path)"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
 
