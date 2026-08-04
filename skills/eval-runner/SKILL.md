@@ -66,6 +66,8 @@ For explicit variant specs using branch names containing `/` (e.g., `claw/vash/f
 
 During the recency check, query Langfuse for experiments whose names **start with** `<dataset-name>__<model-id>__<variant-label>__<git-hash>__<item-scope>` for each requested model and each variant — using the resolved commit hash, not a wildcard. The harness appends ` - <timestamp>` (and optionally ` - <run_idx>/<total>` for repeats) to experiment names, so the lookup must use a prefix match, not an exact match. The item-scope must match exactly (no wildcard) — `all` for full-dataset runs, or the specific item-scope hash for subset runs. This ensures results match the current state, even if the base branch has advanced within the 7-day window. If experiments exist for a variant within a recent window (default: 7 days), that variant can be reused — skip running it again. The confirmation summary notes which variants are being reused and from when.
 
+Before treating a matching experiment as reusable, verify it completed successfully — all dataset items must have outputs with no errors. The harness exits successfully even when individual items fail or time out, so a matching experiment may contain incomplete or errored results. If a matching experiment has any failed or missing items, treat it as if no match exists — include the variant in the run matrix.
+
 If matching experiments are missing for any requested model or variant, or are older than the window, include those variants in the run.
 
 The check still runs for first-time runs (no prior experiments exist — nothing to reuse). For reruns, the recency check runs normally — if nothing has changed since the prior run
