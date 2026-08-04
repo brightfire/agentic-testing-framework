@@ -27,7 +27,7 @@ The variant label identifies the source of the variant — the PR number (for PR
 This label appears in experiment names to distinguish variants, alongside the git hash for precise commit identification.
 
 **Models** (what models to run each skill variant against):
-- **Request mentions model comparison** → model A/B dimension added
+- **Request mentions model comparison, or names a specific model** → model A/B dimension added. Naming a single specific model (e.g., "test against claude-sonnet-4-6") implies an A/B comparison with the agent default as model A and the named model as model B.
 - **No model mention** → single model (whatever the agent default is)
 
 **Dataset items** (which eval cases to run):
@@ -65,8 +65,6 @@ Where `<variant-label>` identifies the variant source — the base branch name (
 For explicit variant specs using branch names containing `/` (e.g., `claw/vash/fix-xyz`), slashes are replaced with hyphens in experiment names (e.g., `claw-vash-fix-xyz`).
 
 During the recency check, query Langfuse for experiments whose names **start with** `<dataset-name>__<model-id>__<variant-label>__<git-hash>__<item-scope>` for each requested model and each variant — using the resolved commit hash, not a wildcard. The harness appends ` - <timestamp>` (and optionally ` - <run_idx>/<total>` for repeats) to experiment names, so the lookup must use a prefix match, not an exact match. The item-scope must match exactly (no wildcard) — `all` for full-dataset runs, or the specific item-scope hash for subset runs. This ensures results match the current state, even if the base branch has advanced within the 7-day window. If experiments exist for a variant within a recent window (default: 7 days), that variant can be reused — skip running it again. The confirmation summary notes which variants are being reused and from when.
-
-Before treating a matching experiment as reusable, verify it completed successfully — all dataset items must have outputs with no errors. The harness exits successfully even when individual items fail or time out, so a matching experiment may contain incomplete or errored results. If a matching experiment has any failed or missing items, treat it as if no match exists — include the variant in the run matrix.
 
 If matching experiments are missing for any requested model or variant, or are older than the window, include those variants in the run.
 
@@ -110,7 +108,7 @@ not itself), so check early — there's no reason to sync anything to Langfuse i
 
 For each variant spec:
 
-1. **Identify skill-relevant files.** Fetch SKILL.md from the git ref: `git show <ref>:<skill-path>/SKILL.md`. Read its body and collect all file references — paths matching patterns like `references/foo.md`, `scripts/bar.py`, `templates/baz.txt`, or Markdown links like `[text](references/foo.md)`. Then recursively follow references in those files to find transitive dependencies (a referenced file may link to another file). Fetch each transitively-referenced file from the git ref and repeat the process until no new files are found. The skill-relevant file set is: SKILL.md itself plus the full closure of files reachable through reference chains. Exclude convention/meta files (AGENTS.md, CLAUDE.md, LICENSE, .gitignore, etc.) even if referenced. Exclude `scripts/` files — references in scripts are code comments, not instructional content the LLM follows. Do NOT include files in the skill directory that aren't reachable from SKILL.md through reference chains.
+1. **Identify skill-relevant files.** Fetch SKILL.md from the git ref: `git show <ref>:<skill-path>/SKILL.md`. Read its body and collect all file references — paths matching patterns like `references/foo.md`, `scripts/bar.py`, `templates/baz.txt`, or Markdown links like `[text](references/foo.md)`. Then recursively follow references in those files to find transitive dependencies (a referenced file may link to another file), up to depth 3. Fetch each transitively-referenced file from the git ref and repeat the process until no new files are found or depth 3 is reached. The skill-relevant file set is: SKILL.md itself plus the full closure of files reachable through reference chains. Exclude convention/meta files (AGENTS.md, CLAUDE.md, LICENSE, .gitignore, etc.) even if referenced. Exclude `scripts/` files — references in scripts are code comments, not instructional content the LLM follows. Do NOT include files in the skill directory that aren't reachable from SKILL.md through reference chains.
 2. **Scan skill-relevant files for self-references.** Fetch each identified file from the git ref via `git show <ref>:<skill-path>/<file>`. Scan each file's content using the whole-word regex: `(?<![a-z0-9-])<skill-name>(?![a-z0-9-])` (case-insensitive). For SKILL.md, scan the body excluding frontmatter; for all other files, scan the entire content. The skill name is the `name:` field from the SKILL.md frontmatter.
 3. **If any self-reference is found**, **abort the entire run** — do not proceed to sync or env setup. Report which skill(s) and line(s) contain self-references, and tell the user
    to fix the source skill before re-running.
@@ -137,7 +135,7 @@ sync all variants. If the recency check found some variants unchanged, only sync
 
 Use `git show` to extract each version to a temp file. This avoids modifying the working tree and works regardless of current checkout state.
 
-Normalize the variant label to `[a-z0-9-]` before using it as a filename (replace `/` with `-`, lowercase, strip dots and underscores). Include the short commit hash (first 7 chars of the resolved git ref) in the filename to prevent collisions between distinct labels that normalize to the same string. For example, `claw/vash/fix-xyz` → `claw-vash-fix-xyz` → `eval-claw-vash-fix-xyz-a1b2c3d.yaml`.
+Normalize the variant label to `[a-z0-9-]` before using it as a filename (replace `/` with `-`, lowercase, strip dots and underscores). For example, `claw/vash/fix-xyz` → `claw-vash-fix-xyz` → `eval-claw-vash-fix-xyz.yaml`.
 
 ```bash
 # Create a working directory for temp files (collision-safe)
@@ -145,9 +143,7 @@ WORK_DIR=$(mktemp -d /tmp/eval-sync.XXXXXX)
 
 # For each variant spec from inference (variant-label, git-ref):
 # Normalize the label to [a-z0-9-] before using it as a filename
-# Extract the short hash (first 7 chars of the resolved git ref)
-SHORT_HASH=$(git rev-parse --short=7 "<variant-ref>")
-git show "<variant-ref>:<eval-yaml-path>" > "$WORK_DIR/eval-<variant-label>-${SHORT_HASH}.yaml"
+git show "<variant-ref>:<eval-yaml-path>" > "$WORK_DIR/eval-<variant-label>.yaml"
 ```
 
 **Edge case — new eval.yaml (variant's ref doesn't have the file):** If `git show "<variant-ref>:<eval-yaml-path>"` fails (file doesn't exist at that ref), this is a new eval
@@ -169,8 +165,8 @@ Run `dataset_sync.py` for each version that exists. Run sequentially — concurr
 ```bash
 # For each extracted eval file (sequentially — concurrent syncs can interleave timestamps):
 python ~/repos/agentic-testing-framework/src/dataset_sync.py \
-  --file "$WORK_DIR/eval-<variant-label>-${SHORT_HASH}.yaml" \
-  --output-manifest "$WORK_DIR/manifest-<variant-label>-${SHORT_HASH}.json"
+  --file "$WORK_DIR/eval-<variant-label>.yaml" \
+  --output-manifest "$WORK_DIR/manifest-<variant-label>.json"
 ```
 
 The manifest file contains per-item server timestamps from Langfuse, used by the execute phase to pin experiment runs to exact dataset state. For the full manifest file contract
@@ -193,10 +189,10 @@ eval_yaml_path: <path within repo>
 manifests:
   - variant: <variant-label>
     ref: <git-hash>
-    manifest: <path to manifest-<variant-label>-<short-hash>.json or null if skipped>
+    manifest: <path to manifest-<variant-label>.json or null if skipped>
   - variant: <variant-label>
     ref: <git-hash>
-    manifest: <path to manifest-<variant-label>-<short-hash>.json or null if skipped>
+    manifest: <path to manifest-<variant-label>.json or null if skipped>
   ...
 ```
 
