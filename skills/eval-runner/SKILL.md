@@ -316,13 +316,6 @@ python ~/repos/agentic-testing-framework/src/eval_harness.py \
 
 Omit `--model` when using the agent's default model. Omit `--repeat` when the repeat count is 1. Pass `--manifest` when the sync phase produced a manifest for this variant — the harness reads the `synced_at` timestamp from the manifest and passes it to Langfuse `get_dataset(version=...)`, pinning the dataset to the exact state at sync time. When a variant's manifest is `null` (new eval.yaml, no sync needed), omit `--manifest` — the harness loads the latest dataset state.
 
-**Prerequisites:**
-- `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` environment variables must be set
-- `LANGFUSE_BASIC_AUTH` environment variable must be set (base64 of `public_key:secret_key`) — the harness uses this for Langfuse REST API trace lookups. Set it with: `export LANGFUSE_BASIC_AUTH=$(printf '%s:%s' "$LANGFUSE_PUBLIC_KEY" "$LANGFUSE_SECRET_KEY" | base64 -w0)`
-- The suffixed skill directories from env setup must exist in `~/.openclaw/workspace/eval-skills/` and be listed in `skills.load.extraDirs` in the gateway config
-- The OpenClaw gateway must be running and healthy
-- Python dependencies (`langfuse`, `requests`, `pyyaml`) must be installed — see `~/repos/agentic-testing-framework/requirements.txt`
-
 #### 4. Filter to specific dataset items (if applicable)
 
 If the run matrix specifies specific dataset items (not all), pass `--item-id <item-id>` to the harness. The harness supports a single `--item-id` per invocation (partial match). For multiple specific items, either:
