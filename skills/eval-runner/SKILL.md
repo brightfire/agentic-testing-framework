@@ -164,7 +164,7 @@ Second phase of the eval runner. Prepares the eval environment so the harness ca
 
 For each variant spec:
 
-1. **Fetch the latest** — If the git ref is a branch or PR head (not a fixed commit hash), `git fetch origin "<ref>"` first to ensure you have the latest state. Then fetch the skill from the git ref: `git show "<ref>:<skill-path>/SKILL.md"` and all files in the skill directory.
+1. **Fetch the skill** — The git ref is already pinned to a commit hash by Ref Resolution. Fetch the skill from the git ref: `git show "<ref>:<skill-path>/SKILL.md"` and all files in the skill directory.
 2. **Create suffixed directory** in `~/.openclaw/workspace/eval-skills/<skill-name>-<label>-<7char-hash>-<4char-random>/`. Normalize the label to `[a-z0-9-]` (replace `/` with `-`, lowercase, strip dots and underscores).
 3. **Copy all skill files** into the suffixed directory (preserving subdirectory structure — references/, scripts/, etc.).
 4. **Rewrite the `name:` field** in the copied `SKILL.md` frontmatter to match the suffixed directory name (e.g., `linear-create` → `linear-create-main-a1b2c3d-x7k2`).
@@ -256,7 +256,7 @@ See [`references/execute-failure-handling.md`](references/execute-failure-handli
 
 ## Cleanup
 
-After execute and report phases complete, remove the suffixed directories created during Environment Setup. Track which directories were created and `rm -rf` only those — do not remove directories from other concurrent runs. If the run aborts after env setup, cleanup should still run. Also clean up `$WORK_DIR` if it was preserved for the execute phase.
+After execute and report phases complete, remove the suffixed directories created during Environment Setup. Track which directories were created and `trash` only those — do not remove directories from other concurrent runs. If the run aborts after env setup, cleanup should still run. Also clean up `$WORK_DIR` if it was preserved for the execute phase.
 
 ## References
 
