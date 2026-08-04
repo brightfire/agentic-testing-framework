@@ -52,8 +52,7 @@ variant within a recent window (default: 7 days), that variant can be reused —
 
 If matching experiments are missing for any requested model or variant, or are older than the window, include those variants in the run.
 
-The check still runs for first-time runs (no prior experiments exist — nothing to reuse) and explicit re-run requests (the user is asking to re-run, so prior results are ignored unless
-the user says otherwise). These aren't exclusions from the check — they're cases where the check finds nothing to reuse.
+The check still runs for first-time runs (no prior experiments exist — nothing to reuse). For reruns, the baseline is excluded by definition (it already exists), and the after variant(s) execute regardless of recency — the user explicitly asked to re-run.
 
 The model and dataset dimensions are orthogonal — they multiply with the remaining skill variants after the recency check. For example, a PR with prior baseline runs for 2 models:
 1 skill variant (after only) × 2 models = 2 runs instead of 4.
@@ -78,9 +77,7 @@ The user can:
 
 Only after confirmation does the skill proceed to pre-flight checks and the phases.
 
-If the user says "run same test again" or "re-run the previous eval", the skill skips variant inference and confirmation, reusing the previous variant spec directly. It proceeds straight to
-pre-flight checks. The recency check still applies — the rerun reuses prior results for any variant with matching experiments within the recency window, unless the user explicitly requests
-a full re-run ("re-run everything") or matching experiments are missing.
+If the user says "run same test again" or "re-run the previous eval", the skill skips variant inference and confirmation — the user is confirming the previous variant set. The baseline is excluded (it already exists in Langfuse from the prior run). The after variant(s) proceed to pre-flight checks and execute again. The recency check does not suppress execution on a rerun — the user explicitly asked to re-run.
 
 
 
