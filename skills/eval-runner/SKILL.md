@@ -10,6 +10,14 @@ metadata:
 
 The eval runner orchestrates eval test phases. Each phase is a section below.
 
+## Ref Resolution
+
+Before variant inference, pin all git refs to commit hashes so subsequent phases use a fixed snapshot:
+
+1. For each variant spec, fetch from origin to ensure the ref is available locally: `git fetch origin <ref>`. If the ref is a branch name (not a commit hash), resolve it to a commit hash: `git rev-parse origin/<ref>` (or `git ls-remote origin <ref>`). If the ref is already a commit hash, `git fetch origin <ref>` ensures the commit is present in the local clone.
+2. Replace the branch ref with the resolved commit hash in the variant spec.
+3. All subsequent phases (variant inference, pre-flight, sync, env setup) use the pinned commit hash — never the branch name.
+
 ## Variant Inference
 
 The skill determines what to test based on the request, not the trigger source. Three independent dimensions:
@@ -51,7 +59,7 @@ Where `<variant-label>` identifies the variant source — the base branch name (
 For explicit variant specs using branch names containing `/` (e.g., `claw/vash/fix-xyz`), slashes are replaced with hyphens in experiment names (e.g., `claw-vash-fix-xyz`).
 
 During inference, query Langfuse for experiments matching `<dataset-name>__<model-id>__<variant-label>__<git-hash>__<item-scope>` for each requested model and each variant — using
-the resolved commit hash (from the Ref Resolution step), not a wildcard. The item-scope must match exactly (no wildcard) — `all` for full-dataset runs, or the specific item-scope
+the resolved commit hash, not a wildcard. The item-scope must match exactly (no wildcard) — `all` for full-dataset runs, or the specific item-scope
 hash for subset runs. This ensures results match the current state, even if the base branch has advanced within the 7-day window.  If experiments exist for a variant within a
 recent window (default: 7 days), that variant can be reused — skip running it again. The confirmation summary notes which variants are being reused and from when.
 
@@ -64,7 +72,7 @@ requested variants execute.
 The model and dataset dimensions are orthogonal — they multiply with the remaining skill variants after the recency check. For example, a PR with prior baseline runs for 2 models:
 1 skill variant (after only) × 2 models = 2 runs instead of 4.
 
-This inference happens at the skill level before the phases run. The env setup phase receives the resolved list of (git ref, label) pairs for skill versions and handles the
+Ref resolution happens before inference, and the inference itself happens at the skill level before the phases run. The env setup phase receives the resolved list of (git ref, label) pairs for skill versions and handles the
 mechanics of creating suffixed copies. The label is used both for directory naming in env setup and as the variant-label component in experiment names.
 
 ## Confirmation
@@ -90,14 +98,6 @@ to confirm they want to force a re-run. If the user confirms, prior results are 
 run — unchanged variants are reused.
 
 
-
-## Ref Resolution
-
-Before pre-flight checks, pin all git refs to commit hashes so subsequent phases use a fixed snapshot:
-
-1. For each variant spec, fetch from origin to ensure the ref is available locally: `git fetch origin <ref>`. If the ref is a branch name (not a commit hash), resolve it to a commit hash: `git rev-parse origin/<ref>` (or `git ls-remote origin <ref>`). If the ref is already a commit hash, `git fetch origin <ref>` ensures the commit is present in the local clone.
-2. Replace the branch ref with the resolved commit hash in the variant spec.
-3. All subsequent phases (pre-flight, sync, env setup) use the pinned commit hash — never the branch name.
 
 ## Pre-flight Checks
 

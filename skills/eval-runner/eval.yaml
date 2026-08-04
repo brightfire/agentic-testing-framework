@@ -244,7 +244,7 @@ items:
         - "Sync: extracts after eval.yaml from PR head ref via git show"
         - "Sync: runs dataset_sync.py sequentially — before then after"
         - "Sync: uses --output-manifest for each sync invocation"
-        - "Sync: produces structured output with dataset, skill, eval_yaml_path, manifest_before, manifest_after"
+        - "Sync: produces a manifests list with per-variant entries"
         # Phase: Env Setup
         - "Env setup: fetches skill files from both git refs via git show"
         - "Env setup: creates suffixed directories with 7-char git hash plus 4-char random suffix for each variant"
@@ -339,15 +339,15 @@ items:
       User request: "Run only the sync phase for this branch."
     expected_output:
       behavior: |
-        The agent attempts to extract the before version from main and finds it doesn't exist. It correctly handles this as a new eval definition: manifest_before is null, only the
-        after version is synced. The output structure reflects manifest_before: null with manifest_after having a path.
+        The agent attempts to extract the before version from main and finds it doesn't exist. It correctly handles this as a new eval definition: the manifests list
+        contains only the after variant entry (the before version is missing). Only the after version is synced.
       scoring_type: pass_fail
       scoring_criteria:
         - "Recognizes the before version doesn't exist on base (new eval.yaml)"
-        - "Sets manifest_before to null"
+        - "manifests list contains only the after variant entry"
         - "Only syncs the after version"
         - "Does not treat the missing before version as an error"
-        - "Output structure includes dataset, manifest_before (null), manifest_after, skill, eval_yaml_path"
+        - "Output structure includes dataset, skill, eval_yaml_path, and a manifests list with only the after variant entry (before version missing)"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
 
@@ -389,28 +389,22 @@ items:
     expected_output:
       behavior: |
         The agent runs variant inference and identifies 5 skill variants — one for each of the last 5 commits on main. The variant labels are the short commit hashes
-        (e.g., `a1b2c3d`, `e5f6g7h`, `i9j0k1l`, `m3n4o5p`, `q7r8s9t`). No baseline recency check is needed since this is not a PR A/B comparison — all 5 variants are
-        explicit commit specs. The agent presents the variant summary for confirmation, then proceeds to pre-flight checks for all 5 variants. Sync extracts 5 versions
-        of eval.yaml (one per commit) and syncs each to Langfuse sequentially, producing 5 manifest files. Env setup creates 5 suffixed directories.
+        (e.g., `a1b2c3d`, `e5f6g7h`, `i9j0k1l`, `m3n4o5p`, `q7r8s9t`). The agent runs the recency check for all 5 variants. If any have matching experiments within the recency
+        window, those are noted as reused. New or changed variants are included in the run. The agent presents the variant summary and waits for user confirmation. The
+        response does NOT proceed to pre-flight, sync, or env setup until the user confirms.
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Variant Inference
         - "Inference: identifies 5 skill variants — one per commit from the last 5 commits on main"
         - "Inference: uses short commit hashes as variant labels"
-        - "Inference: no baseline recency check (not a PR A/B comparison)"
+        - "Inference: runs recency check for all 5 variants"
+        - "Inference: notes any reused variants from prior runs"
         - "Inference: presents variant summary for confirmation"
         # Phase: Confirmation
-        - "Confirmation: waits for user confirmation before proceeding"
-        # Phase: Pre-flight
-        - "Pre-flight: fetches SKILL.md from all 5 commit refs"
-        - "Pre-flight: scans each for self-references, all pass"
-        # Phase: Sync
-        - "Sync: extracts 5 versions of eval.yaml (one per commit)"
-        - "Sync: syncs each version to Langfuse sequentially"
-        - "Sync: produces 5 manifest files"
-        # Phase: Env Setup
-        - "Env setup: creates 5 suffixed directories (one per variant)"
-        - "Env setup: copies all files and rewrites name: field for each"
+        - "Confirmation: waits for user confirmation — does NOT proceed to pre-flight/sync/env setup"
+        # Phase: Pre-flight (add criteria after user confirms)
+        # Phase: Sync (add criteria after user confirms)
+        # Phase: Env Setup (add criteria after user confirms)
         # Phase: Execute (add criteria when implemented)
         # Phase: Report (add criteria when implemented)
       scoring_rules: |
