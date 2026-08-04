@@ -12,10 +12,14 @@ Usage:
         --dataset linear-skill-evaluation \
         --run-name linear-baseline-run-1 \
         --prompt-prefix "Read skill linear-baseline. Then, " \
+        --manifest /tmp/eval-sync/manifest-main.json \
         --langfuse-host http://localhost:3000
 
 Credentials:
     LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY environment variables.
+    LANGFUSE_BASIC_AUTH (base64 of public:secret) is also required for trace
+    lookup REST API calls. Set it with:
+      export LANGFUSE_BASIC_AUTH=$(printf '%s:%s' "$LANGFUSE_PUBLIC_KEY" "$LANGFUSE_SECRET_KEY" | base64 -w0)
     The openclaw agent CLI handles gateway auth internally — the harness
     must run on a host with OpenClaw installed and a running local gateway.
 """
@@ -32,6 +36,44 @@ from typing import Optional
 
 import requests
 from langfuse import Langfuse
+
+
+def load_manifest_version(manifest_path):
+    """Load a sync manifest file and extract the dataset version timestamp.
+
+    The manifest is produced by dataset_sync.py --output-manifest and contains
+    a 'synced_at' field (ISO 8601 UTC) representing when the sync completed.
+    This timestamp is passed to Langfuse get_dataset(version=...) to pin the
+    dataset state to exactly what was synced.
+
+    Returns a timezone-aware UTC datetime, or None if the manifest is invalid
+    or the timestamp cannot be parsed.
+    """
+    try:
+        with open(manifest_path) as f:
+            manifest = json.load(f)
+    except (OSError, json.JSONDecodeError) as e:
+        log(f"Failed to load manifest '{manifest_path}': {e}", "ERROR")
+        return None
+
+    synced_at = manifest.get("synced_at")
+    if not synced_at:
+        log(f"Manifest '{manifest_path}' has no 'synced_at' field", "ERROR")
+        return None
+
+    try:
+        # Manifest timestamps are ISO 8601 with 'Z' suffix (UTC)
+        # datetime.fromisoformat doesn't handle 'Z' until Python 3.11,
+        # so replace with '+00:00' for compatibility
+        ts_str = synced_at.replace("Z", "+00:00")
+        version_dt = datetime.fromisoformat(ts_str)
+        if version_dt.tzinfo is None:
+            version_dt = version_dt.replace(tzinfo=timezone.utc)
+        log(f"Loaded manifest '{manifest_path}' — dataset version pinned to {synced_at}")
+        return version_dt
+    except ValueError as e:
+        log(f"Failed to parse manifest timestamp '{synced_at}': {e}", "ERROR")
+        return None
 
 
 def log(msg, level="INFO"):
@@ -97,11 +139,20 @@ def find_openclaw_trace_id(langfuse_host, auth_header, session_id, max_wait=15):
     return None
 
 
-def get_dataset(langfuse_client, dataset_name):
-    """Fetch a Langfuse dataset by name. Returns DatasetClient or exits."""
+def get_dataset(langfuse_client, dataset_name, version=None):
+    """Fetch a Langfuse dataset by name. Returns DatasetClient or exits.
+
+    If version is provided (a timezone-aware UTC datetime), the dataset is
+    pinned to the state at that timestamp — matching what was synced by
+    dataset_sync.py. This ensures concurrent eval runs don't interfere
+    with each other if someone else updates the dataset in between.
+    """
     try:
-        ds = langfuse_client.get_dataset(dataset_name)
-        log(f"Loaded dataset '{dataset_name}' — {len(ds.items)} items")
+        ds = langfuse_client.get_dataset(dataset_name, version=version)
+        if version:
+            log(f"Loaded dataset '{dataset_name}' (version pinned to {version.isoformat()}) — {len(ds.items)} items")
+        else:
+            log(f"Loaded dataset '{dataset_name}' — {len(ds.items)} items")
         return ds
     except Exception as e:
         log(f"Failed to load dataset '{dataset_name}': {e}", "ERROR")
@@ -260,6 +311,12 @@ def main():
         help="Only run a specific dataset item by ID (partial match supported)"
     )
     parser.add_argument(
+        "--manifest", default=None,
+        help="Path to a sync manifest JSON file (from dataset_sync.py --output-manifest). "
+             "Pins the dataset to the version at sync time by passing the manifest's "
+             "synced_at timestamp to Langfuse get_dataset(version=...)."
+    )
+    parser.add_argument(
         "--dry-run", action="store_true",
         help="Load dataset and print prompts without submitting to the gateway"
     )
@@ -285,8 +342,16 @@ def main():
         host=args.langfuse_host,
     )
 
+    # --- Load manifest and extract dataset version (if provided) ---
+    dataset_version = None
+    if args.manifest:
+        dataset_version = load_manifest_version(args.manifest)
+        if dataset_version is None:
+            log(f"Failed to load manifest from '{args.manifest}' — aborting.", "ERROR")
+            sys.exit(1)
+
     # --- Fetch dataset ---
-    ds = get_dataset(langfuse_client, args.dataset)
+    ds = get_dataset(langfuse_client, args.dataset, version=dataset_version)
 
     if not ds.items:
         log("Dataset has no items. Nothing to run.", "WARN")

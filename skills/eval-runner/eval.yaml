@@ -252,7 +252,8 @@ items:
         # Phase: Execute
         - "Execute: constructs base experiment name following the <dataset>__<model>__<variant-label>__<git-hash>__<item-scope> convention"
         - "Execute: constructs attestation prefix directing agent to the suffixed skill name from env setup"
-        - "Execute: invokes eval_harness.py for each variant with --dataset, --run-name, --prompt-prefix"
+        - "Execute: invokes eval_harness.py for each variant with --dataset, --run-name, --prompt-prefix, --manifest"
+        - "Execute: passes the manifest from the sync phase to pin dataset version"
         - "Execute: runs variants sequentially (not concurrently) by default"
         - "Execute: captures experiment run names and completion status from harness stdout"
         - "Execute: silent on success — does not post results to any channel (passed to report phase)"
@@ -340,7 +341,7 @@ items:
       Inference, confirmation, pre-flight, sync, and env setup all completed. The user confirmed the eval.
 
       During the execute phase, the harness completed (exit 0) but all dataset items failed — the summary shows "Total failures: 5" with 0 successful items. This happened for both variants.
-    expected_output: |
+    expected_output:
       behavior: |
         The agent recognizes that all items failed across all variants — this is an execution failure, not a partial failure. It reports the failure to the originating channel immediately as an error notification, including the total failure count and the affected variants. It does not proceed to the report phase with empty results.
       scoring_type: pass_fail
@@ -363,7 +364,7 @@ items:
       Inference, confirmation, pre-flight, sync, and env setup all completed. The user confirmed the eval.
 
       During the execute phase, the harness completed (exit 0) for both variants. Variant A (main) had 2 failed items out of 10. Variant B (pr-123) had 0 failed items. The harness summary shows "Total failures: 2" for variant A.
-    expected_output: |
+    expected_output:
       behavior: |
         The agent recognizes that partial failures (some items failed, but harness completed with exit 0) are NOT an immediate error condition. It captures the per-item failures as part of the execute phase output and passes them to the report phase. It does not send an immediate error notification — the report phase handles per-item failure analysis.
       scoring_type: pass_fail
@@ -380,7 +381,7 @@ items:
       Slack-triggered model A/B test. The user wants to compare openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6 for the eval-runner skill.
 
       Inference, confirmation, pre-flight, sync, and env setup all completed. The user confirmed the eval. Env setup created a single suffixed skill directory (skill unchanged between model variants).
-    expected_output: |
+    expected_output:
       behavior: |
         The agent invokes the harness twice — once with --model openrouter/z-ai/glm-5.2 and once with --model anthropic/claude-sonnet-4-6. Both invocations use the same suffixed skill name in the attestation prefix (since the skill doesn't change). Both use the same dataset version timestamp (T1 from sync). The agent constructs two experiment names with different model-id segments but the same variant-label and git-hash.
       scoring_type: pass_fail
@@ -390,6 +391,7 @@ items:
         - "Execute: --model flag differs between invocations"
         - "Execute: experiment names differ only in the model-id segment"
         - "Execute: both runs use the same dataset version timestamp (T1)"
+        - "Execute: both runs pass --manifest with the sync phase manifest for T1"
         - "Execute: captures experiment run names and completion status for both runs"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
@@ -506,7 +508,7 @@ items:
         # Phase: Pre-flight (add criteria after user confirms)
         # Phase: Sync (add criteria after user confirms)
         # Phase: Env Setup (add criteria after user confirms)
-        # Phase: Execute (add criteria when implemented)
+        # Phase: Execute
         - "Execute: invokes harness for each of the 5 variants sequentially"
         - "Execute: constructs unique experiment names per variant using commit hash as variant-label"
         # Phase: Report (add criteria when implemented)

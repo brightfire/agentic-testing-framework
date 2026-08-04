@@ -62,7 +62,11 @@ items:
 
 Manifest files contain per-item server timestamps from Langfuse. These are
 passed to the execute phase to pin experiment runs to exact dataset state:
-- `get_dataset(version=<timestamp>)` returns the dataset as it was at that point
-- Enables concurrent test runs without interference
+- The eval harness (`eval_harness.py`) accepts `--manifest <path>` which
+  reads the `synced_at` timestamp and passes it to
+  `langfuse_client.get_dataset(name, version=<timestamp>)`
+- `get_dataset(version=...)` returns the dataset as it was at that point
+- Enables concurrent test runs without interference — each variant runs
+  against the exact dataset state from its own sync
 - `manifest_before` pins the "before" dataset state
 - `manifest_after` pins the "after" dataset state
