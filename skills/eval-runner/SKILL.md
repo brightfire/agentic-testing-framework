@@ -41,7 +41,12 @@ This label appears in experiment names to distinguish variants, alongside the gi
 - **No items specified** → all items in the eval.yaml
 - **Specific item(s) named** → only those items (by id)
 
-### Baseline Recency Check
+Ref resolution happens before inference, and the inference itself happens at the skill level before the phases run. The env setup phase receives the resolved list of (git ref, label) pairs for skill versions and handles the
+mechanics of creating suffixed copies. The label is used both for directory naming in env setup and as the variant-label component in experiment names.
+
+## Recency Check
+
+After variant inference builds the full matrix of combinations (skill variants × models × dataset items), check whether matching experiment results already exist in Langfuse. Prune any combinations that have recent results from the run matrix.
 
 **Baseline recency check**: Before adding any variant to the run matrix, check whether matching experiment results already exist in Langfuse for this dataset.  The execute phase
 creates experiments using the naming convention:
@@ -58,7 +63,7 @@ Where `<variant-label>` identifies the variant source — the base branch name (
 
 For explicit variant specs using branch names containing `/` (e.g., `claw/vash/fix-xyz`), slashes are replaced with hyphens in experiment names (e.g., `claw-vash-fix-xyz`).
 
-During inference, query Langfuse for experiments matching `<dataset-name>__<model-id>__<variant-label>__<git-hash>__<item-scope>` for each requested model and each variant — using
+During the recency check, query Langfuse for experiments matching `<dataset-name>__<model-id>__<variant-label>__<git-hash>__<item-scope>` for each requested model and each variant — using
 the resolved commit hash, not a wildcard. The item-scope must match exactly (no wildcard) — `all` for full-dataset runs, or the specific item-scope
 hash for subset runs. This ensures results match the current state, even if the base branch has advanced within the 7-day window.  If experiments exist for a variant within a
 recent window (default: 7 days), that variant can be reused — skip running it again. The confirmation summary notes which variants are being reused and from when.
@@ -72,12 +77,9 @@ requested variants execute.
 The model and dataset dimensions are orthogonal — they multiply with the remaining skill variants after the recency check. For example, a PR with prior baseline runs for 2 models:
 1 skill variant (after only) × 2 models = 2 runs instead of 4.
 
-Ref resolution happens before inference, and the inference itself happens at the skill level before the phases run. The env setup phase receives the resolved list of (git ref, label) pairs for skill versions and handles the
-mechanics of creating suffixed copies. The label is used both for directory naming in env setup and as the variant-label component in experiment names.
-
 ## Confirmation
 
-After inferring variants, the skill presents a summary and waits for user confirmation before proceeding. The summary shows:
+After variant inference and the recency check, the skill presents a summary of the pruned run matrix and waits for user confirmation before proceeding. The summary shows:
 
 - Skill variants (name, git ref, short hash)
 - Models to test
@@ -88,7 +90,7 @@ After inferring variants, the skill presents a summary and waits for user confir
 
 The user can:
 - **Confirm** — proceed to pre-flight checks
-- **Adjust** — modify any dimension (add/remove skill variants, change models, change dataset items, force re-test of any variant including reused ones) and re-confirm
+- **Adjust** — modify any dimension (add/remove skill variants, change models, change dataset items, force re-test of any variant including reused ones) and re-confirm, re-running the recency check if variants change
 
 Only after confirmation does the skill proceed to pre-flight checks and the phases.
 
@@ -133,8 +135,8 @@ First phase of the eval runner. Syncs eval definitions to Langfuse and captures 
 
 ### Extract eval.yaml for each variant
 
-Sync every variant that the Variant Inference section determined should run. For reruns, if the user confirmed a forced re-run (nothing changed but user wants to re-run anyway),
-sync all variants. If the recency check found some variants unchanged, only sync the new or changed variants. In general: sync what inference produces, nothing more, nothing less.
+Sync every variant that remains after the Recency Check prunes the run matrix. For reruns, if the user confirmed a forced re-run (nothing changed but user wants to re-run anyway),
+sync all variants. If the recency check found some variants unchanged, only sync the new or changed variants. In general: sync what the recency check produces, nothing more, nothing less.
 
 Use `git show` to extract each version to a temp file. This avoids modifying the working tree and works regardless of current checkout state.
 
