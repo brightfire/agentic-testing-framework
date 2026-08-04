@@ -174,8 +174,13 @@ and CLI interface — arguments, environment variables, exit codes, and output f
 
 ### Clean up temp files
 
+Temp eval YAML files in `$WORK_DIR` can be removed after the sync, but **manifest files must be preserved** — the execute phase reads them via `--manifest`. Either:
+- Write manifests to a durable location (e.g., `~/.openclaw/workspace/eval-runs/<run-id>/manifests/`) and clean up `$WORK_DIR` after copying, or
+- Keep `$WORK_DIR` alive until the cleanup phase removes it.
+
 ```bash
-rm -rf "$WORK_DIR"
+# Keep manifest files — do NOT rm -rf "$WORK_DIR" here
+# Cleanup phase handles temp removal after execute + report complete
 ```
 
 ## Output
@@ -367,6 +372,8 @@ Not yet implemented.
 
 After the execute and report phases complete, remove the suffixed directories created during Environment Setup. Track which directories were created during env setup and `rm -rf`
 only those. Do not remove directories created by other concurrent runs. If the run aborts after env setup (e.g., execute phase failure), cleanup should still run.
+
+Also clean up the sync phase temp directory (`$WORK_DIR`) if it was preserved for the execute phase.
 
 ## References
 

@@ -253,7 +253,7 @@ def get_server_version_timestamp(date_header, response_body=None):
     return datetime.now(timezone.utc)
 
 
-def write_manifest(output_path, dataset_name, manifest_items, sync_start):
+def write_manifest(output_path, dataset_name, manifest_items, sync_completed_at):
     """Write the sync manifest JSON file if --output-manifest was provided.
 
     Returns True on success or if no output path was given, False on write
@@ -264,7 +264,7 @@ def write_manifest(output_path, dataset_name, manifest_items, sync_start):
         return True
     manifest = {
         "dataset": dataset_name,
-        "synced_at": sync_start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "synced_at": sync_completed_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "items": manifest_items,
     }
     try:
@@ -408,10 +408,12 @@ def main():
     if not to_archive_active:
         if failed:
             log(f"{failed} upsert(s) failed — fix errors and re-run.", "WARN")
-            write_manifest(args.output_manifest, dataset_name, manifest_items, sync_start)
+            sync_completed_at = datetime.now(timezone.utc)
+            write_manifest(args.output_manifest, dataset_name, manifest_items, sync_completed_at)
             sys.exit(1)
         log("Nothing to archive — dataset is in sync.", "INFO")
-        if not write_manifest(args.output_manifest, dataset_name, manifest_items, sync_start):
+        sync_completed_at = datetime.now(timezone.utc)
+        if not write_manifest(args.output_manifest, dataset_name, manifest_items, sync_completed_at):
             sys.exit(1)
         return
 
@@ -448,7 +450,8 @@ def main():
     log(f"Archived:  {archived}")
     log(f"Failed:    {failed}")
 
-    if not write_manifest(args.output_manifest, dataset_name, manifest_items, sync_start):
+    sync_completed_at = datetime.now(timezone.utc)
+    if not write_manifest(args.output_manifest, dataset_name, manifest_items, sync_completed_at):
         sys.exit(1)
 
     sys.exit(0 if failed == 0 else 1)
