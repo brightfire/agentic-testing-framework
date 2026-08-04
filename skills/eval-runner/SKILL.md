@@ -110,7 +110,7 @@ not itself), so check early — there's no reason to sync anything to Langfuse i
 
 For each variant spec:
 
-1. **Identify skill-relevant files.** Fetch SKILL.md from the git ref: `git show <ref>:<skill-path>/SKILL.md`. Read its body and collect all file references — paths matching patterns like `references/foo.md`, `scripts/bar.py`, `templates/baz.txt`, or Markdown links like `[text](references/foo.md)`. The skill-relevant file set is: SKILL.md itself plus every referenced file. Exclude convention/meta files (AGENTS.md, CLAUDE.md, LICENSE, .gitignore, etc.) even if referenced. Exclude `scripts/` files — references in scripts are code comments, not instructional content the LLM follows. Do NOT include files in the skill directory that aren't referenced by SKILL.md.
+1. **Identify skill-relevant files.** Fetch SKILL.md from the git ref: `git show <ref>:<skill-path>/SKILL.md`. Read its body and collect all file references — paths matching patterns like `references/foo.md`, `scripts/bar.py`, `templates/baz.txt`, or Markdown links like `[text](references/foo.md)`. Then recursively follow references in those files to find transitive dependencies (a referenced file may link to another file). Fetch each transitively-referenced file from the git ref and repeat the process until no new files are found. The skill-relevant file set is: SKILL.md itself plus the full closure of files reachable through reference chains. Exclude convention/meta files (AGENTS.md, CLAUDE.md, LICENSE, .gitignore, etc.) even if referenced. Exclude `scripts/` files — references in scripts are code comments, not instructional content the LLM follows. Do NOT include files in the skill directory that aren't reachable from SKILL.md through reference chains.
 2. **Scan skill-relevant files for self-references.** Fetch each identified file from the git ref via `git show <ref>:<skill-path>/<file>`. Scan each file's content using the whole-word regex: `(?<![a-z0-9-])<skill-name>(?![a-z0-9-])` (case-insensitive). For SKILL.md, scan the body excluding frontmatter; for all other files, scan the entire content. The skill name is the `name:` field from the SKILL.md frontmatter.
 3. **If any self-reference is found**, **abort the entire run** — do not proceed to sync or env setup. Report which skill(s) and line(s) contain self-references, and tell the user
    to fix the source skill before re-running.
@@ -137,7 +137,7 @@ sync all variants. If the recency check found some variants unchanged, only sync
 
 Use `git show` to extract each version to a temp file. This avoids modifying the working tree and works regardless of current checkout state.
 
-Normalize the variant label to `[a-z0-9-]` before using it as a filename (replace `/` with `-`, lowercase, strip dots and underscores). For example, `claw/vash/fix-xyz` → `claw-vash-fix-xyz` → `eval-claw-vash-fix-xyz.yaml`.
+Normalize the variant label to `[a-z0-9-]` before using it as a filename (replace `/` with `-`, lowercase, strip dots and underscores). Include the short commit hash (first 7 chars of the resolved git ref) in the filename to prevent collisions between distinct labels that normalize to the same string. For example, `claw/vash/fix-xyz` → `claw-vash-fix-xyz` → `eval-claw-vash-fix-xyz-a1b2c3d.yaml`.
 
 ```bash
 # Create a working directory for temp files (collision-safe)
@@ -145,7 +145,9 @@ WORK_DIR=$(mktemp -d /tmp/eval-sync.XXXXXX)
 
 # For each variant spec from inference (variant-label, git-ref):
 # Normalize the label to [a-z0-9-] before using it as a filename
-git show "<variant-ref>:<eval-yaml-path>" > "$WORK_DIR/eval-<variant-label>.yaml"
+# Extract the short hash (first 7 chars of the resolved git ref)
+SHORT_HASH=$(git rev-parse --short=7 "<variant-ref>")
+git show "<variant-ref>:<eval-yaml-path>" > "$WORK_DIR/eval-<variant-label>-${SHORT_HASH}.yaml"
 ```
 
 **Edge case — new eval.yaml (variant's ref doesn't have the file):** If `git show "<variant-ref>:<eval-yaml-path>"` fails (file doesn't exist at that ref), this is a new eval
@@ -167,8 +169,8 @@ Run `dataset_sync.py` for each version that exists. Run sequentially — concurr
 ```bash
 # For each extracted eval file (sequentially — concurrent syncs can interleave timestamps):
 python ~/repos/agentic-testing-framework/src/dataset_sync.py \
-  --file "$WORK_DIR/eval-<variant-label>.yaml" \
-  --output-manifest "$WORK_DIR/manifest-<variant-label>.json"
+  --file "$WORK_DIR/eval-<variant-label>-${SHORT_HASH}.yaml" \
+  --output-manifest "$WORK_DIR/manifest-<variant-label>-${SHORT_HASH}.json"
 ```
 
 The manifest file contains per-item server timestamps from Langfuse, used by the execute phase to pin experiment runs to exact dataset state. For the full manifest file contract
@@ -191,10 +193,10 @@ eval_yaml_path: <path within repo>
 manifests:
   - variant: <variant-label>
     ref: <git-hash>
-    manifest: <path to manifest-<variant-label>.json or null if skipped>
+    manifest: <path to manifest-<variant-label>-<short-hash>.json or null if skipped>
   - variant: <variant-label>
     ref: <git-hash>
-    manifest: <path to manifest-<variant-label>.json or null if skipped>
+    manifest: <path to manifest-<variant-label>-<short-hash>.json or null if skipped>
   ...
 ```
 
