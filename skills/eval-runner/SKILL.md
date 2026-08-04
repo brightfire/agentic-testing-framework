@@ -10,14 +10,6 @@ metadata:
 
 The eval runner orchestrates eval test phases. Each phase is a section below.
 
-## Ref Resolution
-
-Before variant inference, pin all git refs to commit hashes so subsequent phases use a fixed snapshot:
-
-1. For each variant spec, fetch from origin to ensure the ref is available locally: `git fetch origin <ref>`. If the ref is a branch name (not a commit hash), resolve it to a commit hash: `git rev-parse origin/<ref>` (or `git ls-remote origin <ref>`). If the ref is already a commit hash, `git fetch origin <ref>` ensures the commit is present in the local clone.
-2. Replace the branch ref with the resolved commit hash in the variant spec.
-3. All subsequent phases (variant inference, pre-flight, sync, env setup) use the pinned commit hash — never the branch name.
-
 ## Variant Inference
 
 The skill determines what to test based on the request, not the trigger source. Three independent dimensions:
@@ -41,8 +33,16 @@ This label appears in experiment names to distinguish variants, alongside the gi
 - **No items specified** → all items in the eval.yaml
 - **Specific item(s) named** → only those items (by id)
 
-Ref resolution happens before inference, and the inference itself happens at the skill level before the phases run. The env setup phase receives the resolved list of (git ref, label) pairs for skill versions and handles the
+Variant inference produces raw refs (branch names, PR numbers, commit hashes) and labels for each variant. Ref resolution happens after inference, pinning those raw refs to commit hashes. The env setup phase receives the resolved list of (git ref, label) pairs for skill versions and handles the
 mechanics of creating suffixed copies. The label is used both for directory naming in env setup and as the variant-label component in experiment names.
+
+## Ref Resolution
+
+After variant inference, pin all git refs to commit hashes so subsequent phases use a fixed snapshot:
+
+1. For each variant spec, fetch from origin to ensure the ref is available locally: `git fetch origin "<ref>"`. If the ref is a branch name (not a commit hash), resolve it to a commit hash: `git rev-parse "origin/<ref>"` (or `git ls-remote origin "<ref>"`). If the ref is already a commit hash, `git fetch origin "<ref>"` ensures the commit is present in the local clone.
+2. Replace the branch ref with the resolved commit hash in the variant spec.
+3. All subsequent phases (recency check, pre-flight, sync, env setup) use the pinned commit hash — never the branch name.
 
 ## Recency Check
 
@@ -110,7 +110,7 @@ not itself), so check early — there's no reason to sync anything to Langfuse i
 
 For each variant spec:
 
-1. **Fetch the SKILL.md** from the git ref: `git show <ref>:<skill-path>/SKILL.md`.
+1. **Fetch the SKILL.md** from the git ref: `git show "<ref>:<skill-path>/SKILL.md"`.
 2. **Extract the body** — everything below the frontmatter `---` delimiter.
 3. **Scan for self-references** using the whole-word regex: `(?<![a-z0-9-])<skill-name>(?![a-z0-9-])` (case-insensitive).
    - The skill name is the `name:` field from the frontmatter.
@@ -140,19 +140,22 @@ sync all variants. If the recency check found some variants unchanged, only sync
 
 Use `git show` to extract each version to a temp file. This avoids modifying the working tree and works regardless of current checkout state.
 
+Normalize the variant label to `[a-z0-9-]` before using it as a filename (replace `/` with `-`, lowercase, strip dots and underscores). For example, `claw/vash/fix-xyz` → `claw-vash-fix-xyz` → `eval-claw-vash-fix-xyz.yaml`.
+
 ```bash
 # Create a working directory for temp files (collision-safe)
 WORK_DIR=$(mktemp -d /tmp/eval-sync.XXXXXX)
 
 # For each variant spec from inference (variant-label, git-ref):
-git show <variant-ref>:<eval-yaml-path> > "$WORK_DIR/eval-<variant-label>.yaml"
+# Normalize the label to [a-z0-9-] before using it as a filename
+git show "<variant-ref>:<eval-yaml-path>" > "$WORK_DIR/eval-<variant-label>.yaml"
 ```
 
-**Edge case — new eval.yaml (variant's ref doesn't have the file):** If `git show <variant-ref>:<eval-yaml-path>` fails (file doesn't exist at that ref), this is a new eval
+**Edge case — new eval.yaml (variant's ref doesn't have the file):** If `git show "<variant-ref>:<eval-yaml-path>"` fails (file doesn't exist at that ref), this is a new eval
 definition for that variant. Skip the sync for that variant. Its manifest entry is `null` — the execute phase should handle this (fewer variants, use current dataset state as
 baseline).
 
-**Edge case — deleted eval.yaml (variant's ref doesn't have the file):** If `git show <variant-ref>:<eval-yaml-path>` fails for a variant that should have the file, the eval was
+**Edge case — deleted eval.yaml (variant's ref doesn't have the file):** If `git show "<variant-ref>:<eval-yaml-path>"` fails for a variant that should have the file, the eval was
 removed at that ref. Skip the sync for that variant. This is unusual — flag it for human review rather than proceeding.
 
 ### Sync each version to Langfuse
@@ -217,9 +220,9 @@ Second phase of the eval runner. Prepares the eval environment so the harness ca
 
 For each variant spec:
 
-1. **Fetch the latest** — If the git ref is a branch or PR head (not a fixed commit hash), always `git fetch origin <ref>` first to ensure you have the latest state. This handles
+1. **Fetch the latest** — If the git ref is a branch or PR head (not a fixed commit hash), always `git fetch origin "<ref>"` first to ensure you have the latest state. This handles
    the test → iterate → retest scenario where the branch has been updated since the last run. Then fetch the skill from the (now up-to-date) git ref: `git show
-   <ref>:<skill-path>/SKILL.md` and all files in the skill directory.
+   "<ref>:<skill-path>/SKILL.md"` and all files in the skill directory.
 2. **Create suffixed directory** in `~/.openclaw/workspace/eval-skills/<skill-name>-<label>-<7char-hash>-<4char-random>/`.
    - Normalize the label to `[a-z0-9-]` before constructing the directory name: replace `/` with `-`, lowercase, and strip dots and underscores (e.g., `claw/vash/fix-xyz` → `claw-vash-fix-xyz`).
    - The 7-char hash is the short hash of the git ref being fetched (for collision prevention).
