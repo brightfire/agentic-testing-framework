@@ -77,11 +77,13 @@ The agent reading the skill is implicit in every eval run. Do not state it in be
 
 ### Running Tests
 
-The Python scripts require a virtualenv with `langfuse`, `requests`, `pyyaml` installed:
+Install dependencies from `requirements.txt` into a virtualenv:
 
 ```bash
 cd ~/repos/agentic-testing-framework
+python -m venv .venv
 source .venv/bin/activate
+pip install -r requirements.txt
 python src/dataset_sync.py --help
 ```
 
