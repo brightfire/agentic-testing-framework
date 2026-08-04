@@ -107,21 +107,23 @@ items:
       User request: "Now test this PR against glm-5.2 and claude-sonnet-4-6."
     expected_output:
       behavior: |
-        The agent runs variant inference with the model dimension, and runs the baseline recency check. It finds a baseline experiment for glm-5.2 (skip baseline) but no baseline
-        for claude-sonnet-4-6 (include baseline). The confirmation summary shows: pr-42×glm-5.2, pr-42×claude-sonnet-4-6, main×claude-sonnet-4-6 = 3 runs. Baseline status notes
-        glm-5.2 as "already tested" and claude-sonnet-4-6 as "no prior baseline."
+        The agent runs variant inference with the model dimension, and runs the baseline recency check. It finds both baseline AND PR-head experiments for glm-5.2
+        (skip both — already tested in prior run) but no experiments for claude-sonnet-4-6 (include both baseline and PR-head). The confirmation summary shows:
+        pr-42×claude-sonnet-4-6, main×claude-sonnet-4-6 = 2 runs. Baseline status notes glm-5.2 as "already tested (both baseline and PR-head)" and
+        claude-sonnet-4-6 as "no prior baseline."
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Variant Inference
         - "Inference: identifies two models — glm-5.2 and claude-sonnet-4-6"
-        - "Inference: runs baseline recency check — finds baseline for glm-5.2 only, not for claude-sonnet-4-6"
-        - "Inference: skips baseline for glm-5.2 (already tested)"
-        - "Inference: includes baseline for claude-sonnet-4-6 (no prior baseline)"
-        - "Inference: recognizes the matrix is 3 runs: pr-42×glm-5.2, pr-42×claude-sonnet-4-6, main×claude-sonnet-4-6"
+        - "Inference: runs baseline recency check — finds both baseline and PR-head experiments for glm-5.2, no experiments for claude-sonnet-4-6"
+        - "Inference: skips both baseline and PR-head for glm-5.2 (already tested in prior run)"
+        - "Inference: includes both baseline and PR-head for claude-sonnet-4-6 (no prior experiments)"
+        - "Inference: recognizes the PR-head glm-5.2 pair is reused from the prior run"
+        - "Inference: recognizes the matrix is 2 runs: pr-42×claude-sonnet-4-6, main×claude-sonnet-4-6"
         # Phase: Confirmation
-        - "Confirmation: presents summary showing after variant for both models plus before variant for claude-sonnet-4-6 only"
-        - "Confirmation: shows total run count (3)"
-        - "Confirmation: notes baseline status per model — glm-5.2 skipped, claude-sonnet-4-6 included"
+        - "Confirmation: presents summary showing after variant for claude-sonnet-4-6 plus before variant for claude-sonnet-4-6 only"
+        - "Confirmation: shows total run count (2)"
+        - "Confirmation: notes baseline status per model — glm-5.2 already tested (both baseline and PR-head), claude-sonnet-4-6 no prior baseline"
         - "Confirmation: waits for user confirmation — does not proceed to any further phase"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
@@ -254,7 +256,7 @@ items:
         - "Sync: produces structured output with dataset, skill, eval_yaml_path, manifest_before, manifest_after"
         # Phase: Env Setup
         - "Env setup: fetches skill files from both git refs via git show"
-        - "Env setup: creates suffixed directories with 7-char git hash for each variant"
+        - "Env setup: creates suffixed directories with 7-char git hash plus 4-char random suffix for each variant"
         - "Env setup: copies all skill files preserving subdirectory structure"
         - "Env setup: rewrites the name: field in each copied SKILL.md to match suffixed dir name"
         - "Env setup: lists created suffixed directories with their git ref and label"
@@ -307,6 +309,7 @@ items:
       - PR number: 123
       - Base branch: main
       - Files changed: skills/eval-runner/SKILL.md
+      Note: The PR head version of skills/eval-runner/SKILL.md contains a self-reference in the body — line 42 says "This skill, eval-runner, handles..." (uses the skill name in prose).
 
       Inference completed: skill A/B (main vs PR head), single model, all dataset items. User has confirmed the summary.
 
