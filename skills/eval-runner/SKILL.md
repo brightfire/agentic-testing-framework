@@ -54,7 +54,7 @@ variant within a recent window (default: 7 days), that variant can be reused —
 
 If matching experiments are missing for any requested model or variant, or are older than the window, include those variants in the run.
 
-The check still runs for first-time runs (no prior experiments exist — nothing to reuse). For reruns, the baseline is excluded by definition (it already exists), and the after variant(s) execute regardless of recency — the user explicitly asked to re-run.
+The check still runs for first-time runs (no prior experiments exist — nothing to reuse). For reruns, the recency check runs normally — if nothing has changed since the prior run (same commit hash), the bot should indicate there are no changes and ask the user to confirm they want to force a re-run. If the user confirms, prior results are excluded and all requested variants execute.
 
 The model and dataset dimensions are orthogonal — they multiply with the remaining skill variants after the recency check. For example, a PR with prior baseline runs for 2 models:
 1 skill variant (after only) × 2 models = 2 runs instead of 4.
@@ -79,7 +79,7 @@ The user can:
 
 Only after confirmation does the skill proceed to pre-flight checks and the phases.
 
-If the user says "run same test again" or "re-run the previous eval", the skill skips variant inference and confirmation — the user is confirming the previous variant set. The baseline is excluded (it already exists in Langfuse from the prior run). The after variant(s) proceed to pre-flight checks and execute again. The recency check does not suppress execution on a rerun — the user explicitly asked to re-run.
+If the user says "run same test again" or "re-run the previous eval", the skill skips variant inference — the user is confirming the previous variant set. The recency check still runs. If nothing has changed (same commit hash, all variants already tested within the recency window), the bot indicates there are no changes since the prior run and asks the user to confirm they want to force a re-run. If the user confirms, prior results are excluded and all requested variants execute. If some variants have changed or are new, only those run — unchanged variants are reused.
 
 
 
@@ -126,7 +126,7 @@ First phase of the eval runner. Syncs eval definitions to Langfuse and captures 
 
 ### Extract both versions of eval.yaml
 
-Sync every variant that the Variant Inference section determined should run. A rerun (when the user says "re-run the previous eval") serves as variant confirmation — the user is confirming the variant set from the previous run. Since the baseline already exists in Langfuse from the prior run, the rerun variant set excludes the baseline. Sync only the after variant(s). In general: sync what inference produces, nothing more, nothing less.
+Sync every variant that the Variant Inference section determined should run. For reruns, if the user confirmed a forced re-run (nothing changed but user wants to re-run anyway), sync all variants. If the recency check found some variants unchanged, only sync the new or changed variants. In general: sync what inference produces, nothing more, nothing less.
 
 Use `git show` to extract each version to a temp file. This avoids modifying the working tree and works regardless of current checkout state.
 
