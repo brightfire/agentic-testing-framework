@@ -375,3 +375,43 @@ items:
         - "Explains that before sync must succeed before proceeding"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
+
+  # ─── Multi-variant (N > 2) eval ─────────────────────────────────────
+
+  - id: multi-commit-eval
+    input: |
+      Repo: brightfire/agentic-testing-framework
+      Branch: main
+      Skill: eval-runner
+      eval.yaml path: skills/eval-runner/eval.yaml
+
+      User request: "Run the evaluation for the past 5 commits on the main branch."
+    expected_output:
+      behavior: |
+        The agent runs variant inference and identifies 5 skill variants — one for each of the last 5 commits on main. The variant labels are the short commit hashes
+        (e.g., `a1b2c3d`, `e5f6g7h`, `i9j0k1l`, `m3n4o5p`, `q7r8s9t`). No baseline recency check is needed since this is not a PR A/B comparison — all 5 variants are
+        explicit commit specs. The agent presents the variant summary for confirmation, then proceeds to pre-flight checks for all 5 variants. Sync extracts 5 versions
+        of eval.yaml (one per commit) and syncs each to Langfuse sequentially, producing 5 manifest files. Env setup creates 5 suffixed directories.
+      scoring_type: pass_fail
+      scoring_criteria:
+        # Phase: Variant Inference
+        - "Inference: identifies 5 skill variants — one per commit from the last 5 commits on main"
+        - "Inference: uses short commit hashes as variant labels"
+        - "Inference: no baseline recency check (not a PR A/B comparison)"
+        - "Inference: presents variant summary for confirmation"
+        # Phase: Confirmation
+        - "Confirmation: waits for user confirmation before proceeding"
+        # Phase: Pre-flight
+        - "Pre-flight: fetches SKILL.md from all 5 commit refs"
+        - "Pre-flight: scans each for self-references, all pass"
+        # Phase: Sync
+        - "Sync: extracts 5 versions of eval.yaml (one per commit)"
+        - "Sync: syncs each version to Langfuse sequentially"
+        - "Sync: produces 5 manifest files"
+        # Phase: Env Setup
+        - "Env setup: creates 5 suffixed directories (one per variant)"
+        - "Env setup: copies all files and rewrites name: field for each"
+        # Phase: Execute (add criteria when implemented)
+        # Phase: Report (add criteria when implemented)
+      scoring_rules: |
+        Score 10 * (passed criteria / total criteria).
