@@ -1,93 +1,409 @@
 dataset: eval-runner
+
 description: "End-to-end evaluation runner for OpenClaw skills — dataset sync, environment setup, variant isolation, and orchestrated eval runs via Langfuse."
 
 items:
-  - id: happy-path-sync
+  # ─── Inference + confirmation (stops at confirmation gate) ──────────
+
+  - id: pr-triggered-inference
     input: |
-      You are performing the eval-runner phase for a PR in
-      brightfire/agentic-testing-framework. The PR modifies
-      skills/eval-runner/eval.yaml on branch claw/vash/update-eval-items.
-      The base branch is main.
+      PR context:
+      - Repo: brightfire/agentic-testing-framework
+      - PR branch: claw/vash/skill-improvement
+      - PR number: 123
+      - Base branch: main
+      - Files changed: skills/eval-runner/SKILL.md
 
-      Read the eval-runner skill from available_skills, then perform
-      the sync phase for this PR. Report the structured output.
-
-      Do NOT actually run dataset_sync.py — simulate the sync and report
-      what you would do and what output structure you would produce.
+      User request: "Run the eval for this PR."
     expected_output:
       behavior: |
-        The agent reads the eval-runner skill, extracts both versions
-        of eval.yaml via git show into a mktemp working directory, runs
-        dataset_sync.py sequentially (before then after) with
-        --output-manifest for each, and produces the structured output
-        format with dataset, skill, eval_yaml_path, manifest_before, and
-        manifest_after fields.
+        The agent runs variant inference and presents a confirmation summary. It does NOT proceed to pre-flight, sync, or env setup — it waits for the user to confirm or adjust.
       scoring_type: pass_fail
       scoring_criteria:
-        - "Describes extracting before version from base ref (main) via git show"
-        - "Describes extracting after version from PR head ref via git show"
-        - "States that syncs must run sequentially (before then after)"
-        - "Uses --output-manifest flag for each sync invocation"
-        - "Output includes dataset, skill, eval_yaml_path fields"
-        - "Output includes manifest_before and manifest_after file paths"
+        # Phase: Variant Inference
+        - "Inference: identifies skill A/B — main (before) vs PR head (after)"
+        - "Inference: selects single model (agent default, no model comparison requested)"
+        - "Inference: selects all dataset items (none specifically named)"
+        - "Recency: runs baseline recency check — no prior experiments found, so baseline is included"
+        # Phase: Confirmation
+        - "Confirmation: presents summary with skill variants, model, dataset items, and baseline status"
+        - "Confirmation: waits for user confirmation — does not proceed to any further phase"
+        - "Confirmation: does not run pre-flight, sync, or env setup"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
 
-  - id: new-eval-yaml-edge-case
+  - id: model-comparison-inference
     input: |
-      You are performing the eval-runner phase for a PR in
-      brightfire/agentic-testing-framework. The PR adds a new file:
-      skills/eval-runner/eval.yaml. This file does not exist on the
-      base branch (main). The PR head branch is claw/vash/add-eval-yaml.
+      Branch context:
+      - Repo: brightfire/agentic-testing-framework
+      - Branch: claw/vash/skill-model-comparison
+      - Base branch: main
+      - Files changed: skills/eval-runner/SKILL.md
 
-      Read the eval-runner skill from available_skills, then perform
-      the sync phase for this PR. Report the structured output.
-
-      Do NOT actually run dataset_sync.py — simulate and report what you
-      would do.
+      User request: "Test this branch against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6."
     expected_output:
       behavior: |
-        The agent reads the eval-runner skill, attempts to extract the
-        before version from main and finds it doesn't exist. It correctly
-        handles this as a new eval definition: manifest_before is null, only
-        the after version is synced. The output structure reflects
-        manifest_before: null with manifest_after having a path.
+        The agent runs variant inference with the model dimension added, runs the recency check (no prior experiments, so baseline is included), and presents a
+        confirmation summary showing the full 2×2 matrix (2 skill variants × 2 models = 4 runs). It waits for confirmation — no further phases run.
+      scoring_type: pass_fail
+      scoring_criteria:
+        # Phase: Variant Inference
+        - "Inference: identifies skill A/B — main (before) vs branch head (after)"
+        - "Inference: identifies two models — glm-5.2 and claude-sonnet-4-6"
+        - "Recency: runs baseline recency check — no prior experiments found, baseline included for both models"
+        - "Inference: recognizes the full matrix is 2 skill variants × 2 models = 4 runs"
+        - "Inference: selects all dataset items (none specifically named)"
+        # Phase: Confirmation
+        - "Confirmation: presents summary showing skill variants, model dimension, total run count (4), and baseline status"
+        - "Confirmation: waits for user confirmation — does not proceed to any further phase"
+        - "Confirmation: does not run pre-flight, sync, or env setup"
+      scoring_rules: |
+        Score 10 * (passed criteria / total criteria).
+
+  - id: model-comparison-baseline-recent
+    input: |
+      Branch context:
+      - Repo: brightfire/agentic-testing-framework
+      - Branch: claw/vash/skill-model-comparison
+      - Base branch: main
+      - Files changed: skills/eval-runner/SKILL.md
+
+      Prior runs: 2 baseline (before/main) experiments already exist in Langfuse for this dataset — one for glm-5.2 and one for claude-sonnet-4-6, both created 2 days ago.
+
+      User request: "Test this branch against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6."
+    expected_output:
+      behavior: |
+        The agent runs variant inference with the model dimension, runs the recency check and finds 2 recent baseline experiments — one per model. It skips the baseline
+        variant for both models — only the after (branch head) variant is included. The confirmation summary shows 1 skill variant × 2 models = 2 runs, with baseline status "already
+        tested, skipping" for both models.
+      scoring_type: pass_fail
+      scoring_criteria:
+        # Phase: Variant Inference
+        - "Inference: identifies two models — glm-5.2 and claude-sonnet-4-6"
+        - "Recency: runs baseline recency check — finds 2 separate baseline experiments (one per model)"
+        - "Recency: skips baseline variant for both models — only after (branch head) is included"
+        - "Recency: recognizes the reduced matrix is 1 skill variant × 2 models = 2 runs (not 4)"
+        # Phase: Confirmation
+        - "Confirmation: presents summary showing only after variant, both models, total run count (2)"
+        - "Confirmation: notes baseline status as 'already tested, skipping' for both models"
+        - "Confirmation: waits for user confirmation — does not proceed to any further phase"
+      scoring_rules: |
+        Score 10 * (passed criteria / total criteria).
+
+  - id: model-comparison-after-pr-eval
+    input: |
+      PR context:
+      - Repo: brightfire/agentic-testing-framework
+      - PR branch: claw/vash/skill-model-comparison
+      - PR number: 42
+      - Base branch: main
+      - Files changed: skills/eval-runner/SKILL.md
+
+      Prior runs: A previous PR eval was already completed using openrouter/z-ai/glm-5.2 as the single model. Baseline (before/main) experiment exists in Langfuse for glm-5.2 only,
+      created 1 day ago. No baseline experiment exists for claude-sonnet-4-6.
+
+      User request: "Now test this PR against glm-5.2 and claude-sonnet-4-6."
+    expected_output:
+      behavior: |
+        The agent runs variant inference and the baseline recency check. It finds that glm-5.2 was already tested in the prior run (skip). Only claude-sonnet-4-6 needs to run —
+        both baseline and PR-head since no prior experiments exist for it. The agent asks for confirmation to proceed with only the new model (claude-sonnet-4-6).
+      scoring_type: pass_fail
+      scoring_criteria:
+        # Phase: Variant Inference
+        - "Inference: identifies two models — glm-5.2 and claude-sonnet-4-6"
+        - "Recency: recognizes glm-5.2 was already tested in the prior run (skip)"
+        - "Recency: recognizes claude-sonnet-4-6 has no prior experiments (include both baseline and PR-head)"
+        - "Confirmation: asks user to confirm proceeding with only claude-sonnet-4-6"
+        - "Recency: recognizes the matrix is 2 runs: pr-42×claude-sonnet-4-6, main×claude-sonnet-4-6"
+      scoring_rules: |
+        Score 10 * (passed criteria / total criteria).
+
+  - id: model-b-only-after-pr-eval
+    input: |
+      PR context:
+      - Repo: brightfire/agentic-testing-framework
+      - PR branch: claw/vash/skill-model-comparison
+      - PR number: 42
+      - Base branch: main
+      - Files changed: skills/eval-runner/SKILL.md
+
+      Prior runs: A previous PR eval was already completed using openrouter/z-ai/glm-5.2 as the single model. Baseline (before/main) experiment exists in Langfuse for glm-5.2 only,
+      created 1 day ago. No baseline experiment exists for claude-sonnet-4-6.
+
+      User request: "Now test this PR against claude-sonnet-4-6."
+    expected_output:
+      behavior: |
+        The agent runs variant inference with a single model (claude-sonnet-4-6), and runs the recency check. It finds no baseline experiment for claude-sonnet-4-6, so the
+        baseline variant is included. The confirmation summary shows: main×claude-sonnet-4-6, pr-42×claude-sonnet-4-6 = 2 runs. Baseline status notes claude-sonnet-4-6 as "no
+        prior baseline."
+      scoring_type: pass_fail
+      scoring_criteria:
+        # Phase: Variant Inference
+        - "Inference: identifies single model — claude-sonnet-4-6"
+        - "Recency: runs baseline recency check — finds no baseline experiment for claude-sonnet-4-6"
+        - "Recency: includes baseline variant for claude-sonnet-4-6 (no prior baseline)"
+        - "Inference: recognizes the matrix is 2 runs: main×claude-sonnet-4-6, pr-42×claude-sonnet-4-6"
+        # Phase: Confirmation
+        - "Confirmation: presents summary showing both before and after variants for claude-sonnet-4-6"
+        - "Confirmation: shows total run count (2)"
+        - "Confirmation: notes baseline status as 'no prior baseline' for claude-sonnet-4-6"
+        - "Confirmation: waits for user confirmation — does not proceed to any further phase"
+      scoring_rules: |
+        Score 10 * (passed criteria / total criteria).
+
+  - id: model-ab-baseline-missing
+    input: |
+      Branch context:
+      - Repo: brightfire/agentic-testing-framework
+      - Branch: claw/vash/skill-model-comparison
+      - Base branch: main
+      - Files changed: skills/eval-runner/SKILL.md
+
+      Prior runs: A previous eval was run as a re-run (after variant only, no baseline). No baseline (before/main) experiments exist in Langfuse for this dataset for any model.
+
+      User request: "Test this branch against glm-5.2 and claude-sonnet-4-6."
+    expected_output:
+      behavior: |
+        The agent runs variant inference with the model dimension, and runs the recency check. It finds no baseline experiments for either model, so the baseline variant
+        is included for both. The confirmation summary shows the full 2×2 matrix: main×glm-5.2, main×claude-sonnet-4-6, claw-vash-skill-model-comparison×glm-5.2,
+        claw-vash-skill-model-comparison×claude-sonnet-4-6 = 4 runs. Baseline status notes "no prior baseline" for both models.
+      scoring_type: pass_fail
+      scoring_criteria:
+        # Phase: Variant Inference
+        - "Inference: identifies two models — glm-5.2 and claude-sonnet-4-6"
+        - "Recency: runs baseline recency check — finds no baseline experiments for either model"
+        - "Recency: includes baseline variant for both models"
+        - "Inference: recognizes the full matrix is 2 skill variants × 2 models = 4 runs"
+        # Phase: Confirmation
+        - "Confirmation: presents summary showing both skill variants for both models"
+        - "Confirmation: shows total run count (4)"
+        - "Confirmation: notes baseline status as 'no prior baseline' for both models"
+        - "Confirmation: waits for user confirmation — does not proceed to any further phase"
+      scoring_rules: |
+        Score 10 * (passed criteria / total criteria).
+
+  - id: skill-and-eval-changed-model-ab
+    input: |
+      PR context:
+      - Repo: brightfire/agentic-testing-framework
+      - PR branch: claw/vash/skill-and-eval-update
+      - PR number: 55
+      - Base branch: main
+      - Files changed: skills/eval-runner/SKILL.md, skills/eval-runner/eval.yaml
+
+      User request: "Test this PR against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6."
+    expected_output:
+      behavior: |
+        The agent runs variant inference with the model dimension, and notes that eval.yaml has changed in addition to SKILL.md — meaning both before and after eval versions will
+        need syncing (two dataset timestamps). It runs the recency check (no prior experiments, baseline included for both models). The confirmation summary shows the full
+        2×2 matrix (2 skill variants × 2 models = 4 runs) and notes that eval.yaml changed, so both eval versions will be synced. It waits for confirmation — no further phases run.
+      scoring_type: pass_fail
+      scoring_criteria:
+        # Phase: Variant Inference
+        - "Inference: identifies skill A/B — main (before) vs PR head (after)"
+        - "Inference: identifies two models — glm-5.2 and claude-sonnet-4-6"
+        - "Inference: detects that eval.yaml is in the changed files — both before and after eval versions will need syncing"
+        - "Recency: runs baseline recency check — no prior experiments found, baseline included for both models"
+        - "Inference: recognizes the full matrix is 2 skill variants × 2 models = 4 runs"
+        - "Inference: selects all dataset items (none specifically named)"
+        # Phase: Confirmation
+        - "Confirmation: presents summary showing skill variants, model dimension, total run count (4), and baseline status"
+        - "Confirmation: notes that eval.yaml changed — both eval versions will be synced (two dataset timestamps)"
+        - "Confirmation: waits for user confirmation — does not proceed to any further phase"
+      scoring_rules: |
+        Score 10 * (passed criteria / total criteria).
+
+  # ─── Full run (post-confirmation → sync → env setup) ────────────────
+
+  - id: pr-triggered-full-run
+    input: |
+      PR context:
+      - Repo: brightfire/agentic-testing-framework
+      - PR branch: claw/vash/skill-improvement
+      - PR number: 123
+      - Base branch: main
+      - Files changed: skills/eval-runner/SKILL.md
+
+      Inference completed: skill A/B (main vs PR head), single model (agent default), all dataset items. Baseline included (no prior runs). User has confirmed the summary.
+
+      Proceed with the eval.
+    expected_output:
+      behavior: |
+        The agent executes pre-flight checks, sync (both versions), and env setup (both variants). Inference and confirmation are already done — the agent does not re-present a
+        confirmation summary.
+      scoring_type: pass_fail
+      scoring_criteria:
+        # Phase: Pre-flight
+        - "Pre-flight: fetches SKILL.md from both git refs via git show"
+        - "Pre-flight: scans both skill bodies for self-references"
+        - "Pre-flight: passes (no self-references found), proceeds to sync"
+        # Phase: Sync
+        - "Sync: extracts before eval.yaml from base ref (main) via git show"
+        - "Sync: extracts after eval.yaml from PR head ref via git show"
+        - "Sync: runs dataset_sync.py sequentially — before then after"
+        - "Sync: uses --output-manifest for each sync invocation"
+        - "Sync: produces a manifests list with per-variant entries"
+        # Phase: Env Setup
+        - "Env setup: fetches skill files from both git refs via git show"
+        - "Env setup: creates suffixed directories with 7-char git hash plus 4-char random suffix for each variant"
+        - "Env setup: copies all skill files preserving subdirectory structure"
+        - "Env setup: rewrites the name: field in each copied SKILL.md to match suffixed dir name"
+        - "Env setup: lists created suffixed directories with their git ref and label"
+        # Phase: Execute (add criteria when implemented)
+        # Phase: Report (add criteria when implemented)
+      scoring_rules: |
+        Score 10 * (passed criteria / total criteria).
+
+  - id: rerun-previous-eval
+    input: |
+      PR context:
+      - Repo: brightfire/agentic-testing-framework
+      - PR branch: claw/vash/skill-improvement
+      - PR number: 123
+      - Base branch: main
+
+      User request: "Re-run the previous eval for this PR."
+      The PR head has not changed since the previous eval. The user confirms they want to force a re-run.
+    expected_output:
+      behavior: |
+        The agent recognizes the re-run request and skips variant inference — reusing the previous variant spec directly. The recency check runs and finds that nothing has changed
+        since the prior run (same commit hash, all variants already tested). The agent indicates there are no changes and asks the user to confirm a forced re-run. The user confirms.
+        The agent proceeds to pre-flight checks, then syncs all variants that need re-execution (both baseline and after, since the user forced a full re-run). It then sets up the
+        env for all requested variants.
+      scoring_type: pass_fail
+      scoring_criteria:
+        # Phase: Variant Inference (skipped)
+        - "Inference: skips variant inference — reuses previous variant spec"
+        - "Recency: runs the recency check and finds nothing has changed (same commit hash)"
+        - "Confirmation: indicates no changes since prior run and asks user to confirm forced re-run"
+        - "Confirmation: user confirms — agent proceeds to pre-flight"
+        # Phase: Pre-flight
+        - "Pre-flight: fetches SKILL.md from both git refs (base + PR head)"
+        - "Pre-flight: scans for self-references, passes"
+        # Phase: Sync
+        - "Sync: syncs all variants for the forced re-run (both before and after versions)"
+        - "Sync: uses --output-manifest for both version syncs"
+        # Phase: Env Setup
+        - "Env setup: creates suffixed directories for all requested variants"
+        - "Env setup: copies all files and rewrites name: field"
+        # Phase: Execute (add criteria when implemented)
+        # Phase: Report (add criteria when implemented)
+      scoring_rules: |
+        Score 10 * (passed criteria / total criteria).
+
+  # ─── Pre-flight gate test ───────────────────────────────────────────
+
+  - id: self-reference-abort
+    input: |
+      Branch context:
+      - Repo: brightfire/agentic-testing-framework
+      - Branch: claw/vash/skill-improvement
+      - Base branch: main
+      - Files changed: skills/eval-runner/SKILL.md
+      Note: The branch head version of skills/eval-runner/SKILL.md contains a self-reference in the body — line 42 says "This skill, eval-runner, handles..." (uses the skill name in prose).
+
+      Inference completed: skill A/B (main vs branch head), single model, all dataset items. User has confirmed the summary.
+
+      Proceed with the eval.
+    expected_output:
+      behavior: |
+        The agent proceeds to pre-flight checks (inference and confirmation already done). Pre-flight detects a self-reference — the skill name appearing in the SKILL.md body — and
+        aborts the entire run before syncing anything to Langfuse or setting up the env. It reports which skill and line(s) contain self-references and tells the user to fix the
+        source skill before re-running.
+      scoring_type: pass_fail
+      scoring_criteria:
+        # Phase: Pre-flight (abort path)
+        - "Pre-flight: fetches SKILL.md from both git refs via git show"
+        - "Pre-flight: scans skill body (not frontmatter) for self-references using word-boundary regex"
+        - "Pre-flight: detects self-reference in the skill body"
+        - "Pre-flight: aborts the entire run — does not proceed to sync"
+        - "Pre-flight: does NOT call dataset_sync.py or Langfuse"
+        - "Pre-flight: does NOT create suffixed directories or run env setup"
+        - "Pre-flight: reports which skill and line(s) contain self-references"
+        - "Pre-flight: tells user to fix the source skill before re-running"
+      scoring_rules: |
+        Score 10 * (passed criteria / total criteria).
+
+  # ─── Phase-targeted edge cases (sync) ────────────────────────────────
+
+  - id: new-eval-yaml
+    input: |
+      Branch context:
+      - Repo: brightfire/agentic-testing-framework
+      - Branch: claw/vash/add-eval-yaml
+      - Base branch: main
+      - Files changed: skills/eval-runner/eval.yaml (new file — does not exist on base branch)
+
+      User request: "Run only the sync phase for this branch."
+    expected_output:
+      behavior: |
+        The agent attempts to extract the before version from main and finds it doesn't exist. It correctly handles this as a new eval definition: the manifests list
+        contains two entries — the base variant with `manifest: null` (no before version exists) and the after variant with `manifest: <path>`. Only the after version is synced.
       scoring_type: pass_fail
       scoring_criteria:
         - "Recognizes the before version doesn't exist on base (new eval.yaml)"
-        - "Sets manifest_before to null"
+        - "manifests list contains two entries: base variant with manifest: null and after variant with manifest: <path>"
         - "Only syncs the after version"
         - "Does not treat the missing before version as an error"
-        - "Output structure includes dataset, manifest_before (null), manifest_after, skill, eval_yaml_path"
+        - "Output structure includes dataset, skill, eval_yaml_path, and a manifests list with both entries (base with null manifest, after with manifest path)"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
 
-  - id: sync-failure-handling
+  - id: sync-failure-abort
     input: |
-      You are performing the eval-runner phase for a PR in
-      brightfire/agentic-testing-framework, which modifies
-      skills/eval-runner/eval.yaml. You have extracted both versions and
-      started the sync. The "before" version sync failed —
-      dataset_sync.py exited with code 1 and the output shows
-      "LANGFUSE_SECRET_KEY not set".
+      Branch context:
+      - Repo: brightfire/agentic-testing-framework
+      - Branch: claw/vash/eval-yaml-update
+      - Base branch: main
+      - Files changed: skills/eval-runner/eval.yaml
 
-      Read the eval-runner skill from available_skills, then report
-      how you handle this failure and what you would do next.
+      During sync, the "before" version sync failed — dataset_sync.py exited with code 1 and the output shows "LANGFUSE_SECRET_KEY not set".
 
-      Do NOT actually run dataset_sync.py.
+      User request: "Run only the sync phase for this branch."
     expected_output:
       behavior: |
-        The agent reads the eval-runner skill, recognizes the sync
-        failure from the non-zero exit code, and aborts the entire sync
-        phase. It does NOT attempt the after sync. It reports the error
-        from the script output and explains that the before sync must
-        succeed before proceeding.
+        The agent recognizes the sync failure from the non-zero exit code, and aborts the sync phase. It does NOT attempt the after sync. It reports the error from the script
+        output and explains that the before sync must succeed before proceeding to the after sync or any subsequent phases.
       scoring_type: pass_fail
       scoring_criteria:
         - "Recognizes the sync failure (exit code 1)"
         - "Aborts the sync phase — does not attempt the after sync"
+        - "Does not proceed to env setup or any subsequent phase"
         - "Reports the error from the script output"
-        - "Does not attempt the after sync after the before sync failed"
-        - "References having read the eval-runner skill"
+        - "Explains that before sync must succeed before proceeding"
+      scoring_rules: |
+        Score 10 * (passed criteria / total criteria).
+
+  # ─── Multi-variant (N > 2) eval ─────────────────────────────────────
+
+  - id: multi-commit-eval
+    input: |
+      Repo: brightfire/agentic-testing-framework
+      Branch: main
+      Skill: eval-runner
+      eval.yaml path: skills/eval-runner/eval.yaml
+
+      User request: "Run the evaluation for the past 5 commits on the main branch."
+    expected_output:
+      behavior: |
+        The agent runs variant inference and identifies 5 skill variants — one for each of the last 5 commits on main. The variant labels are the short commit hashes
+        (e.g., `a1b2c3d`, `e5f6g7h`, `i9j0k1l`, `m3n4o5p`, `q7r8s9t`). The agent runs the recency check for all 5 variants. If any have matching experiments within the recency
+        window, those are noted as reused. New or changed variants are included in the run. The agent presents the variant summary and waits for user confirmation. The
+        response does NOT proceed to pre-flight, sync, or env setup until the user confirms.
+      scoring_type: pass_fail
+      scoring_criteria:
+        # Phase: Variant Inference
+        - "Inference: identifies 5 skill variants — one per commit from the last 5 commits on main"
+        - "Inference: uses short commit hashes as variant labels"
+        - "Recency: runs recency check for all 5 variants"
+        - "Recency: notes any reused variants from prior runs"
+        - "Inference: presents variant summary for confirmation"
+        # Phase: Confirmation
+        - "Confirmation: waits for user confirmation — does NOT proceed to pre-flight/sync/env setup"
+        # Phase: Pre-flight (add criteria after user confirms)
+        # Phase: Sync (add criteria after user confirms)
+        # Phase: Env Setup (add criteria after user confirms)
+        # Phase: Execute (add criteria when implemented)
+        # Phase: Report (add criteria when implemented)
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).

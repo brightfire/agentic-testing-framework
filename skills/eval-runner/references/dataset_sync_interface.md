@@ -1,7 +1,6 @@
 # Dataset Sync Script Interface Reference
 
 **Script:** `~/repos/agentic-testing-framework/src/dataset_sync.py`
-**Issue:** DEV-543
 
 ## CLI Usage
 
@@ -48,10 +47,11 @@ eval harness to pin experiment runs to exact dataset state.
 
 Note: `--dry-run` always exits 0 without making API calls.
 
-## eval.yaml Schema (DEV-321)
+## eval.yaml Schema
 
 ```yaml
 dataset: <langfuse-dataset-name>
+description: <human-readable description of the eval>
 items:
   - id: <unique-string-id>
     input: <prompt text sent to the agent>
