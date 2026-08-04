@@ -110,8 +110,8 @@ not itself), so check early — there's no reason to sync anything to Langfuse i
 
 For each variant spec:
 
-1. **Fetch all skill files** from the git ref: `git show <ref>:<skill-path>/SKILL.md` and all files in the skill directory (`git ls-tree -r --name-only <ref>:<skill-path>/` to list files, then `git show` each). Exclude non-skill files: `AGENTS.md`, `CLAUDE.md`, `LICENSE`, `.gitignore`, and similar convention/meta files.
-2. **Scan all skill files for self-references** using the whole-word regex: `(?<![a-z0-9-])<skill-name>(?![a-z0-9-])` (case-insensitive). Scan the body of SKILL.md (excluding frontmatter), plus the full content of every other skill file (references/*, scripts/*, etc.). The skill name is the `name:` field from the SKILL.md frontmatter.
+1. **Identify skill-relevant files.** Fetch SKILL.md from the git ref: `git show <ref>:<skill-path>/SKILL.md`. Read its body and collect all file references — paths matching patterns like `references/foo.md`, `scripts/bar.py`, `templates/baz.txt`, or Markdown links like `[text](references/foo.md)`. The skill-relevant file set is: SKILL.md itself plus every referenced file. Exclude convention/meta files (AGENTS.md, CLAUDE.md, LICENSE, .gitignore, etc.) even if referenced. Do NOT include files in the skill directory that aren't referenced by SKILL.md.
+2. **Scan skill-relevant files for self-references.** Fetch each identified file from the git ref via `git show <ref>:<skill-path>/<file>`. Scan each file's content using the whole-word regex: `(?<![a-z0-9-])<skill-name>(?![a-z0-9-])` (case-insensitive). For SKILL.md, scan the body excluding frontmatter; for all other files, scan the entire content. The skill name is the `name:` field from the SKILL.md frontmatter.
 3. **If any self-reference is found**, **abort the entire run** — do not proceed to sync or env setup. Report which skill(s) and line(s) contain self-references, and tell the user
    to fix the source skill before re-running.
 4. **If all variants pass**, proceed to the Sync Phase.
