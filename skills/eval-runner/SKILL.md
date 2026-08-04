@@ -301,7 +301,6 @@ Run `eval_harness.py` for each (skill variant × model) combination in the prune
 ```bash
 # Source Langfuse credentials
 source ~/.openclaw/secrets/langfuse.env 2>/dev/null
-export LANGFUSE_BASIC_AUTH=$(printf '%s:%s' "$LANGFUSE_PUBLIC_KEY" "$LANGFUSE_SECRET_KEY" | base64 -w0)
 
 # For each (skill variant × model) combination in the pruned run matrix:
 python ~/repos/agentic-testing-framework/src/eval_harness.py \
@@ -358,21 +357,7 @@ Status values:
 
 ### Failure Handling
 
-**Immediate error notification:** If any harness invocation fails outright (non-zero exit code, crash, timeout, or all items failed), report back to the originating channel immediately as an error notification. Do NOT wait for the report phase. The notification should include:
-- Which variant and model failed
-- The error message from the harness
-- The experiment name (if one was created)
-- Suggestion to check logs and re-run
-
-**Partial failures:** If some items fail but the harness completes (exit 0 with `N failed items` logged), this is NOT an immediate error — capture the failures and pass them to the report phase. The report phase handles per-item failure analysis.
-
-**Multiple variants:** If one variant fails and others succeed, report the failed variant immediately (per above) and continue with the remaining variants. Do not abort the entire execute phase on a single variant failure — only abort if the failure is systemic (e.g., gateway down, Langfuse unreachable, all variants failing).
-
-### Limitations
-
-1. **Single `--item-id` per invocation.** The harness accepts one `--item-id` flag (partial match). Multiple specific items require multiple invocations or running all items with post-hoc filtering.
-
-2. **No experiment deletion on failure.** If a harness invocation creates experiment runs in Langfuse and then fails partway through, those partial runs remain in Langfuse. The report phase should note partial/failed runs when presenting results.
+See [`references/execute-failure-handling.md`](references/execute-failure-handling.md) for the full failure handling procedure.
 
 ## Report Phase
 

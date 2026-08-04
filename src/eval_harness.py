@@ -17,14 +17,14 @@ Usage:
 
 Credentials:
     LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY environment variables.
-    LANGFUSE_BASIC_AUTH (base64 of public:secret) is also required for trace
-    lookup REST API calls. Set it with:
-      export LANGFUSE_BASIC_AUTH=$(printf '%s:%s' "$LANGFUSE_PUBLIC_KEY" "$LANGFUSE_SECRET_KEY" | base64 -w0)
+    The harness derives LANGFUSE_BASIC_AUTH (base64 of public:secret) internally
+    for trace lookup REST API calls.
     The openclaw agent CLI handles gateway auth internally — the harness
     must run on a host with OpenClaw installed and a running local gateway.
 """
 
 import argparse
+import base64
 import json
 import os
 import subprocess
@@ -377,7 +377,9 @@ def main():
         return
 
     # --- Run experiment via SDK ---
-    auth_header = os.environ["LANGFUSE_BASIC_AUTH"]
+    auth_header = base64.b64encode(
+        f"{os.environ['LANGFUSE_PUBLIC_KEY']}:{os.environ['LANGFUSE_SECRET_KEY']}".encode()
+    ).decode()
     task = make_task(
         prompt_prefix=args.prompt_prefix,
         agent_id=args.agent,
