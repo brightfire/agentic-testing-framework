@@ -93,7 +93,7 @@ run — unchanged variants are reused.
 
 Before pre-flight checks, pin all git refs to commit hashes so subsequent phases use a fixed snapshot:
 
-1. For each variant spec, if the git ref is a branch name (not a commit hash), resolve it: `git fetch origin <ref> && git rev-parse origin/<ref>` (or `git ls-remote origin <ref>`).
+1. For each variant spec, fetch from origin to ensure the ref is available locally: `git fetch origin <ref>`. If the ref is a branch name (not a commit hash), resolve it to a commit hash: `git rev-parse origin/<ref>` (or `git ls-remote origin <ref>`). If the ref is already a commit hash, `git fetch origin <ref>` ensures the commit is present in the local clone.
 2. Replace the branch ref with the resolved commit hash in the variant spec.
 3. All subsequent phases (pre-flight, sync, env setup) use the pinned commit hash — never the branch name.
 
