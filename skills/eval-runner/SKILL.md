@@ -60,7 +60,7 @@ After inference builds the full matrix (skill variants × models × dataset item
 - `<item-scope>`: `all` for full dataset, or 8-char SHA-256 prefix of sorted item IDs joined by `|` (e.g., items `['c','a','b']` → `a|b|c` → `sha256('a|b|c')[:8]`)
 - Example: `linear-create-eval__openrouter-z-ai-glm-5.2__pr-123__e5f6g7h__all`
 
-Query Langfuse for experiments whose names **start with** this prefix (using resolved commit hash, not wildcard). The harness appends ` - <timestamp>` and optionally ` - <run_idx>/<total>` for repeats, so use prefix match. Item-scope must match exactly. If matching experiments exist within 7 days, reuse them — skip running. Note reused variants and dates in the confirmation summary.
+Query Langfuse for experiments whose names **start with** this prefix (using resolved commit hash, not wildcard). The harness appends ` - <timestamp>` and optionally ` - <run_idx>/<total>` for repeats, so use prefix match. Item-scope must match exactly. Only reuse experiments where all items succeeded (no partial failures) — a prior run with failed items must not skip re-running. If matching experiments with full success exist within 7 days, reuse them — skip running. Note reused variants and dates in the confirmation summary.
 
 If experiments are missing or older than 7 days, include those variants in the run. First-time runs: check runs normally (nothing to reuse). Reruns: if nothing changed (same commit hash), tell the user and ask to confirm force re-run. If user confirms, prior results excluded, all variants execute.
 
@@ -227,11 +227,11 @@ Omit `--model` for the agent's default model. Omit `--repeat` when count is 1. P
 
 #### 4. Filter to specific dataset items (if applicable)
 
-Pass `--item-id <item-id>` to the harness (single item per invocation, partial match). For multiple specific items, run the harness once per item with `--item-id`, using the same base experiment name.
+Pass `--item-id <item-id>` to the harness (single item per invocation, partial match). For multiple specific items, run the harness once per item with `--item-id`. Each per-item invocation must use its own item-scope in the experiment name — the 8-char hash of the single item ID — not the hash of the full requested subset. This prevents incomplete subset runs from being reused as if the full subset ran.
 
 #### 5. Capture results
 
-For each harness invocation, capture: experiment run name(s) from stdout (`Last run name: <name>`), completion status (exit 0 = success, non-zero = failure), per-item failures (`N failed items` logged), and dataset run URL.
+For each harness invocation, capture: experiment run name(s) from stdout (`Last run name: <name>`), completion status (exit 0 = success, non-zero = failure), per-item failures (harness logs `N failed items — indices: [...]` with item indices), and dataset run URL.
 
 ### Output
 
