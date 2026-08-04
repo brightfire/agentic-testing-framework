@@ -213,17 +213,17 @@ For each variant spec:
 1. **Fetch the latest** — If the git ref is a branch or PR head (not a fixed commit hash), always `git fetch origin <ref>` first to ensure you have the latest state. This handles the test
    → iterate → retest scenario where the branch has been updated since the last run. Then fetch the skill from the (now up-to-date) git ref: `git show <ref>:<skill-path>/SKILL.md` and all
    files in the skill directory.
-2. **Create suffixed directory** in `~/.openclaw/workspace/eval-skills/<skill-name>-<label>-<7char-hash>/`.
+2. **Create suffixed directory** in `~/.openclaw/workspace/eval-skills/<skill-name>-<label>-<7char-hash>-<4char-random>/`.
    - Normalize the label to `[a-z0-9-]` before constructing the directory name: replace `/` with `-`, lowercase, and strip dots/underscores (e.g., `claw/vash/fix-xyz` → `claw-vash-fix-xyz`).
    - The 7-char hash is the short hash of the git ref being fetched (for collision prevention).
 3. **Copy all skill files** into the suffixed directory (preserving subdirectory structure — references/, scripts/, etc.).
-4. **Rewrite the `name:` field** in the copied `SKILL.md` frontmatter to match the suffixed directory name (e.g., `linear-create` → `linear-create-main-a1b2c3d`).
+4. **Rewrite the `name:` field** in the copied `SKILL.md` frontmatter to match the suffixed directory name (e.g., `linear-create` → `linear-create-main-a1b2c3d-x7k2`).
 
 ### Output
 
 List of suffixed directories created in `~/.openclaw/workspace/eval-skills/`, each with:
 
-- Suffixed skill name (e.g., `linear-create-main-a1b2c3d`)
+- Suffixed skill name (e.g., `linear-create-main-a1b2c3d-x7k2`)
 - Directory path
 - Git ref and label it was created from
 
@@ -235,8 +235,8 @@ List of suffixed directories created in `~/.openclaw/workspace/eval-skills/`, ea
 
 3. **Skill names are normalized** — OpenClaw normalizes skill names to `[a-z0-9-]` (lowercase, hyphens only). Suffixed names must stay within this charset. No dots, underscores, or uppercase.
 
-4. **Concurrent runs** — The 7-char git hash in the suffix prevents directory collisions between concurrent runs testing different commits. If a collision still occurs (same ref, same hash),
-   the run should detect the dir already exists and skip re-copying.
+4. **Concurrent runs** — Each run should ALWAYS create its own unique directory by appending a short random suffix (e.g., 4 chars) after the hash:
+   `<skill-name>-<label>-<7char-hash>-<4char-random>`. This ensures cleanup is always safe — no two runs share a directory, so one run's cleanup cannot remove another run's files.
 
 5. **Copying subdirectories** — Skills may have subdirectories (references/, scripts/, templates/, etc.). Copy the entire skill directory structure, not just SKILL.md. Internal relative
    paths in the skill body (e.g., `references/foo.md`) work because the structure is preserved.
