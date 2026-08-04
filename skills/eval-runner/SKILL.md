@@ -21,6 +21,7 @@ The skill determines what to test based on the request, not the trigger source. 
 - **Request names specific commits** → use those commits as skill variants. The variant label is the commit hash.
 - **Request says "just the PR version" or similar** → single skill variant: `<pr-branch>@<hash>`. The variant label is `pr-<number>` (e.g., `pr-123`).
 - **Explicit skill variant specs provided** → use them. The variant label is the branch name or commit hash provided.
+- **Request asks for "past N commits" on a branch** → resolve the branch, list the last N commit hashes via `git rev-list --max-count=N <branch>`, and create N skill variants — one per commit. The variant label for each is the short commit hash (7 chars). For example, "past 5 commits on main" produces 5 variants with labels like `a1b2c3d`, `e5f6g7h`, etc.
 
 The variant label identifies the source of the variant — the PR number (for PR head variants), the base branch name (for the base variant), or commit hash (for explicit specs).
 This label appears in experiment names to distinguish variants, alongside the git hash for precise commit identification.
@@ -63,10 +64,7 @@ Where `<variant-label>` identifies the variant source — the base branch name (
 
 For explicit variant specs using branch names containing `/` (e.g., `claw/vash/fix-xyz`), slashes are replaced with hyphens in experiment names (e.g., `claw-vash-fix-xyz`).
 
-During the recency check, query Langfuse for experiments matching `<dataset-name>__<model-id>__<variant-label>__<git-hash>__<item-scope>` for each requested model and each variant — using
-the resolved commit hash, not a wildcard. The item-scope must match exactly (no wildcard) — `all` for full-dataset runs, or the specific item-scope
-hash for subset runs. This ensures results match the current state, even if the base branch has advanced within the 7-day window.  If experiments exist for a variant within a
-recent window (default: 7 days), that variant can be reused — skip running it again. The confirmation summary notes which variants are being reused and from when.
+During the recency check, query Langfuse for experiments whose names **start with** `<dataset-name>__<model-id>__<variant-label>__<git-hash>__<item-scope>` for each requested model and each variant — using the resolved commit hash, not a wildcard. The harness appends ` - <timestamp>` (and optionally ` - <run_idx>/<total>` for repeats) to experiment names, so the lookup must use a prefix match, not an exact match. The item-scope must match exactly (no wildcard) — `all` for full-dataset runs, or the specific item-scope hash for subset runs. This ensures results match the current state, even if the base branch has advanced within the 7-day window. If experiments exist for a variant within a recent window (default: 7 days), that variant can be reused — skip running it again. The confirmation summary notes which variants are being reused and from when.
 
 If matching experiments are missing for any requested model or variant, or are older than the window, include those variants in the run.
 
