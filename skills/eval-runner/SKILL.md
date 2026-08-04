@@ -42,7 +42,7 @@ creates experiments using the naming convention:
 ```
 
 Where `<variant-label>` identifies the variant source — the base branch name (e.g., `main`), the PR number (e.g., `pr-123`), or a commit ref (for explicit specs). `<item-scope>` is
-`all` when all dataset items are used (the default case), or a short hash (8 chars) of the sorted item IDs when a subset of items is used. For example:
+`all` when all dataset items are used (the default case), or an 8-character hex hash for subset runs. The hash is computed as: sort the item IDs lexicographically, join with `|` (pipe), take the first 8 characters of the SHA-256 hex digest of the resulting string. For example, items `['c', 'a', 'b']` → `a|b|c` → `sha256('a|b|c')[:8]`. For example:
 `linear-create-eval__glm-5.2__main__a1b2c3d__all` (base branch `main`, all items) or `linear-create-eval__glm-5.2__pr-123__e5f6g7h__all` (PR head, all items).
 
 For explicit variant specs using branch names containing `/` (e.g., `claw/vash/fix-xyz`), slashes are replaced with hyphens in experiment names (e.g., `claw-vash-fix-xyz`).
