@@ -38,7 +38,7 @@ import requests
 from langfuse import Langfuse
 
 
-def load_manifest_version(manifest_path):
+def load_manifest_version(manifest_path, expected_dataset=None):
     """Load a sync manifest file and extract the dataset version timestamp.
 
     The manifest is produced by dataset_sync.py --output-manifest and contains
@@ -54,6 +54,12 @@ def load_manifest_version(manifest_path):
             manifest = json.load(f)
     except (OSError, json.JSONDecodeError) as e:
         log(f"Failed to load manifest '{manifest_path}': {e}", "ERROR")
+        return None
+
+    # Reject manifests for a different dataset
+    manifest_dataset = manifest.get("dataset")
+    if expected_dataset and manifest_dataset and manifest_dataset != expected_dataset:
+        log(f"Manifest '{manifest_path}' is for dataset '{manifest_dataset}', expected '{expected_dataset}'", "ERROR")
         return None
 
     synced_at = manifest.get("synced_at")
@@ -345,7 +351,7 @@ def main():
     # --- Load manifest and extract dataset version (if provided) ---
     dataset_version = None
     if args.manifest:
-        dataset_version = load_manifest_version(args.manifest)
+        dataset_version = load_manifest_version(args.manifest, expected_dataset=args.dataset)
         if dataset_version is None:
             log(f"Failed to load manifest from '{args.manifest}' — aborting.", "ERROR")
             sys.exit(1)
@@ -452,7 +458,7 @@ def main():
             if error is not None or output is None:
                 failed_items.append(i)
         if failed_items:
-            log(f"  Run {run_idx}/{total} ({run_result.run_name}): {len(failed_items)} failed items", "WARN")
+            log(f"  Run {run_idx}/{total} ({run_result.run_name}): {len(failed_items)} failed items — indices: {failed_items}", "WARN")
             total_failed += len(failed_items)
 
     if total_failed:
