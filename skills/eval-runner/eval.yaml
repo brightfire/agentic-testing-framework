@@ -10,6 +10,7 @@ items:
       PR context:
       - Repo: brightfire/agentic-testing-framework
       - PR branch: claw/vash/skill-improvement
+      - PR number: 123
       - Base branch: main
       - Files changed: skills/eval-runner/SKILL.md
 
@@ -36,6 +37,7 @@ items:
       PR context:
       - Repo: brightfire/agentic-testing-framework
       - PR branch: claw/vash/skill-model-comparison
+      - PR number: 42
       - Base branch: main
       - Files changed: skills/eval-runner/SKILL.md
 
@@ -64,6 +66,7 @@ items:
       PR context:
       - Repo: brightfire/agentic-testing-framework
       - PR branch: claw/vash/skill-model-comparison
+      - PR number: 42
       - Base branch: main
       - Files changed: skills/eval-runner/SKILL.md
 
@@ -94,6 +97,7 @@ items:
       PR context:
       - Repo: brightfire/agentic-testing-framework
       - PR branch: claw/vash/skill-model-comparison
+      - PR number: 42
       - Base branch: main
       - Files changed: skills/eval-runner/SKILL.md
 
@@ -104,7 +108,7 @@ items:
     expected_output:
       behavior: |
         The agent runs variant inference with the model dimension, and runs the baseline recency check. It finds a baseline experiment for glm-5.2 (skip baseline) but no baseline
-        for claude-sonnet-4-6 (include baseline). The confirmation summary shows: pr-123×glm-5.2, pr-123×claude-sonnet-4-6, main×claude-sonnet-4-6 = 3 runs. Baseline status notes
+        for claude-sonnet-4-6 (include baseline). The confirmation summary shows: pr-42×glm-5.2, pr-42×claude-sonnet-4-6, main×claude-sonnet-4-6 = 3 runs. Baseline status notes
         glm-5.2 as "already tested" and claude-sonnet-4-6 as "no prior baseline."
       scoring_type: pass_fail
       scoring_criteria:
@@ -113,7 +117,7 @@ items:
         - "Inference: runs baseline recency check — finds baseline for glm-5.2 only, not for claude-sonnet-4-6"
         - "Inference: skips baseline for glm-5.2 (already tested)"
         - "Inference: includes baseline for claude-sonnet-4-6 (no prior baseline)"
-        - "Inference: recognizes the matrix is 3 runs: pr-123×glm-5.2, pr-123×claude-sonnet-4-6, main×claude-sonnet-4-6"
+        - "Inference: recognizes the matrix is 3 runs: pr-42×glm-5.2, pr-42×claude-sonnet-4-6, main×claude-sonnet-4-6"
         # Phase: Confirmation
         - "Confirmation: presents summary showing after variant for both models plus before variant for claude-sonnet-4-6 only"
         - "Confirmation: shows total run count (3)"
@@ -127,6 +131,7 @@ items:
       PR context:
       - Repo: brightfire/agentic-testing-framework
       - PR branch: claw/vash/skill-model-comparison
+      - PR number: 42
       - Base branch: main
       - Files changed: skills/eval-runner/SKILL.md
 
@@ -137,7 +142,7 @@ items:
     expected_output:
       behavior: |
         The agent runs variant inference with a single model (claude-sonnet-4-6), and runs the baseline recency check. It finds no baseline experiment for claude-sonnet-4-6, so the
-        baseline variant is included. The confirmation summary shows: main×claude-sonnet-4-6, pr-123×claude-sonnet-4-6 = 2 runs. Baseline status notes claude-sonnet-4-6 as "no
+        baseline variant is included. The confirmation summary shows: main×claude-sonnet-4-6, pr-42×claude-sonnet-4-6 = 2 runs. Baseline status notes claude-sonnet-4-6 as "no
         prior baseline."
       scoring_type: pass_fail
       scoring_criteria:
@@ -145,7 +150,7 @@ items:
         - "Inference: identifies single model — claude-sonnet-4-6"
         - "Inference: runs baseline recency check — finds no baseline experiment for claude-sonnet-4-6"
         - "Inference: includes baseline variant for claude-sonnet-4-6 (no prior baseline)"
-        - "Inference: recognizes the matrix is 2 runs: main×claude-sonnet-4-6, pr-123×claude-sonnet-4-6"
+        - "Inference: recognizes the matrix is 2 runs: main×claude-sonnet-4-6, pr-42×claude-sonnet-4-6"
         # Phase: Confirmation
         - "Confirmation: presents summary showing both before and after variants for claude-sonnet-4-6"
         - "Confirmation: shows total run count (2)"
@@ -159,6 +164,7 @@ items:
       PR context:
       - Repo: brightfire/agentic-testing-framework
       - PR branch: claw/vash/skill-model-comparison
+      - PR number: 42
       - Base branch: main
       - Files changed: skills/eval-runner/SKILL.md
 
@@ -168,7 +174,7 @@ items:
     expected_output:
       behavior: |
         The agent runs variant inference with the model dimension, and runs the baseline recency check. It finds no baseline experiments for either model, so the baseline variant
-        is included for both. The confirmation summary shows the full 2×2 matrix: main×glm-5.2, main×claude-sonnet-4-6, pr-123×glm-5.2, pr-123×claude-sonnet-4-6 = 4 runs.
+        is included for both. The confirmation summary shows the full 2×2 matrix: main×glm-5.2, main×claude-sonnet-4-6, pr-42×glm-5.2, pr-42×claude-sonnet-4-6 = 4 runs.
         Baseline status notes "no prior baseline" for both models.
       scoring_type: pass_fail
       scoring_criteria:
@@ -190,6 +196,7 @@ items:
       PR context:
       - Repo: brightfire/agentic-testing-framework
       - PR branch: claw/vash/skill-and-eval-update
+      - PR number: 55
       - Base branch: main
       - Files changed: skills/eval-runner/SKILL.md, skills/eval-runner/eval.yaml
 
@@ -222,6 +229,7 @@ items:
       PR context:
       - Repo: brightfire/agentic-testing-framework
       - PR branch: claw/vash/skill-improvement
+      - PR number: 123
       - Base branch: main
       - Files changed: skills/eval-runner/SKILL.md
 
@@ -260,6 +268,7 @@ items:
       PR context:
       - Repo: brightfire/agentic-testing-framework
       - PR branch: claw/vash/skill-improvement
+      - PR number: 123
       - Base branch: main
 
       User request: "Re-run the previous eval for this PR."
@@ -295,6 +304,7 @@ items:
       PR context:
       - Repo: brightfire/agentic-testing-framework
       - PR branch: claw/vash/skill-improvement
+      - PR number: 123
       - Base branch: main
       - Files changed: skills/eval-runner/SKILL.md
 
@@ -327,6 +337,7 @@ items:
       PR context:
       - Repo: brightfire/agentic-testing-framework
       - PR branch: claw/vash/add-eval-yaml
+      - PR number: 67
       - Base branch: main
       - Files changed: skills/eval-runner/eval.yaml (new file — does not exist on base branch)
 
@@ -350,6 +361,7 @@ items:
       PR context:
       - Repo: brightfire/agentic-testing-framework
       - PR branch: claw/vash/eval-yaml-update
+      - PR number: 78
       - Base branch: main
       - Files changed: skills/eval-runner/eval.yaml
 
