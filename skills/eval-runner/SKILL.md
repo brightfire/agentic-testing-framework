@@ -339,7 +339,7 @@ Return a structured result for the report phase:
 ```
 runs:
   - variant: <variant-label>
-    model: <model-id or "default">
+    model: <model-id>
     experiment_name: <base-experiment-name>
     harness_run_names: [<full names from harness stdout, including timestamp suffixes>]
     status: success | partial | failed
@@ -347,7 +347,7 @@ runs:
     error: <error message, if failed>
     dataset_run_url: <langfuse url, if available>
   - variant: <variant-label>
-    model: <model-id or "default">
+    model: <model-id>
     ...
 ```
 
