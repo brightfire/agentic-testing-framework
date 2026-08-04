@@ -1,6 +1,5 @@
 # Execute Phase — Failure Handling
 
-Reference for error handling during the Execute Phase. The skill consults this when a harness invocation fails.
 
 ## Immediate Error Notification
 

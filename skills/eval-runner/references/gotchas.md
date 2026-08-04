@@ -1,6 +1,5 @@
 # Eval Runner Gotchas
 
-Error-prevention notes for all phases. Consult when encountering issues.
 
 ## Sync Phase
 
