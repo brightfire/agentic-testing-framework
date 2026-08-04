@@ -264,7 +264,7 @@ def write_manifest(output_path, dataset_name, manifest_items, sync_completed_at)
         return True
     manifest = {
         "dataset": dataset_name,
-        "synced_at": sync_completed_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "synced_at": sync_completed_at.isoformat(),
         "items": manifest_items,
     }
     try:
