@@ -3,7 +3,7 @@ name: eval-runner
 description: "Use when evaluating a skill or running tests for a skill — syncs eval definitions to Langfuse, prepares the eval environment, and orchestrates variant runs. SKIP for skill creation, editing, or auditing requests — use the skill-creator or skill-reviewer skills instead."
 metadata:
   author: brightfire
-  version: "2.1"
+  version: "2.2"
 ---
 
 # Eval Runner
@@ -251,7 +251,135 @@ List of suffixed directories created in `~/.openclaw/workspace/eval-skills/`, ea
 
 ## Execute Phase
 
-Not yet implemented.
+Third phase of the eval runner. Invokes the eval harness for each variant in the pruned run matrix, directing the agent to the appropriate suffixed skill via an attestation prefix. Silent on success — results are passed to the report phase. Loud on failure — if execution fails outright (harness crash, all items failed, unable to start), report back to the originating channel immediately as an error notification.
+
+### Inputs
+
+| Input | Source | Description |
+|-------|--------|-------------|
+| Dataset name | Sync phase output | Langfuse dataset name from eval.yaml |
+| Manifests | Sync phase output | Per-variant manifest paths (for future version pinning — see Limitations) |
+| Suffixed skills | Env setup output | List of (suffixed skill name, directory path, variant label, git hash) |
+| Run matrix | Recency check output | Pruned list of (skill variant × model) combinations to execute |
+| Dataset items | Variant inference | All items or specific item IDs |
+| Repeat count | User request or default | Number of repeats per variant (default: 1) |
+
+### Procedure
+
+#### 1. Construct experiment names
+
+For each (skill variant × model) combination in the pruned run matrix, construct the base experiment name following the convention from the Recency Check section:
+
+```
+<dataset-name>__<model-id>__<variant-label>__<git-hash>__<item-scope>
+```
+
+Where:
+- `<model-id>` is the full provider-qualified model ID with `/` replaced by `-` (e.g., `openrouter-z-ai-glm-5.2`). When no model override is specified, use the agent's current default model ID.
+- `<variant-label>` is the variant label from variant inference (e.g., `main`, `pr-123`, a short commit hash). Slashes are replaced with hyphens.
+- `<git-hash>` is the 7-char short hash of the resolved git ref for that variant.
+- `<item-scope>` is `all` when all dataset items are used (the default), or an 8-character hex hash for subset runs (computed as described in the Recency Check section).
+
+The harness automatically appends ` - <timestamp>` (and ` - <run_idx>/<total>` for repeats) to the experiment name at runtime. The base experiment name passed via `--run-name` must NOT include the timestamp or repeat suffix — the harness adds those.
+
+#### 2. Construct attestation prefix
+
+For each skill variant, construct the `--prompt-prefix` that directs the agent to read the suffixed skill created during env setup:
+
+```
+Read the <suffixed-skill-name> skill from available_skills. When you respond, the first line of the response must be the path of the skill you read. Then,
+```
+
+The suffixed skill name is the `name:` field from the copied SKILL.md (e.g., `linear-create-main-a1b2c3d-x7k2`). The trailing space after "Then," is intentional — the harness prepends this prefix directly to each dataset item's input.
+
+For model A/B tests (Slack-triggered, single skill variant), the same suffixed skill name and attestation prefix is used for both model runs — only the `--model` flag differs between invocations.
+
+#### 3. Invoke the harness
+
+Run `eval_harness.py` for each (skill variant × model) combination in the pruned run matrix. Run sequentially by default to avoid gateway overload — each harness invocation spawns `openclaw agent` subprocesses that consume gateway capacity. Concurrent execution across variants is possible if the gateway has capacity, but sequential is the safe default.
+
+```bash
+# Source Langfuse credentials
+source ~/.openclaw/secrets/langfuse.env 2>/dev/null
+
+# For each (skill variant × model) combination in the pruned run matrix:
+python ~/repos/agentic-testing-framework/src/eval_harness.py \
+  --dataset "<dataset-name>" \
+  --run-name "<base-experiment-name>" \
+  --prompt-prefix "Read the <suffixed-skill-name> skill from available_skills. When you respond, the first line of the response must be the path of the skill you read. Then, " \
+  --model "<model-id>" \
+  --repeat "<repeat-count>" \
+  --langfuse-host "http://10.18.32.57:3000"
+```
+
+Omit `--model` when using the agent's default model. Omit `--repeat` when the repeat count is 1.
+
+**Prerequisites:**
+- `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` environment variables must be set
+- `LANGFUSE_BASIC_AUTH` environment variable must be set (base64 of `public_key:secret_key`) — the harness uses this for Langfuse REST API trace lookups. Set it with: `export LANGFUSE_BASIC_AUTH=$(printf '%s:%s' "$LANGFUSE_PUBLIC_KEY" "$LANGFUSE_SECRET_KEY" | base64 -w0)`
+- The suffixed skill directories from env setup must exist in `~/.openclaw/workspace/eval-skills/` and be listed in `skills.load.extraDirs` in the gateway config
+- The OpenClaw gateway must be running and healthy
+- Python dependencies (`langfuse`, `requests`, `pyyaml`) must be installed — see `~/repos/agentic-testing-framework/requirements.txt`
+
+#### 4. Filter to specific dataset items (if applicable)
+
+If the run matrix specifies specific dataset items (not all), pass `--item-id <item-id>` to the harness. The harness supports a single `--item-id` per invocation (partial match). For multiple specific items, either:
+- Run the harness once per item with `--item-id`, using the same base experiment name — the harness creates separate experiment runs with distinct timestamps. Use the item-scope hash for the full item set in the base experiment name for all runs.
+- Or run with all items and filter post-hoc in the report phase.
+
+The single-item-per-invocation limitation means the report phase must aggregate across multiple runs when filtering by multiple items. This is acceptable for now — the harness may be enhanced to accept multiple `--item-id` flags in the future.
+
+#### 5. Capture results
+
+For each harness invocation, capture:
+- **Experiment run name(s)** — from the harness stdout summary (the harness prints `Last run name: <name>` in the summary)
+- **Completion status** — success (exit 0) or failure (non-zero exit)
+- **Per-item failures** — the harness summary logs `N failed items` per run with item indices
+- **Dataset run URL** — the Langfuse URL for the experiment run
+
+### Output
+
+Return a structured result for the report phase:
+
+```
+runs:
+  - variant: <variant-label>
+    model: <model-id or "default">
+    experiment_name: <base-experiment-name>
+    harness_run_names: [<full names from harness stdout, including timestamp suffixes>]
+    status: success | partial | failed
+    failed_items: [<item indices or ids, if any>]
+    error: <error message, if failed>
+    dataset_run_url: <langfuse url, if available>
+  - variant: <variant-label>
+    model: <model-id or "default">
+    ...
+```
+
+Status values:
+- `success` — all items completed, harness exit 0
+- `partial` — some items failed but harness completed (exit 0 with failed items logged)
+- `failed` — harness crashed (non-zero exit) or all items failed
+
+### Failure Handling
+
+**Immediate error notification:** If any harness invocation fails outright (non-zero exit code, crash, timeout, or all items failed), report back to the originating channel immediately as an error notification. Do NOT wait for the report phase. The notification should include:
+- Which variant and model failed
+- The error message from the harness
+- The experiment name (if one was created)
+- Suggestion to check logs and re-run
+
+**Partial failures:** If some items fail but the harness completes (exit 0 with `N failed items` logged), this is NOT an immediate error — capture the failures and pass them to the report phase. The report phase handles per-item failure analysis.
+
+**Multiple variants:** If one variant fails and others succeed, report the failed variant immediately (per above) and continue with the remaining variants. Do not abort the entire execute phase on a single variant failure — only abort if the failure is systemic (e.g., gateway down, Langfuse unreachable, all variants failing).
+
+### Limitations
+
+1. **Dataset version pinning not yet implemented in the harness.** The sync phase produces manifests with per-item timestamps, but the harness currently loads whatever dataset state Langfuse has at invocation time — it does not pass a version timestamp to `get_dataset()`. For the eval.yaml-changed scenario (4 runs: v1×T1, v1×T2, v2×T1, v2×T2), all variants run against the latest synced dataset state. Version pinning is a future enhancement to the harness (add a `--dataset-version <timestamp>` flag that passes through to `langfuse_client.get_dataset(name, version=<timestamp>)`).
+
+2. **Single `--item-id` per invocation.** The harness accepts one `--item-id` flag (partial match). Multiple specific items require multiple invocations or running all items with post-hoc filtering.
+
+3. **No experiment deletion on failure.** If a harness invocation creates experiment runs in Langfuse and then fails partway through, those partial runs remain in Langfuse. The report phase should note partial/failed runs when presenting results.
 
 ## Report Phase
 
