@@ -221,8 +221,7 @@ For each variant spec:
    the test → iterate → retest scenario where the branch has been updated since the last run. Then fetch the skill from the (now up-to-date) git ref: `git show
    <ref>:<skill-path>/SKILL.md` and all files in the skill directory.
 2. **Create suffixed directory** in `~/.openclaw/workspace/eval-skills/<skill-name>-<label>-<7char-hash>-<4char-random>/`.
-   - Normalize the label before constructing the directory name: replace `/` with `_`, lowercase, and strip dots (e.g., `claw/vash/fix-xyz` → `claw_vash_fix-xyz`). Use `_` (not
-     `-`) to replace slashes so the label doesn't merge with the `-`-separated directory components.
+   - Normalize the label to `[a-z0-9-]` before constructing the directory name: replace `/` with `-`, lowercase, and strip dots and underscores (e.g., `claw/vash/fix-xyz` → `claw-vash-fix-xyz`).
    - The 7-char hash is the short hash of the git ref being fetched (for collision prevention).
 3. **Copy all skill files** into the suffixed directory (preserving subdirectory structure — references/, scripts/, etc.).
 4. **Rewrite the `name:` field** in the copied `SKILL.md` frontmatter to match the suffixed directory name (e.g., `linear-create` → `linear-create-main-a1b2c3d-x7k2`).
