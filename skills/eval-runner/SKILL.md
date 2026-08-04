@@ -99,11 +99,6 @@ so check early — there's no reason to sync anything to Langfuse if we can't ru
 
 ### Procedure
 
-Before checking variants, verify the eval environment:
-
-1. **Check eval-skills configuration** — `~/.openclaw/workspace/eval-skills/` must exist AND be listed in `skills.load.extraDirs` in the gateway config.  If not, report the issue and stop
-   — do not proceed to sync or env setup.
-
 For each variant spec:
 
 1. **Fetch the SKILL.md** from the git ref: `git show <ref>:<skill-path>/SKILL.md`.
@@ -132,7 +127,7 @@ First phase of the eval runner. Syncs eval definitions to Langfuse and captures 
 
 ### Extract both versions of eval.yaml
 
-Sync every variant that the Variant Inference section determined should run. If inference determined the baseline is being reused (baseline recency check passed), skip the before version — it already exists in Langfuse. If inference determined the baseline needs to run, extract and sync it. In short: sync what inference produces, nothing more, nothing less.
+Sync every variant that the Variant Inference section determined should run. A rerun (when the user says "re-run the previous eval") serves as variant confirmation — the user is confirming the variant set from the previous run. Since the baseline already exists in Langfuse from the prior run, the rerun variant set excludes the baseline. Sync only the after variant(s). In general: sync what inference produces, nothing more, nothing less.
 
 Use `git show` to extract each version to a temp file. This avoids modifying the working tree and works regardless of current checkout state.
 
@@ -236,8 +231,7 @@ List of suffixed directories created in `~/.openclaw/workspace/eval-skills/`, ea
 
 ### Gotchas
 
-1. **eval-skills dir configuration** — Checked during pre-flight (above) — the eval-skills dir must exist and be in `skills.load.extraDirs`. Adding a new extraDir requires a gateway restart
-   — the skill should NOT attempt to restart the gateway.
+1. **eval-skills not configured** — If `~/.openclaw/workspace/eval-skills/` is missing or not listed in `skills.load.extraDirs` in the gateway config, environment setup will fail. Check this first if env setup errors. Once configured, this is unlikely to fail again.
 
 2. **Self-references in skill bodies** — Checked during the pre-flight phase (above). If any are found, the run aborts before env setup.  Fix self-references at the source skill before re-running.
 
