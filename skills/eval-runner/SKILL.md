@@ -1,6 +1,6 @@
 ---
 name: eval-runner
-description: "Use when running eval tests — syncs eval definitions to Langfuse, prepares the eval environment, and orchestrates variant runs."
+description: "Use when running eval tests — syncs eval definitions to Langfuse, prepares the eval environment, and orchestrates variant runs. SKIP for skill creation or skill review requests — use the skill-creator or skill-reviewer skills instead."
 metadata:
   author: brightfire
   version: "2.1"
@@ -82,7 +82,7 @@ If the user says "run same test again" or "re-run the previous eval", the skill 
 pre-flight checks. The recency check still applies — the rerun reuses prior results for any variant with matching experiments within the recency window, unless the user explicitly requests
 a full re-run ("re-run everything") or matching experiments are missing.
 
-If the user explicitly requests a single phase (e.g., "run only the sync phase"), skip the confirmation gate and proceed directly to pre-flight checks for that phase.
+
 
 ## Ref Resolution
 
@@ -132,7 +132,7 @@ First phase of the eval runner. Syncs eval definitions to Langfuse and captures 
 
 ### Extract both versions of eval.yaml
 
-For re-runs (when the user says "re-run the previous eval"), skip the before version extraction and sync — only extract and sync the after (PR head) version. The baseline has not changed.
+Sync every variant that the Variant Inference section determined should run. If inference determined the baseline is being reused (baseline recency check passed), skip the before version — it already exists in Langfuse. If inference determined the baseline needs to run, extract and sync it. In short: sync what inference produces, nothing more, nothing less.
 
 Use `git show` to extract each version to a temp file. This avoids modifying the working tree and works regardless of current checkout state.
 
