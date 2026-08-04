@@ -301,18 +301,20 @@ Run `eval_harness.py` for each (skill variant × model) combination in the prune
 ```bash
 # Source Langfuse credentials
 source ~/.openclaw/secrets/langfuse.env 2>/dev/null
+export LANGFUSE_BASIC_AUTH=$(printf '%s:%s' "$LANGFUSE_PUBLIC_KEY" "$LANGFUSE_SECRET_KEY" | base64 -w0)
 
 # For each (skill variant × model) combination in the pruned run matrix:
 python ~/repos/agentic-testing-framework/src/eval_harness.py \
   --dataset "<dataset-name>" \
   --run-name "<base-experiment-name>" \
   --prompt-prefix "Read the <suffixed-skill-name> skill from available_skills. When you respond, the first line of the response must be the path of the skill you read. Then, " \
+  --manifest "<path-to-manifest-from-sync-phase>" \
   --model "<model-id>" \
   --repeat "<repeat-count>" \
   --langfuse-host "http://10.18.32.57:3000"
 ```
 
-Omit `--model` when using the agent's default model. Omit `--repeat` when the repeat count is 1.
+Omit `--model` when using the agent's default model. Omit `--repeat` when the repeat count is 1. Pass `--manifest` when the sync phase produced a manifest for this variant — the harness reads the `synced_at` timestamp from the manifest and passes it to Langfuse `get_dataset(version=...)`, pinning the dataset to the exact state at sync time. When a variant's manifest is `null` (new eval.yaml, no sync needed), omit `--manifest` — the harness loads the latest dataset state.
 
 **Prerequisites:**
 - `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` environment variables must be set
@@ -375,11 +377,9 @@ Status values:
 
 ### Limitations
 
-1. **Dataset version pinning not yet implemented in the harness.** The sync phase produces manifests with per-item timestamps, but the harness currently loads whatever dataset state Langfuse has at invocation time — it does not pass a version timestamp to `get_dataset()`. For the eval.yaml-changed scenario (4 runs: v1×T1, v1×T2, v2×T1, v2×T2), all variants run against the latest synced dataset state. Version pinning is a future enhancement to the harness (add a `--dataset-version <timestamp>` flag that passes through to `langfuse_client.get_dataset(name, version=<timestamp>)`).
+1. **Single `--item-id` per invocation.** The harness accepts one `--item-id` flag (partial match). Multiple specific items require multiple invocations or running all items with post-hoc filtering.
 
-2. **Single `--item-id` per invocation.** The harness accepts one `--item-id` flag (partial match). Multiple specific items require multiple invocations or running all items with post-hoc filtering.
-
-3. **No experiment deletion on failure.** If a harness invocation creates experiment runs in Langfuse and then fails partway through, those partial runs remain in Langfuse. The report phase should note partial/failed runs when presenting results.
+2. **No experiment deletion on failure.** If a harness invocation creates experiment runs in Langfuse and then fails partway through, those partial runs remain in Langfuse. The report phase should note partial/failed runs when presenting results.
 
 ## Report Phase
 
