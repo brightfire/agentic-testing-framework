@@ -17,6 +17,7 @@ The skill determines what to test based on the request, not the trigger source. 
 **Skill versions** (what skill code to test):
 - **PR referenced, no explicit skill specs** → default to skill A/B: base branch (e.g., `main@<base-hash>`) + PR head (e.g., `<pr-branch>@<head-hash>`). The variant label is `main`
   (base branch name) for the base and `pr-<number>` (e.g., `pr-123`) for the PR head.
+- **Branch named, no PR referenced** → default to skill A/B: base branch (e.g., `main@<base-hash>`) + named branch (e.g., `<branch>@<head-hash>`). The variant label is the base branch name (e.g., `main`) for the base and the normalized branch name for the named branch (slashes replaced with hyphens, e.g., `claw-vash-fix-xyz`).
 - **Request names specific commits** → use those commits as skill variants. The variant label is the commit hash.
 - **Request says "just the PR version" or similar** → single skill variant: `<pr-branch>@<hash>`. The variant label is `pr-<number>` (e.g., `pr-123`).
 - **Explicit skill variant specs provided** → use them. The variant label is the branch name or commit hash provided.
