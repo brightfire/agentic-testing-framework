@@ -44,7 +44,9 @@ creates experiments using the naming convention:
 
 Where `<variant-label>` identifies the variant source — the base branch name (e.g., `main`), the PR number (e.g., `pr-123`), or a commit ref (for explicit specs). `<item-scope>` is
 `all` when all dataset items are used (the default case), or an 8-character hex hash for subset runs. The hash is computed as: sort the item IDs lexicographically, join with `|` (pipe), take the first 8 characters of the SHA-256 hex digest of the resulting string. For example, items `['c', 'a', 'b']` → `a|b|c` → `sha256('a|b|c')[:8]`. For example:
-`linear-create-eval__glm-5.2__main__a1b2c3d__all` (base branch `main`, all items) or `linear-create-eval__glm-5.2__pr-123__e5f6g7h__all` (PR head, all items).
+`linear-create-eval__openrouter-z-ai-glm-5.2__main__a1b2c3d__all` (base branch `main`, all items) or `linear-create-eval__openrouter-z-ai-glm-5.2__pr-123__e5f6g7h__all` (PR head, all items).
+
+`<model-id>` is the full provider-qualified model ID (e.g., `openrouter/z-ai/glm-5.2`) with `/` replaced by `-` (e.g., `openrouter-z-ai-glm-5.2`). This prevents collisions between providers that share the same leaf model name.
 
 For explicit variant specs using branch names containing `/` (e.g., `claw/vash/fix-xyz`), slashes are replaced with hyphens in experiment names (e.g., `claw-vash-fix-xyz`).
 
@@ -199,6 +201,8 @@ manifest_after: <path to manifest-after.json or null>
 The manifest files contain per-item server timestamps from Langfuse. Pass these to the execute phase:
 - `manifest_before` pins the "before" dataset state (skill v1 + model A, skill v1 + model B)
 - `manifest_after` pins the "after" dataset state (skill v2 + model A, skill v2 + model B)
+
+**Limitation:** The current sync procedure and output schema support two skill variants (before/after). If variant inference produces 3+ skill variants, additional sync runs and manifest entries are needed. This will be addressed when multi-variant support is implemented.
 
 ## Gotchas
 
