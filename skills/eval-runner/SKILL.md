@@ -1,6 +1,6 @@
 ---
 name: eval-runner
-description: "Use when running eval tests, evaluating a skill, or executing an eval — syncs eval definitions to Langfuse, prepares the eval environment, and orchestrates variant runs. SKIP for skill creation, editing, or auditing requests — use the skill-creator or skill-reviewer skills instead."
+description: "Use when evaluating a skill or running tests for a skill — syncs eval definitions to Langfuse, prepares the eval environment, and orchestrates variant runs. SKIP for skill creation, editing, or auditing requests — use the skill-creator or skill-reviewer skills instead."
 metadata:
   author: brightfire
   version: "2.1"
