@@ -68,5 +68,4 @@ passed to the execute phase to pin experiment runs to exact dataset state:
 - `get_dataset(version=...)` returns the dataset as it was at that point
 - Enables concurrent test runs without interference — each variant runs
   against the exact dataset state from its own sync
-- `manifest_before` pins the "before" dataset state
-- `manifest_after` pins the "after" dataset state
+- Each variant's manifest pins its dataset state at sync time

@@ -157,11 +157,6 @@ removed at that ref. Skip the sync for that variant. This is unusual — flag it
 
 Run `dataset_sync.py` for each version that exists. Run sequentially — concurrent syncs to the same dataset can interleave version timestamps.
 
-**Prerequisites:**
-- `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` environment variables must be set
-- Source from `~/.openclaw/secrets/langfuse.env` if available
-- Langfuse host must be reachable (default: `http://localhost:3000`)
-
 ```bash
 # For each extracted eval file (sequentially — concurrent syncs can interleave timestamps):
 python ~/repos/agentic-testing-framework/src/dataset_sync.py \
@@ -211,6 +206,8 @@ The manifest files contain per-item server timestamps from Langfuse. Pass these 
   unusual and may indicate a dataset rename.
 - **Python deps:** The agentic-testing-framework requires `langfuse`, `requests`, `pyyaml` — ensure the venv or system Python has these installed. Check
   `~/repos/agentic-testing-framework/requirements.txt`.
+- **Langfuse credentials:** `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` must be set — source from `~/.openclaw/secrets/langfuse.env` if available. The Langfuse host must be
+  reachable (default: `http://localhost:3000`).
 
 ## Environment Setup Phase
 
@@ -273,17 +270,7 @@ Third phase of the eval runner. Invokes the eval harness for each variant in the
 
 #### 1. Construct experiment names
 
-For each (skill variant × model) combination in the pruned run matrix, construct the base experiment name following the convention from the Recency Check section:
-
-```
-<dataset-name>__<model-id>__<variant-label>__<git-hash>__<item-scope>
-```
-
-Where:
-- `<model-id>` is the full provider-qualified model ID with `/` replaced by `-` (e.g., `openrouter-z-ai-glm-5.2`). When no model override is specified, use the agent's current default model ID.
-- `<variant-label>` is the variant label from variant inference (e.g., `main`, `pr-123`, a short commit hash). Slashes are replaced with hyphens.
-- `<git-hash>` is the 7-char short hash of the resolved git ref for that variant.
-- `<item-scope>` is `all` when all dataset items are used (the default), or an 8-character hex hash for subset runs (computed as described in the Recency Check section).
+For each (skill variant × model) combination in the pruned run matrix, construct the base experiment name following the naming convention defined in the Recency Check section: `<dataset-name>__<model-id>__<variant-label>__<git-hash>__<item-scope>`. When no model override is specified, use the agent's current default model ID.
 
 The harness automatically appends ` - <timestamp>` (and ` - <run_idx>/<total>` for repeats) to the experiment name at runtime. The base experiment name passed via `--run-name` must NOT include the timestamp or repeat suffix — the harness adds those.
 
@@ -363,10 +350,6 @@ Status values:
 ### Failure Handling
 
 See [`references/execute-failure-handling.md`](references/execute-failure-handling.md) for the full failure handling procedure.
-
-## Report Phase
-
-Not yet implemented.
 
 ## Cleanup
 
