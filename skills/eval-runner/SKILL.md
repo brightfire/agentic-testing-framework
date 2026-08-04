@@ -38,16 +38,18 @@ appears in experiment names to distinguish variants, alongside the git hash for 
 experiments using the naming convention:
 
 ```
-<dataset-name>__<model-id>__<variant-label>__<git-hash>
+<dataset-name>__<model-id>__<variant-label>__<git-hash>__<item-scope>
 ```
 
-Where `<variant-label>` identifies the variant source — the base branch name (e.g., `main`), the PR number (e.g., `pr-123`), or a commit ref (for explicit specs). For example:
-`linear-create-eval__glm-5.2__main__a1b2c3d` (base branch `main`) or `linear-create-eval__glm-5.2__pr-123__e5f6g7h` (PR head, PR number as label).
+Where `<variant-label>` identifies the variant source — the base branch name (e.g., `main`), the PR number (e.g., `pr-123`), or a commit ref (for explicit specs). `<item-scope>` is `all`
+when all dataset items are used (the default case), or a short hash (8 chars) of the sorted item IDs when a subset of items is used. For example:
+`linear-create-eval__glm-5.2__main__a1b2c3d__all` (base branch `main`, all items) or `linear-create-eval__glm-5.2__pr-123__e5f6g7h__all` (PR head, all items).
 
 For explicit variant specs using branch names containing `/` (e.g., `claw/vash/fix-xyz`), slashes are replaced with hyphens in experiment names (e.g., `claw-vash-fix-xyz`).
 
-During inference, query Langfuse for experiments matching `<dataset-name>__<model-id>__<variant-label>__<git-hash>` for each requested model and each variant — using the resolved commit hash
-(from the Ref Resolution step), not a wildcard. This ensures results match the current state, even if the base branch has advanced within the 7-day window.  If experiments exist for a
+During inference, query Langfuse for experiments matching `<dataset-name>__<model-id>__<variant-label>__<git-hash>__<item-scope>` for each requested model and each variant — using the resolved
+commit hash (from the Ref Resolution step), not a wildcard. The item-scope must match exactly (no wildcard) — `all` for full-dataset runs, or the specific item-scope hash for subset runs.
+This ensures results match the current state, even if the base branch has advanced within the 7-day window.  If experiments exist for a
 variant within a recent window (default: 7 days), that variant can be reused — skip running it again. The confirmation summary notes which variants are being reused and from when.
 
 If matching experiments are missing for any requested model or variant, or are older than the window, include those variants in the run.
@@ -166,10 +168,8 @@ python ~/repos/agentic-testing-framework/src/dataset_sync.py \
   --output-manifest "$WORK_DIR/manifest-after.json"
 ```
 
-The script prints sync progress logs to stdout, with the manifest file path as the **last line of stdout**. The `--output-manifest` flag writes a JSON file with per-item server timestamps
-— these manifests are passed to the execute phase to pin experiment runs to exact dataset state.
-
-For the full CLI interface — arguments, environment variables, exit codes, and output format — see [`references/dataset_sync_interface.md`](references/dataset_sync_interface.md).
+The manifest file contains per-item server timestamps from Langfuse, used by the execute phase to pin experiment runs to exact dataset state. For the full manifest file contract and CLI
+interface — arguments, environment variables, exit codes, and output format — see [`references/dataset_sync_interface.md`](references/dataset_sync_interface.md).
 
 ### Clean up temp files
 
@@ -214,7 +214,7 @@ For each variant spec:
    → iterate → retest scenario where the branch has been updated since the last run. Then fetch the skill from the (now up-to-date) git ref: `git show <ref>:<skill-path>/SKILL.md` and all
    files in the skill directory.
 2. **Create suffixed directory** in `~/.openclaw/workspace/eval-skills/<skill-name>-<label>-<7char-hash>-<4char-random>/`.
-   - Normalize the label to `[a-z0-9-]` before constructing the directory name: replace `/` with `-`, lowercase, and strip dots/underscores (e.g., `claw/vash/fix-xyz` → `claw-vash-fix-xyz`).
+   - Normalize the label before constructing the directory name: replace `/` with `_`, lowercase, and strip dots (e.g., `claw/vash/fix-xyz` → `claw_vash_fix-xyz`). Use `_` (not `-`) to replace slashes so the label doesn't merge with the `-`-separated directory components.
    - The 7-char hash is the short hash of the git ref being fetched (for collision prevention).
 3. **Copy all skill files** into the suffixed directory (preserving subdirectory structure — references/, scripts/, etc.).
 4. **Rewrite the `name:` field** in the copied `SKILL.md` frontmatter to match the suffixed directory name (e.g., `linear-create` → `linear-create-main-a1b2c3d-x7k2`).

@@ -34,14 +34,13 @@ items:
 
   - id: model-comparison-inference
     input: |
-      PR context:
+      Branch context:
       - Repo: brightfire/agentic-testing-framework
-      - PR branch: claw/vash/skill-model-comparison
-      - PR number: 42
+      - Branch: claw/vash/skill-model-comparison
       - Base branch: main
       - Files changed: skills/eval-runner/SKILL.md
 
-      User request: "Test this PR against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6."
+      User request: "Test this branch against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6."
     expected_output:
       behavior: |
         The agent runs variant inference with the model dimension added, runs the baseline recency check (no prior experiments, so baseline is included), and presents a
@@ -49,7 +48,7 @@ items:
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Variant Inference
-        - "Inference: identifies skill A/B — main (before) vs PR head (after)"
+        - "Inference: identifies skill A/B — main (before) vs branch head (after)"
         - "Inference: identifies two models — glm-5.2 and claude-sonnet-4-6"
         - "Inference: runs baseline recency check — no prior experiments found, baseline included for both models"
         - "Inference: recognizes the full matrix is 2 skill variants × 2 models = 4 runs"
@@ -63,27 +62,26 @@ items:
 
   - id: model-comparison-baseline-recent
     input: |
-      PR context:
+      Branch context:
       - Repo: brightfire/agentic-testing-framework
-      - PR branch: claw/vash/skill-model-comparison
-      - PR number: 42
+      - Branch: claw/vash/skill-model-comparison
       - Base branch: main
       - Files changed: skills/eval-runner/SKILL.md
 
       Prior runs: 2 baseline (before/main) experiments already exist in Langfuse for this dataset — one for glm-5.2 and one for claude-sonnet-4-6, both created 2 days ago.
 
-      User request: "Test this PR against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6."
+      User request: "Test this branch against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6."
     expected_output:
       behavior: |
         The agent runs variant inference with the model dimension, runs the baseline recency check and finds 2 recent baseline experiments — one per model. It skips the baseline
-        variant for both models — only the after (PR head) variant is included. The confirmation summary shows 1 skill variant × 2 models = 2 runs, with baseline status "already
+        variant for both models — only the after (branch head) variant is included. The confirmation summary shows 1 skill variant × 2 models = 2 runs, with baseline status "already
         tested, skipping" for both models.
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Variant Inference
         - "Inference: identifies two models — glm-5.2 and claude-sonnet-4-6"
         - "Inference: runs baseline recency check — finds 2 separate baseline experiments (one per model)"
-        - "Inference: skips baseline variant for both models — only after (PR head) is included"
+        - "Inference: skips baseline variant for both models — only after (branch head) is included"
         - "Inference: recognizes the reduced matrix is 1 skill variant × 2 models = 2 runs (not 4)"
         # Phase: Confirmation
         - "Confirmation: presents summary showing only after variant, both models, total run count (2)"
@@ -163,21 +161,20 @@ items:
 
   - id: model-ab-baseline-missing
     input: |
-      PR context:
+      Branch context:
       - Repo: brightfire/agentic-testing-framework
-      - PR branch: claw/vash/skill-model-comparison
-      - PR number: 42
+      - Branch: claw/vash/skill-model-comparison
       - Base branch: main
       - Files changed: skills/eval-runner/SKILL.md
 
       Prior runs: A previous eval was run as a re-run (after variant only, no baseline). No baseline (before/main) experiments exist in Langfuse for this dataset for any model.
 
-      User request: "Test this PR against glm-5.2 and claude-sonnet-4-6."
+      User request: "Test this branch against glm-5.2 and claude-sonnet-4-6."
     expected_output:
       behavior: |
         The agent runs variant inference with the model dimension, and runs the baseline recency check. It finds no baseline experiments for either model, so the baseline variant
-        is included for both. The confirmation summary shows the full 2×2 matrix: main×glm-5.2, main×claude-sonnet-4-6, pr-42×glm-5.2, pr-42×claude-sonnet-4-6 = 4 runs.
-        Baseline status notes "no prior baseline" for both models.
+        is included for both. The confirmation summary shows the full 2×2 matrix: main×glm-5.2, main×claude-sonnet-4-6, claw-vash-skill-model-comparison×glm-5.2,
+        claw-vash-skill-model-comparison×claude-sonnet-4-6 = 4 runs. Baseline status notes "no prior baseline" for both models.
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Variant Inference
@@ -303,15 +300,14 @@ items:
 
   - id: self-reference-abort
     input: |
-      PR context:
+      Branch context:
       - Repo: brightfire/agentic-testing-framework
-      - PR branch: claw/vash/skill-improvement
-      - PR number: 123
+      - Branch: claw/vash/skill-improvement
       - Base branch: main
       - Files changed: skills/eval-runner/SKILL.md
-      Note: The PR head version of skills/eval-runner/SKILL.md contains a self-reference in the body — line 42 says "This skill, eval-runner, handles..." (uses the skill name in prose).
+      Note: The branch head version of skills/eval-runner/SKILL.md contains a self-reference in the body — line 42 says "This skill, eval-runner, handles..." (uses the skill name in prose).
 
-      Inference completed: skill A/B (main vs PR head), single model, all dataset items. User has confirmed the summary.
+      Inference completed: skill A/B (main vs branch head), single model, all dataset items. User has confirmed the summary.
 
       Proceed with the eval.
     expected_output:
@@ -337,14 +333,13 @@ items:
 
   - id: new-eval-yaml
     input: |
-      PR context:
+      Branch context:
       - Repo: brightfire/agentic-testing-framework
-      - PR branch: claw/vash/add-eval-yaml
-      - PR number: 67
+      - Branch: claw/vash/add-eval-yaml
       - Base branch: main
       - Files changed: skills/eval-runner/eval.yaml (new file — does not exist on base branch)
 
-      User request: "Run only the sync phase for this PR."
+      User request: "Run only the sync phase for this branch."
     expected_output:
       behavior: |
         The agent attempts to extract the before version from main and finds it doesn't exist. It correctly handles this as a new eval definition: manifest_before is null, only the
@@ -361,16 +356,15 @@ items:
 
   - id: sync-failure-abort
     input: |
-      PR context:
+      Branch context:
       - Repo: brightfire/agentic-testing-framework
-      - PR branch: claw/vash/eval-yaml-update
-      - PR number: 78
+      - Branch: claw/vash/eval-yaml-update
       - Base branch: main
       - Files changed: skills/eval-runner/eval.yaml
 
       During sync, the "before" version sync failed — dataset_sync.py exited with code 1 and the output shows "LANGFUSE_SECRET_KEY not set".
 
-      User request: "Run only the sync phase for this PR."
+      User request: "Run only the sync phase for this branch."
     expected_output:
       behavior: |
         The agent recognizes the sync failure from the non-zero exit code, and aborts the sync phase. It does NOT attempt the after sync. It reports the error from the script
