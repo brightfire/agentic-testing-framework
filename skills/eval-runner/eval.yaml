@@ -265,25 +265,28 @@ items:
       - Base branch: main
 
       User request: "Re-run the previous eval for this PR."
+      The PR head has not changed since the previous eval. The user confirms they want to force a re-run.
     expected_output:
       behavior: |
-        The agent recognizes the re-run request, and skips variant inference + confirmation — reusing the previous variant spec directly. It proceeds to pre-flight checks, then
-        syncs ONLY the after version (PR head) — the baseline has not changed and does not need re-syncing or re-testing. It then sets up the env for the after variant.
+        The agent recognizes the re-run request and skips variant inference — reusing the previous variant spec directly. The recency check runs and finds that nothing has changed
+        since the prior run (same commit hash, all variants already tested). The agent indicates there are no changes and asks the user to confirm a forced re-run. The user confirms.
+        The agent proceeds to pre-flight checks, then syncs all variants that need re-execution (both baseline and after, since the user forced a full re-run). It then sets up the
+        env for all requested variants.
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Variant Inference (skipped)
         - "Inference: skips variant inference — reuses previous variant spec"
-        - "Inference: skips confirmation — proceeds straight to pre-flight"
+        - "Recency: runs the recency check and finds nothing has changed (same commit hash)"
+        - "Confirmation: indicates no changes since prior run and asks user to confirm forced re-run"
+        - "Confirmation: user confirms — agent proceeds to pre-flight"
         # Phase: Pre-flight
-        - "Pre-flight: fetches SKILL.md from the after git ref (PR head)"
+        - "Pre-flight: fetches SKILL.md from both git refs (base + PR head)"
         - "Pre-flight: scans for self-references, passes"
         # Phase: Sync
-        - "Sync: syncs ONLY the after version — does not re-sync the before/baseline version"
-        - "Sync: does not re-test the baseline unless user explicitly requests it"
-        - "Sync: uses --output-manifest for the after version sync"
+        - "Sync: syncs all variants for the forced re-run (both before and after versions)"
+        - "Sync: uses --output-manifest for both version syncs"
         # Phase: Env Setup
-        - "Env setup: creates suffixed directory for the after variant only"
-        - "Env setup: does not create a suffixed directory for the baseline/before variant"
+        - "Env setup: creates suffixed directories for all requested variants"
         - "Env setup: copies all files and rewrites name: field"
         # Phase: Execute (add criteria when implemented)
         # Phase: Report (add criteria when implemented)
