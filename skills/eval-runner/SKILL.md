@@ -309,11 +309,7 @@ Omit `--model` when using the agent's default model. Omit `--repeat` when the re
 
 #### 4. Filter to specific dataset items (if applicable)
 
-If the run matrix specifies specific dataset items (not all), pass `--item-id <item-id>` to the harness. The harness supports a single `--item-id` per invocation (partial match). For multiple specific items, either:
-- Run the harness once per item with `--item-id`, using the same base experiment name — the harness creates separate experiment runs with distinct timestamps. Use the item-scope hash for the full item set in the base experiment name for all runs.
-- Or run with all items and filter post-hoc in the report phase.
-
-The single-item-per-invocation limitation means the report phase must aggregate across multiple runs when filtering by multiple items. This is acceptable for now — the harness may be enhanced to accept multiple `--item-id` flags in the future.
+If the run matrix specifies specific dataset items (not all), pass `--item-id <item-id>` to the harness. The harness supports a single `--item-id` per invocation (partial match). For multiple specific items, run the harness once per item with `--item-id`, using the same base experiment name — the harness creates separate experiment runs with distinct timestamps. Use the item-scope hash for the full item set in the base experiment name for all runs.
 
 #### 5. Capture results
 

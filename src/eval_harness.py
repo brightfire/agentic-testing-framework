@@ -457,6 +457,12 @@ def main():
 
     if total_failed:
         log(f"Total failures: {total_failed}", "WARN")
+        # If every item across all runs failed, treat as a harness-level failure
+        total_items = sum(len(r.item_results) for r in all_results)
+        if total_failed >= total_items and total_items > 0:
+            log("All items failed — treating as execution failure (exit 1)", "ERROR")
+            langfuse_client.flush()
+            sys.exit(1)
     else:
         log("All items in all runs completed successfully.", "INFO")
 
