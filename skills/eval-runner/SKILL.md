@@ -124,9 +124,9 @@ First phase of the eval runner. Syncs eval definitions to Langfuse and captures 
 
 | Input | Source | Example |
 |-------|--------|--------|
-| Skill name | Variant specs from Variant Inference | `eval-runner` |
+| Skill name | Variant specs from Variant Inference | `linear-create` |
 | Variant specs | Variant Inference phase | `main@a1b2c3d`, `pr-123@e5f6g7h` |
-| eval.yaml path | Relative path within the repo | `skills/eval-runner/eval.yaml` |
+| eval.yaml path | Relative path within the repo | `skills/linear-create/eval.yaml` |
 
 ## Procedure
 
