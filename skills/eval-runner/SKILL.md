@@ -258,7 +258,7 @@ Third phase of the eval runner. Invokes the eval harness for each variant in the
 | Input | Source | Description |
 |-------|--------|-------------|
 | Dataset name | Sync phase output | Langfuse dataset name from eval.yaml |
-| Manifests | Sync phase output | Per-variant manifest paths (for future version pinning — see Limitations) |
+| Manifests | Sync phase output | Per-variant manifest paths (each pins the dataset version via --manifest) |
 | Suffixed skills | Env setup output | List of (suffixed skill name, directory path, variant label, git hash) |
 | Run matrix | Recency check output | Pruned list of (skill variant × model) combinations to execute |
 | Dataset items | Variant inference | All items or specific item IDs |
