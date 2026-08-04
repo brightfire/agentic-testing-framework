@@ -315,7 +315,7 @@ items:
 
       Inference, confirmation, pre-flight, sync, and env setup all completed successfully. The user confirmed the eval.
 
-      During the execute phase, the first harness invocation (variant A / main) crashed with exit code 1 and the error "LANGFUSE_SECRET_KEY not set". The second variant (pr-123) has not yet been attempted.
+      During the execute phase, the first harness invocation (variant A / main) crashed with exit code 1 and a Python traceback — the harness hit an unexpected error while spawning the `openclaw agent` subprocess for the first dataset item. The second variant (pr-123) has not yet been attempted.
     expected_output:
       behavior: |
         The agent detects the harness crash from the non-zero exit code. It immediately reports the failure to the originating channel as an error notification — including which variant failed, the error message, and the experiment name. It does NOT wait for the report phase. It then continues with the remaining variant (pr-123) rather than aborting the entire execute phase, since the failure is variant-specific (not systemic).
