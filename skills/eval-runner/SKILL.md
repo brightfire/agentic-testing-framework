@@ -173,7 +173,7 @@ After sync (the dataset must exist in Langfuse first) and before env setup/execu
 
 ### Procedure
 
-Run `evaluator_check.py` with the dataset name from the synced eval.yaml:
+Run `evaluator_check.py` for every distinct dataset name produced by the sync phase (before and after variants may use different dataset names if the eval.yaml was renamed). If any check fails, STOP — do not proceed to env setup or execute.
 
 ```bash
 source ~/.openclaw/secrets/langfuse.env 2>/dev/null

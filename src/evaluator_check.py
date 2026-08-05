@@ -100,10 +100,11 @@ def fetch_evaluation_rules(langfuse_host, auth_headers):
 
 
 def find_matching_rules(rules, dataset_id):
-    """Find enabled evaluation rules that target the given dataset.
+    """Find enabled experiment evaluation rules that target the given dataset.
 
     A rule matches if:
       - rule["enabled"] is True
+      - rule["target"] is "experiment" (trace/observation rules don't score dataset runs)
       - rule is not paused (status != "paused", if the field exists)
       - rule has no filters (applies to all datasets), OR
       - rule has a datasetId filter with operator "any of" (or no operator)
@@ -119,6 +120,9 @@ def find_matching_rules(rules, dataset_id):
     matching = []
     for rule in rules:
         if not rule.get("enabled", False):
+            continue
+        # Only experiment rules score dataset runs
+        if rule.get("target") != "experiment":
             continue
         # Defensive: skip paused rules if the field is present
         if rule.get("status") == "paused":

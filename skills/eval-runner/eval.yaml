@@ -572,8 +572,6 @@ items:
       - Base branch: main
       - Files changed: skills/eval-runner/SKILL.md
 
-      Inference, confirmation, pre-flight, and sync all completed successfully. The dataset was synced to Langfuse. User has confirmed the summary and the agent has proceeded through pre-flight and sync.
-
       Proceed with the eval.
     expected_output:
       behavior: |
