@@ -337,13 +337,13 @@ def main():
     )
     parser.add_argument(
         "--item-id", default=None,
-        help="Only run a specific dataset item by ID (partial match supported). Cannot be used with --manifest."
+        help="Only run a specific dataset item by ID (partial match supported). Can be used with --manifest to further filter manifest items, or with --dataset."
     )
     parser.add_argument(
         "--manifest", default=None,
         help="Path to a sync manifest JSON file (from dataset_sync.py --output-manifest). "
              "The manifest is the source of truth: dataset name, item IDs, and per-item "
-             "timestamps are read from it. Cannot be used with --dataset or --item-id."
+             "timestamps are read from it. Cannot be used with --dataset."
     )
     parser.add_argument(
         "--dry-run", action="store_true",
@@ -352,8 +352,8 @@ def main():
     args = parser.parse_args()
 
     # --- Validate mutual exclusivity ---
-    if args.manifest and (args.dataset or args.item_id):
-        log("--manifest cannot be used with --dataset or --item-id. The manifest is the source of truth.", "ERROR")
+    if args.manifest and args.dataset:
+        log("--manifest cannot be used with --dataset. The manifest is the source of truth.", "ERROR")
         sys.exit(1)
 
     if not args.manifest and not args.dataset:
@@ -413,6 +413,14 @@ def main():
         if missing:
             log(f"Warning: {len(missing)} manifest item IDs not found in dataset: {sorted(missing)}", "WARN")
         log(f"Filtered to {len(ds.items)}/{original_count} items from manifest")
+        # --- Further filter with --item-id if also provided ---
+        if args.item_id:
+            pre_filter_count = len(ds.items)
+            ds.items = [item for item in ds.items if args.item_id in item.id]
+            if not ds.items:
+                log(f"No dataset item matching '--item-id {args.item_id}' after manifest filter in dataset '{dataset_name}'.", "ERROR")
+                sys.exit(1)
+            log(f"--item-id '{args.item_id}' further filtered to {len(ds.items)}/{pre_filter_count} items")
     # --- Filter to specific item if --item-id is provided (no manifest) ---
     elif args.item_id:
         original_count = len(ds.items)
