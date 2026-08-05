@@ -167,7 +167,7 @@ Prepares the eval environment so the harness can run skill versions in isolation
 
 ### Procedure
 
-For each skill version, run the setup script:
+For each skill version:
 
 ```bash
 SUFFIXED_DIR=$(bash ~/repos/agentic-testing-framework/src/setup_eval_skill.sh \
@@ -175,8 +175,6 @@ SUFFIXED_DIR=$(bash ~/repos/agentic-testing-framework/src/setup_eval_skill.sh \
   --hash "<commit-hash>" \
   --label "<version-label>")
 ```
-
-The script handles: extracting the skill from the git ref via `git archive`, creating the suffixed directory in `~/.openclaw/workspace/eval-skills/<skill-name>-<label>-<7char-hash>-<4char-random>/`, copying all skill files (preserving subdirectory structure), and rewriting the `name:` field in the copied `SKILL.md` to match the suffixed directory name.
 
 ### Output
 
