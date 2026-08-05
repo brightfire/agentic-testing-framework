@@ -230,11 +230,8 @@ python ~/repos/agentic-testing-framework/src/eval_harness.py \
 
 Omit `--model` for the agent's default model. Always pass `--repeat` — default is 10 when inference doesn't specify a count.
 
-#### 4. Item filtering
 
-When using `--manifest`, items are already filtered at sync time. When sync was skipped (no manifest, using `--dataset`), pass `--item-id <item-id>` for subset runs.
-
-#### 5. Capture results
+#### 4. Capture results
 
 For each harness invocation, capture: completion status (exit 0 = success, non-zero = failure), per-item failures (harness logs `N failed items — indices: [...]` with item indices), and dataset run URL.
 
