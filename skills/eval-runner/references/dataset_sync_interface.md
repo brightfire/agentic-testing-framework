@@ -58,19 +58,12 @@ items:
     expected_output: <what a correct response looks like>
 ```
 
-## Manifest File Usage
+## Manifest File
 
-Manifest files contain the dataset name, per-item server timestamps from
-Langfuse, and an overall `synced_at` completion timestamp. The manifest is
-the **source of truth** for the eval harness:
-- The eval harness (`eval_harness.py`) accepts `--manifest <path>` which
-  reads the `dataset` field for the dataset name, the `items` list for
-  which items to run, and derives the dataset version from the max per-item
-  timestamp (not `synced_at`).
-- `--manifest` cannot be used with `--dataset` or `--item-id`.
-- `get_dataset(version=<max item timestamp>)` returns the dataset as it was
-  at that point in time.
-- `synced_at` is metadata for the user to know when the sync occurred; it
-  is not used by the harness.
-- Enables concurrent test runs without interference — each variant runs
-  against the exact dataset state from its own sync.
+When `--output-manifest <path>` is passed, a JSON file is written containing
+the dataset name, per-item server timestamps, and an overall `synced_at`
+completion timestamp. This file is passed to the eval harness via `--manifest`.
+
+The manifest is the source of truth for the harness — it determines the
+dataset name, which items to run, and the dataset version. `--manifest` is
+mutually exclusive with `--dataset` and `--item-id`.

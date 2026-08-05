@@ -152,7 +152,7 @@ manifests:
   ...
 ```
 
-Pass manifest paths to the execute phase — each pins the dataset state for its variant.
+Pass manifest paths to the execute phase.
 
 See [`references/gotchas.md`](references/gotchas.md) for Sync Phase error prevention.
 
@@ -184,7 +184,7 @@ Third phase of the eval runner. Invokes the eval harness for each variant in the
 | Input | Source | Description |
 |-------|--------|-------------|
 | Dataset name | Sync phase output | Langfuse dataset name from eval.yaml |
-| Manifests | Sync phase output | Per-variant manifest paths (each pins the dataset version via --manifest) |
+| Manifests | Sync phase output | Per-variant manifest paths (passed to the harness via --manifest) |
 | Suffixed skills | Env setup output | List of (suffixed skill name, directory path, variant label, git hash) |
 | Run matrix | Recency check output | Pruned list of (skill variant × model) combinations to execute |
 | Dataset items | Variant inference | All items or specific item IDs |
@@ -222,11 +222,13 @@ python ~/repos/agentic-testing-framework/src/eval_harness.py \
   --langfuse-host "http://10.18.32.57:3000"
 ```
 
-Omit `--model` for the agent's default model. Omit `--repeat` when count is 1. When sync produced a manifest, pass `--manifest` — the manifest is the source of truth: the harness reads the dataset name, item IDs, and per-item timestamps from it. `--manifest` cannot be used with `--dataset` or `--item-id`. When manifest is `null` (sync skipped), omit `--manifest` and pass `--dataset` explicitly — the harness loads the latest dataset state.
+Omit `--model` for the agent's default model. Omit `--repeat` when count is 1. When sync produced a manifest, pass `--manifest` — the manifest is the source of truth for the dataset and items. When manifest is `null` (sync skipped), omit `--manifest` and pass `--dataset` instead.
+
+`--manifest` and `--dataset` are mutually exclusive. Do not pass both.
 
 #### 4. Filter to specific dataset items (if applicable)
 
-When using `--manifest`, item filtering is handled automatically — the harness only runs the items listed in the manifest. When NOT using `--manifest` (sync was skipped), pass `--item-id <item-id>` to the harness (single item per invocation, partial match). For multiple specific items, run the harness once per item with `--item-id`. Each per-item invocation must use its own item-scope in the experiment name — the 8-char hash of the single item ID — not the hash of the full requested subset. This prevents incomplete subset runs from being reused as if the full subset ran.
+When using `--manifest`, item selection comes from the manifest. When using `--dataset` (no manifest), pass `--item-id <item-id>` for subset runs (single item per invocation, partial match). For multiple specific items, run the harness once per item with `--item-id`. Each per-item invocation must use its own item-scope in the experiment name — the 8-char hash of the single item ID — not the hash of the full requested subset.
 
 #### 5. Capture results
 
