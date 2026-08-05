@@ -121,8 +121,6 @@ Sync each skill version that remains after the Recency Check prunes the run matr
 
 Use `git show` to extract each version to a temp file.
 
-Normalize the version label to `[a-z0-9-]` before using it as a filename (replace `/` with `-`, lowercase, strip dots and underscores).
-
 ```bash
 WORK_DIR=$(mktemp -d /tmp/eval-sync.XXXXXX)
 git show "<skill-version-ref>:<eval-yaml-path>" > "$WORK_DIR/eval-<version-label>.yaml"
