@@ -55,6 +55,7 @@ After variant inference, pin all git refs to commit hashes so subsequent phases 
 1. Fetch and pin each ref to a commit hash: `git fetch origin "<ref>"` then `git rev-parse "origin/<ref>"` for branch refs. Commit hashes are used as-is.
 2. Replace the branch ref with the resolved commit hash in the variant spec.
 3. All subsequent phases (recency check, pre-flight, sync, env setup) use the pinned commit hash — never the branch name.
+4. Verify eval.yaml exists at each pinned commit: `git show "<hash>:<eval-yaml-path>"` — if it fails, exclude that skill version from the matrix (nothing to test).
 
 ## Recency Check
 
@@ -82,6 +83,7 @@ After inference and the recency check, present a summary of the pruned run matri
 - Models to test
 - Dataset items (all or specific ids)
 - For each variant: testing (new) or reused (from when — user can override and force re-run)
+- Excluded variants: skill versions where eval.yaml was not present at the commit (note which ref and that nothing can be tested)
 
 The user can **confirm** (proceed to pre-flight) or **adjust** (modify any dimension and re-confirm, re-running the recency check if variants change).
 
