@@ -412,12 +412,16 @@ def main():
     log(f"Found {len(existing)} items in Langfuse after upsert")
 
     # ── Determine archive candidates from fresh snapshot ────────────────
-    to_archive = existing_api_ids - yaml_api_ids
-
-    to_archive_active = {
-        api_id for api_id in to_archive
-        if existing.get(api_id, {}).get("status", "ACTIVE").upper() == "ACTIVE"
-    }
+    # Skip archiving when --items is used — partial syncs should not remove other DSIs
+    if args.items:
+        to_archive_active = set()
+        log("Skipping archive step (--items filter active)")
+    else:
+        to_archive = existing_api_ids - yaml_api_ids
+        to_archive_active = {
+            api_id for api_id in to_archive
+            if existing.get(api_id, {}).get("status", "ACTIVE").upper() == "ACTIVE"
+        }
 
     if not to_archive_active:
         if failed:
