@@ -30,6 +30,7 @@ import base64
 import os
 import sys
 from datetime import datetime, timezone
+from urllib.parse import quote
 
 import requests
 
@@ -61,7 +62,7 @@ def fetch_dataset_id(langfuse_host, auth_headers, dataset_name):
 
     Returns the dataset ID string, or None if not found.
     """
-    url = f"{langfuse_host}{API_BASE}/datasets/{dataset_name}"
+    url = f"{langfuse_host}{API_BASE}/datasets/{quote(dataset_name, safe='')}"
     resp = requests.get(url, headers=auth_headers, timeout=30)
     if resp.status_code == 404:
         return None
