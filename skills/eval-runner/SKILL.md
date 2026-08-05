@@ -81,8 +81,7 @@ After inference and the recency check, present a summary of the pruned run matri
 - Skill variants (name, git ref, short hash)
 - Models to test
 - Dataset items (all or specific ids)
-- Baseline status: included or skipped (with reason)
-- Reused variants: which variants are reused and from when (user can override and force re-run)
+- For each variant: testing (new) or reused (from when — user can override and force re-run)
 
 The user can **confirm** (proceed to pre-flight) or **adjust** (modify any dimension and re-confirm, re-running the recency check if variants change).
 
