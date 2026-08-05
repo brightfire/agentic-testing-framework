@@ -115,20 +115,20 @@ Syncs eval definitions to Langfuse and captures manifest paths needed by the exe
 
 ### Procedure
 
-#### Extract eval.yaml for each variant
+#### Extract eval.yaml for each skill version
 
-Sync every variant that remains after the Recency Check prunes the run matrix. For reruns, sync all variants if the user confirmed a forced re-run; otherwise only sync new or changed variants.
+Sync each skill version that remains after the Recency Check prunes the run matrix. For reruns, sync all skill versions if the user confirmed a forced re-run; otherwise only sync new or changed versions.
 
 Use `git show` to extract each version to a temp file.
 
-Normalize the variant label to `[a-z0-9-]` before using it as a filename (replace `/` with `-`, lowercase, strip dots and underscores).
+Normalize the version label to `[a-z0-9-]` before using it as a filename (replace `/` with `-`, lowercase, strip dots and underscores).
 
 ```bash
 WORK_DIR=$(mktemp -d /tmp/eval-sync.XXXXXX)
-git show "<variant-ref>:<eval-yaml-path>" > "$WORK_DIR/eval-<variant-label>.yaml"
+git show "<skill-version-ref>:<eval-yaml-path>" > "$WORK_DIR/eval-<version-label>.yaml"
 ```
 
-**Edge case — new eval.yaml:** If `git show` fails (file doesn't exist at that ref), skip sync for that variant. Its manifest entry is `null` — the execute phase handles this (fewer variants, use current dataset state as baseline). **Deleted eval.yaml:** If the file should exist but doesn't, flag it for human review.
+**Edge case — new eval.yaml:** If `git show` fails (file doesn't exist at that ref), skip sync for that skill version. Its manifest entry is `null` — the execute phase handles this. **Deleted eval.yaml:** If the file should exist but doesn't, flag it for human review.
 
 #### Sync each version to Langfuse
 
@@ -136,8 +136,8 @@ Run `dataset_sync.py` sequentially — concurrent syncs to the same dataset can 
 
 ```bash
 python ~/repos/agentic-testing-framework/src/dataset_sync.py \
-  --file "$WORK_DIR/eval-<variant-label>.yaml" \
-  --output-manifest "$WORK_DIR/manifest-<variant-label>.json"
+  --file "$WORK_DIR/eval-<version-label>.yaml" \
+  --output-manifest "$WORK_DIR/manifest-<version-label>.json"
 ```
 
 For the full manifest file contract and CLI interface, see [`references/dataset_sync_interface.md`](references/dataset_sync_interface.md).
@@ -153,9 +153,9 @@ dataset: <langfuse-dataset-name from eval.yaml>
 skill: <skill-name>
 eval_yaml_path: <path within repo>
 manifests:
-  - variant: <variant-label>
+  - version: <version-label>
     ref: <git-hash>
-    manifest: <path to manifest-<variant-label>.json or null if skipped>
+    manifest: <path to manifest-<version-label>.json or null if skipped>
   ...
 ```
 
