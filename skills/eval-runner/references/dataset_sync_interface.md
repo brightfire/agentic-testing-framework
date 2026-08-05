@@ -38,6 +38,6 @@ python src/dataset_sync.py --file <path-to-eval.yaml> [options]
 | 0 | Success (manifest file path printed to stdout) |
 | 1 | Failure (missing env vars, file not found, YAML parse error, or item operation failures) |
 
-Note: `--dry-run` always exits 0 without making API calls.
+Note: `--dry-run` makes read-only API calls to preview changes but does not write.
 
 
