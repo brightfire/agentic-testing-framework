@@ -110,14 +110,15 @@ Syncs eval definitions to Langfuse and captures manifest paths needed by the exe
 | Input | Source | Example |
 |-------|--------|--------|
 | Skill name | Variant specs from Variant Inference | `linear-create` |
-| Variant specs | Variant Inference phase | `main@a1b2c3d`, `pr-123@e5f6g7h` |
+| Skill versions | Variant Inference phase | `main@a1b2c3d`, `pr-123@e5f6g7h` |
 | eval.yaml path | Relative path within the repo | `skills/linear-create/eval.yaml` |
+| Dataset items | Variant Inference (which DSIs to test) | `item-1,item-2` or all |
 
 ### Procedure
 
 #### Extract eval.yaml for each skill version
 
-Sync each skill version that remains after the Recency Check prunes the run matrix. For reruns, sync all skill versions if the user confirmed a forced re-run; otherwise only sync new or changed versions.
+Sync each skill version that remains after the Recency Check prunes the run matrix, filtered to the DSIs selected during inference. For reruns, sync all skill versions if the user confirmed a forced re-run; otherwise only sync new or changed versions.
 
 Use `git show` to extract each version to a temp file and pass it to `dataset_sync.py`.
 
@@ -136,11 +137,11 @@ Run `dataset_sync.py` sequentially — concurrent syncs to the same dataset can 
 MANIFEST_FILE=$(mktemp)
 python ~/repos/agentic-testing-framework/src/dataset_sync.py \
   --file "$EVAL_FILE" \
-  --items "<comma-separated-item-ids>" \
+  --items "<comma-separated-item-ids from inference>" \
   --output-manifest "$MANIFEST_FILE"
 ```
 
-Omit `--items` when syncing all DSIs. Capture `$MANIFEST_FILE` — the execute phase needs it.
+Omit `--items` when inference selected all DSIs. Capture `$MANIFEST_FILE` — the execute phase needs it.
 
 For the full manifest file contract and CLI interface, see [`references/dataset_sync_interface.md`](references/dataset_sync_interface.md).
 
@@ -234,9 +235,9 @@ Omit `--model` for the agent's default model. Omit `--repeat` when count is 1. W
 
 `--manifest` and `--dataset` are mutually exclusive. Do not pass both.
 
-#### 4. Filter to specific dataset items (if applicable)
+#### 4. Item filtering
 
-When using `--dataset` (no manifest), pass `--item-id <item-id>` for subset runs (single item per invocation, partial match). For multiple specific items, run the harness once per item with `--item-id`. Each per-item invocation must use its own item-scope in the experiment name — the 8-char hash of the single item ID.
+When using `--manifest`, items are already filtered at sync time. When sync was skipped (no manifest, using `--dataset`), pass `--item-id <item-id>` for subset runs.
 
 #### 5. Capture results
 
