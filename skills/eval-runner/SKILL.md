@@ -74,8 +74,6 @@ Count the run names on stdout. If the count meets the requested repeat count, pr
 
 Exit 1 = script error. Report and stop.
 
-If nothing changed since the last run (same commit hash), ask the user to confirm force re-run.
-
 ## Confirmation
 
 After inference and the recency check, present a summary of the pruned run matrix and wait for user confirmation:
