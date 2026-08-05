@@ -192,12 +192,10 @@ Invokes the eval harness for each variant in the pruned run matrix, directing th
 
 | Input | Source | Description |
 |-------|--------|-------------|
-| Dataset name | Sync phase output | Langfuse dataset name from eval.yaml |
-| Manifests | Sync phase output | Per-variant manifest paths (passed to the harness via --manifest) |
-| Suffixed skills | Env setup output | List of (suffixed skill name, directory path, variant label, git hash) |
+| Manifests | Sync phase output | Per-skill-version manifest paths (passed to harness via --manifest) |
+| Suffixed skills | Env setup output | Suffixed skill names (for the attestation prefix) |
 | Run matrix | Recency check output | Pruned list of (skill variant × model) combinations to execute |
-| Dataset items | Variant inference | All items or specific item IDs |
-| Repeat count | User request or default | Number of repeats per variant (default: 1) |
+| Repeat count | User request or default | Number of repeats per variant (default: 10) |
 
 ### Procedure
 
@@ -227,13 +225,10 @@ python ~/repos/agentic-testing-framework/src/eval_harness.py \
   --run-name "<base-experiment-name>" \
   --prompt-prefix "Read the <suffixed-skill-name> skill from available_skills. When you respond, the first line of the response must be the path of the skill you read. Then, " \
   --model "<model-id>" \
-  --repeat "<repeat-count>" \
-  --langfuse-host "http://localhost:3000"
+  --repeat "<repeat-count>"
 ```
 
-Omit `--model` for the agent's default model. Omit `--repeat` when count is 1. When sync produced a manifest, pass `--manifest` — the manifest is the source of truth for the dataset and items. When manifest is `null` (sync skipped), omit `--manifest` and pass `--dataset` instead.
-
-`--manifest` and `--dataset` are mutually exclusive. Do not pass both.
+Omit `--model` for the agent's default model. Default repeat count is 10 — only specify `--repeat` when the user requests a different count.
 
 #### 4. Item filtering
 
