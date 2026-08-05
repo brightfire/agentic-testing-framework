@@ -40,14 +40,4 @@ python src/dataset_sync.py --file <path-to-eval.yaml> [options]
 
 Note: `--dry-run` always exits 0 without making API calls.
 
-## eval.yaml Schema
-
-```yaml
-dataset: <langfuse-dataset-name>
-description: <human-readable description of the eval>
-items:
-  - id: <unique-string-id>
-    input: <prompt text sent to the agent>
-    expected_output: <what a correct response looks like>
-```
 
