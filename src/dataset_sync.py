@@ -341,8 +341,10 @@ def main():
     if args.items:
         requested_ids = set(id.strip() for id in args.items.split(",") if id.strip())
         yaml_items = [item for item in yaml_items if item["id"] in requested_ids]
-        if not yaml_items:
-            log(f"No items in eval.yaml match the requested IDs: {sorted(requested_ids)}", "ERROR")
+        matched_ids = {item["id"] for item in yaml_items}
+        missing_ids = requested_ids - matched_ids
+        if missing_ids:
+            log(f"Requested item IDs not found in eval.yaml: {sorted(missing_ids)}", "ERROR")
             sys.exit(1)
         log(f"Filtered to {len(yaml_items)} requested item(s): {[item['id'] for item in yaml_items]}")
 
