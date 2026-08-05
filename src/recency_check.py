@@ -76,6 +76,21 @@ def parse_since(since_str):
 # ── API calls ────────────────────────────────────────────────────────────────
 
 
+def dataset_exists(langfuse_host, auth_header, dataset):
+    """Check if a dataset exists in Langfuse via GET /api/public/datasets/{name}."""
+    url = f"{langfuse_host}{API_BASE}/datasets/{dataset}"
+    resp = requests.get(
+        url,
+        headers={"Authorization": f"Basic {auth_header}"},
+        timeout=30,
+    )
+    if resp.status_code == 200:
+        return True
+    if resp.status_code == 404:
+        return False
+    raise RuntimeError(f"Langfuse API error {resp.status_code} checking dataset existence: {resp.text}")
+
+
 def fetch_dataset_runs(langfuse_host, auth_header, dataset, filter_prefix, cutoff_ts):
     """Fetch dataset runs from Langfuse, paginating and filtering by name prefix and cutoff.
 
@@ -98,10 +113,6 @@ def fetch_dataset_runs(langfuse_host, auth_header, dataset, filter_prefix, cutof
             headers={"Authorization": f"Basic {auth_header}"},
             timeout=30,
         )
-        if resp.status_code == 404:
-            # Dataset doesn't exist yet — no prior runs
-            log(f"Dataset '{dataset}' not found (404) — treating as no prior runs")
-            return []
         if resp.status_code != 200:
             raise RuntimeError(f"Langfuse API error {resp.status_code} fetching dataset runs: {resp.text}")
         data = resp.json()
@@ -215,6 +226,15 @@ def main():
     cutoff_ts = datetime.now(timezone.utc) - delta
     log(f"Cutoff: {cutoff_ts.strftime('%Y-%m-%dT%H:%M:%SZ')} (since={args.since})")
     log(f"Dataset: {args.dataset}, filter prefix: '{args.filter} - '")
+
+    # Check dataset exists
+    try:
+        if not dataset_exists(args.langfuse_host, auth_header, args.dataset):
+            log(f"Dataset '{args.dataset}' does not exist — no prior runs")
+            sys.exit(0)
+    except Exception as e:
+        log(f"Error checking dataset existence: {e}", "ERROR")
+        sys.exit(1)
 
     # Fetch matching runs
     try:
