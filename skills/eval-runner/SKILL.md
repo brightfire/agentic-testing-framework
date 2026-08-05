@@ -50,7 +50,7 @@ The harness appends ` - <timestamp>` and optionally ` - <run_idx>/<total>` for r
 
 ## Ref Resolution
 
-After variant inference, pin all git refs to commit hashes so subsequent phases use a fixed snapshot:
+After variant inference (and before the recency check), pin all git refs to commit hashes so subsequent phases use a fixed snapshot. For reruns, ref re-resolution happens after skipping variant inference but before the recency check — reruns still need fresh commit hashes:
 
 1. Fetch and pin each ref to a commit hash: `git fetch origin "<ref>"` then `git rev-parse "origin/<ref>"` for branch refs. For explicit commit hashes, `git fetch origin "<hash>"` ensures the commit is present locally.
 2. Replace the branch ref with the resolved commit hash in the variant spec.
@@ -88,7 +88,7 @@ After inference and the recency check, present a summary of the pruned run matri
 
 The user can **confirm** (proceed to pre-flight) or **adjust** (modify any dimension and re-confirm, re-running the recency check if variants change).
 
-For reruns ("run same test again"), the skill skips variant inference — the user is confirming the previous variant set. The recency check still runs; if nothing changed, ask the user to confirm force re-run. On confirmation, restore all pruned combinations to the matrix.
+For reruns ("run same test again"), the skill skips variant inference — the user is confirming the previous variant set. However, before the recency check, **re-resolve all git refs** (re-fetch and re-pin commit hashes for each variant). If any ref has changed since the previous run, treat it as a new variant — inform the user that the branch has advanced, update the variant spec with the new hash, and proceed with the updated commit (not the stale one). Only if all refs are unchanged should the recency check proceed against the existing experiment names. If nothing changed and all variants already have sufficient runs, ask the user to confirm a forced re-run. On confirmation, restore all pruned combinations to the matrix.
 
 ## Pre-flight Checks
 
