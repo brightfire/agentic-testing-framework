@@ -215,7 +215,7 @@ For model A/B tests (Slack-triggered, single skill variant), the same suffixed s
 
 #### 3. Invoke the harness
 
-Run `eval_harness.py` for each (skill variant × model) combination. Run sequentially by default to avoid gateway overload.
+Run `eval_harness.py` for each (skill variant × model) combination. Run sequentially by default to avoid gateway overload. Skip combinations whose sync manifest is `null` (no eval.yaml at that ref).
 
 ```bash
 source ~/.openclaw/secrets/langfuse.env 2>/dev/null
@@ -228,7 +228,7 @@ python ~/repos/agentic-testing-framework/src/eval_harness.py \
   --repeat "<repeat-count>"
 ```
 
-Omit `--model` for the agent's default model. Always pass `--repeat` — default is 10 when inference doesn't specify a count.
+Omit `--model` for the agent's default model. Always pass `--repeat` — default is 10 when inference doesn't specify a count. If recency found existing runs, subtract them from the repeat count (e.g., 10 requested, 4 found → `--repeat 6`).
 
 
 #### 4. Capture results

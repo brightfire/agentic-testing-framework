@@ -98,6 +98,10 @@ def fetch_dataset_runs(langfuse_host, auth_header, dataset, filter_prefix, cutof
             headers={"Authorization": f"Basic {auth_header}"},
             timeout=30,
         )
+        if resp.status_code == 404:
+            # Dataset doesn't exist yet — no prior runs
+            log(f"Dataset '{dataset}' not found (404) — treating as no prior runs")
+            return []
         if resp.status_code != 200:
             raise RuntimeError(f"Langfuse API error {resp.status_code} fetching dataset runs: {resp.text}")
         data = resp.json()
