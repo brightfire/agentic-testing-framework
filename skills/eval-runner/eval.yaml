@@ -302,6 +302,41 @@ items:
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
 
+  - id: rerun-branch-advanced
+    input: |
+      PR context:
+      - Repo: brightfire/agentic-testing-framework
+      - PR branch: claw/vash/skill-improvement
+      - PR number: 123
+      - Base branch: main
+
+      User request: "Re-run the previous eval for this PR."
+      The previous eval ran against PR head commit a1b2c3d. Since then, the PR branch has advanced — the current PR head is now e5f6g7h (2 new commits pushed to the branch).
+    expected_output:
+      behavior: |
+        The agent recognizes the re-run request and skips variant inference — reusing the previous variant spec. Before the recency check, it re-resolves all git refs
+        by re-fetching and re-pinning commit hashes for each variant. It detects that the PR head has advanced from a1b2c3d to e5f6g7h. The agent informs the user that the
+        PR head has advanced from a1b2c3d to e5f6g7h, updates the variant spec with the new hash, and proceeds with the updated commit. The recency check runs against the
+        new hash e5f6g7h — since no prior experiments exist for this commit, the new variant is included in the run matrix without needing a forced-rerun confirmation. The
+        base variant (main) ref is unchanged and its recency check proceeds normally against existing experiment names.
+      scoring_type: pass_fail
+      scoring_criteria:
+        # Phase: Variant Inference (skipped)
+        - "Inference: skips variant inference — reuses previous variant spec"
+        # Phase: Ref Resolution
+        - "Ref Resolution: re-resolves all git refs before the recency check (re-fetches and re-pins commit hashes)"
+        - "Ref Resolution: detects that the PR head has advanced from a1b2c3d to e5f6g7h"
+        - "Ref Resolution: informs the user that the PR head has advanced from a1b2c3d to e5f6g7h"
+        - "Ref Resolution: updates the variant spec with the new hash e5f6g7h (does NOT reuse the stale hash a1b2c3d)"
+        # Phase: Recency Check
+        - "Recency: runs recency check against the new hash e5f6g7h (not the old hash a1b2c3d)"
+        - "Recency: new variant (e5f6g7h) has no prior experiments — included in the run matrix"
+        - "Recency: does NOT ask the user to confirm a forced re-run (the new hash is a genuinely new variant)"
+        # Phase: Confirmation
+        - "Confirmation: presents summary with updated PR head hash (e5f6g7h) and notes the branch advancement"
+      scoring_rules: |
+        Score 10 * (passed criteria / total criteria).
+
   # ─── Execute phase edge cases ──────────────────────────────────────
 
   - id: execute-harness-crash
