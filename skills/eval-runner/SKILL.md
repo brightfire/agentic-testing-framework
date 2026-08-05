@@ -87,6 +87,7 @@ After inference and the recency check, present a summary of the pruned run matri
 - Dataset items (all or specific ids)
 - For each variant: testing (new) or reused (from when — user can override and force re-run)
 - Excluded variants: skill versions where eval.yaml was not present at the commit (note which ref and that nothing can be tested)
+- Note: an evaluator check will run after sync to verify that at least one evaluator is configured for the dataset in Langfuse
 
 The user can **confirm** (proceed to pre-flight) or **adjust** (modify any dimension and re-confirm, re-running the recency check if variants change).
 
@@ -165,6 +166,32 @@ manifests:
 Pass manifest paths to the execute phase.
 
 See [`references/gotchas.md`](references/gotchas.md) for Sync Phase error prevention.
+
+## Evaluator Check
+
+After sync (the dataset must exist in Langfuse first) and before env setup/execute (to avoid wasted work), verify that at least one enabled evaluator is configured for the dataset in Langfuse.
+
+### Why
+
+The eval harness runs successfully even when no evaluator is configured — the dataset items execute, traces are created, but no scores are applied. This wastes time and tokens on unscored runs. Catching this early prevents the entire execute phase from running pointlessly.
+
+### Procedure
+
+Run `evaluator_check.py` with the dataset name from the synced eval.yaml:
+
+```bash
+source ~/.openclaw/secrets/langfuse.env 2>/dev/null
+
+python ~/repos/agentic-testing-framework/src/evaluator_check.py \
+  --dataset "<dataset-name>"
+```
+
+- **If the check passes (exit 0):** at least one enabled evaluation rule targets the dataset. Proceed to Environment Setup.
+- **If the check fails (exit 1):** no enabled evaluator is configured for the dataset. STOP — do not proceed to env setup or execute. Report to the user that no evaluator is configured and they need to set one up in the Langfuse UI before re-running.
+
+### Output
+
+On success, logs the matching rule name(s) and evaluator name(s) to stderr. On failure, prints a clear error message naming the dataset and instructing the user to configure an evaluator in the Langfuse UI.
 
 ## Environment Setup Phase
 
