@@ -169,7 +169,7 @@ See [`references/gotchas.md`](references/gotchas.md) for Sync Phase error preven
 
 ## Evaluator Check
 
-After sync (the dataset must exist in Langfuse first) and before env setup/execute (to avoid wasted work), verify that at least one enabled evaluator is configured for the dataset in Langfuse. Skip this check for sync-only runs that will not proceed to execute.
+After sync (the dataset must exist in Langfuse first) and before env setup/execute (to avoid wasted work), verify that at least one enabled evaluator is configured for the dataset in Langfuse. This check always runs after sync — lack of evaluators means the dataset is not ready for eval and should fail regardless of whether execute is intended.
 
 ### Procedure
 
