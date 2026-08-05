@@ -4,7 +4,7 @@ Recency Check — list recent Langfuse dataset runs matching a filter prefix.
 
 Queries Langfuse for dataset runs whose names start with a given filter prefix,
 optionally restricted to a time window (--since), and optionally filtered to
-only include runs that have scores when a minimum pass-percent threshold is met.
+only include runs where at least --min-pass-percent of items have a score > 0.
 
 Output is one run name per line on stdout (machine-consumable). All logging
 goes to stderr.
@@ -125,10 +125,14 @@ def fetch_dataset_runs(langfuse_host, auth_header, dataset, filter_prefix, cutof
     return matching_runs
 
 
-def run_has_scores(langfuse_host, auth_header, run_id):
-    """Check if a dataset run has any scores by querying the scores API with limit=1."""
-    url = f"{langfuse_host}{API_BASE}/scores"
-    params = {"datasetRunId": run_id, "limit": 1}
+def fetch_run_items(langfuse_host, auth_header, dataset_id, run_name):
+    """Fetch dataset run items to get the trace IDs for each item in the run.
+
+    Uses GET /api/public/dataset-run-items?datasetId=X&runName=Y.
+    Returns a list of dicts, each with at least 'traceId' and 'datasetItemId'.
+    """
+    url = f"{langfuse_host}{API_BASE}/dataset-run-items"
+    params = {"datasetId": dataset_id, "runName": run_name, "limit": PAGE_LIMIT}
     resp = requests.get(
         url,
         params=params,
@@ -136,11 +140,38 @@ def run_has_scores(langfuse_host, auth_header, run_id):
         timeout=30,
     )
     if resp.status_code != 200:
-        raise RuntimeError(f"Langfuse API error {resp.status_code} fetching scores for run {run_id}: {resp.text}")
+        raise RuntimeError(
+            f"Langfuse API error {resp.status_code} fetching run items for '{run_name}': {resp.text}"
+        )
     data = resp.json()
-    meta = data.get("meta", {})
-    total_items = meta.get("totalItems", 0)
-    return total_items > 0
+    return data.get("data", [])
+
+
+def check_item_scored(langfuse_host, auth_header, trace_id):
+    """Check if a single item (by trace ID) has a score > 0 via the v3 scores API.
+
+    Returns True if the item has at least one score with value > 0, False otherwise
+    (including if no scores exist at all).
+    """
+    url = f"{langfuse_host}{API_BASE}/v3/scores"
+    params = {"traceId": trace_id, "limit": 50}
+    resp = requests.get(
+        url,
+        params=params,
+        headers={"Authorization": f"Basic {auth_header}"},
+        timeout=30,
+    )
+    if resp.status_code != 200:
+        raise RuntimeError(
+            f"Langfuse API error {resp.status_code} fetching scores for trace {trace_id}: {resp.text}"
+        )
+    data = resp.json()
+    scores = data.get("data", [])
+    for score in scores:
+        value = score.get("value")
+        if isinstance(value, (int, float)) and value > 0:
+            return True
+    return False
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
@@ -153,7 +184,7 @@ def main():
     parser.add_argument("--dataset", required=True, help="Langfuse dataset name")
     parser.add_argument("--filter", required=True, help="Experiment name prefix to match")
     parser.add_argument("--since", default=DEFAULT_SINCE, help="How far back to look (e.g. 7d, 24h, 2w). Default: 7d")
-    parser.add_argument("--min-pass-percent", type=float, default=None, help="Minimum %% of runs with scores to qualify the group (0-100)")
+    parser.add_argument("--min-pass-percent", type=float, default=None, help="Minimum %% of items with score > 0 to include a run (0-100)")
     parser.add_argument("--langfuse-host", default=DEFAULT_LANGFUSE_HOST, help="Langfuse host URL")
     args = parser.parse_args()
 
@@ -196,33 +227,42 @@ def main():
         # No matches — print nothing, exit 0
         sys.exit(0)
 
-    # If min-pass-percent is specified, check scored status
+    # If min-pass-percent is specified, check per-item score status
     if args.min_pass_percent is not None:
-        scored_runs = []
-        unscored_count = 0
+        passed_runs = []
         for run in matching_runs:
             run_id = run.get("id", "")
+            run_name = run.get("name", "")
+            dataset_id = run.get("datasetId", "")
+            if not dataset_id or not run_name:
+                log(f"Run {run_id} missing datasetId or name, skipping", "WARN")
+                continue
             try:
-                has_scores = run_has_scores(args.langfuse_host, auth_header, run_id)
+                items = fetch_run_items(args.langfuse_host, auth_header, dataset_id, run_name)
             except Exception as e:
-                log(f"Error checking scores for run {run_id}: {e}", "ERROR")
+                log(f"Error fetching run items for '{run_name}': {e}", "ERROR")
                 sys.exit(1)
-            if has_scores:
-                scored_runs.append(run)
-            else:
-                unscored_count += 1
+            if not items:
+                log(f"Run '{run_name}' has no items, excluding", "WARN")
+                continue
+            passed = 0
+            for item in items:
+                trace_id = item.get("traceId", "")
+                if not trace_id:
+                    continue
+                try:
+                    if check_item_scored(args.langfuse_host, auth_header, trace_id):
+                        passed += 1
+                except Exception as e:
+                    log(f"Error checking score for trace {trace_id}: {e}", "ERROR")
+                    sys.exit(1)
+            total = len(items)
+            pass_pct = (passed / total * 100) if total > 0 else 0
+            log(f"Run '{run_name}': {passed}/{total} items passed ({pass_pct:.1f}%)")
+            if pass_pct >= args.min_pass_percent:
+                passed_runs.append(run)
 
-        total = len(matching_runs)
-        scored_count = len(scored_runs)
-        scored_pct = (scored_count / total) * 100 if total > 0 else 0
-        log(f"Scored: {scored_count}/{total} ({scored_pct:.1f}%), threshold: {args.min_pass_percent}%")
-
-        if scored_pct < args.min_pass_percent:
-            log(f"Pass percent {scored_pct:.1f}% below threshold {args.min_pass_percent}%, suppressing output", "INFO")
-            sys.exit(0)
-
-        # Output only scored runs
-        for run in scored_runs:
+        for run in passed_runs:
             print(run.get("name", ""))
     else:
         # No threshold — output all matching runs
