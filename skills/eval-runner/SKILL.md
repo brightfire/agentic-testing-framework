@@ -58,9 +58,7 @@ After variant inference, pin all git refs to commit hashes so subsequent phases 
 
 ## Recency Check
 
-After inference and ref resolution, check Langfuse for matching experiment results and prune combinations with recent results.
-
-Run `recency_check.py` for each (skill variant × model) combination:
+After ref resolution, run `recency_check.py` for each (skill variant × model) combination:
 
 ```bash
 source ~/.openclaw/secrets/langfuse.env 2>/dev/null
@@ -70,16 +68,13 @@ python ~/repos/agentic-testing-framework/src/recency_check.py \
   --filter "<base-experiment-name>"
 ```
 
-`--filter` is the full base experiment name following the naming convention (e.g. `linear-create-eval__openrouter-z-ai-glm-5.2__pr-123__e5f6g7h__all`). The script automatically appends ` - ` for prefix matching against run names — do not include the harness-added ` - <timestamp>` suffix.
+`--filter` is the full base experiment name from the naming convention above. Do not include the harness-added ` - <timestamp>` suffix.
 
-**Interpreting output:**
-- **Empty stdout** → no matching runs found; include this combination in the run matrix.
-- **Run names on stdout** → recent runs exist. Count them to determine reuse vs. needing more: if the user requests 25 repeats and 10 matching runs exist, only 15 more are needed.
-- **Exit 1** → script error (not "no matches"). Report the error and stop.
+Count the run names on stdout. If the count meets the requested repeat count, prune the combination from the matrix. If fewer runs exist than requested, only the difference needs to run. Empty stdout means no existing runs — include the combination.
 
-Prune combinations that have sufficient recent runs from the matrix. Note reused variants and their run count in the confirmation summary.
+Exit 1 = script error. Report and stop.
 
-If nothing changed since the last run (same commit hash), tell the user and ask to confirm force re-run. If user confirms, prior results are excluded and all variants execute.
+If nothing changed since the last run (same commit hash), ask the user to confirm force re-run.
 
 ## Confirmation
 
