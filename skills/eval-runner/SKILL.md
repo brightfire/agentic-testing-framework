@@ -214,20 +214,19 @@ Run `eval_harness.py` for each (skill variant × model) combination. Run sequent
 source ~/.openclaw/secrets/langfuse.env 2>/dev/null
 
 python ~/repos/agentic-testing-framework/src/eval_harness.py \
-  --dataset "<dataset-name>" \
+  --manifest "<path-to-manifest-from-sync-phase>" \
   --run-name "<base-experiment-name>" \
   --prompt-prefix "Read the <suffixed-skill-name> skill from available_skills. When you respond, the first line of the response must be the path of the skill you read. Then, " \
-  --manifest "<path-to-manifest-from-sync-phase>" \
   --model "<model-id>" \
   --repeat "<repeat-count>" \
   --langfuse-host "http://localhost:3000"
 ```
 
-Omit `--model` for the agent's default model. Omit `--repeat` when count is 1. Pass `--manifest` when sync produced one — the harness reads `synced_at` and pins the dataset to that state. When manifest is `null`, omit `--manifest` — the harness loads the latest dataset state.
+Omit `--model` for the agent's default model. Omit `--repeat` when count is 1. When sync produced a manifest, pass `--manifest` — the manifest is the source of truth: the harness reads the dataset name, item IDs, and per-item timestamps from it. `--manifest` cannot be used with `--dataset` or `--item-id`. When manifest is `null` (sync skipped), omit `--manifest` and pass `--dataset` explicitly — the harness loads the latest dataset state.
 
 #### 4. Filter to specific dataset items (if applicable)
 
-Pass `--item-id <item-id>` to the harness (single item per invocation, partial match). For multiple specific items, run the harness once per item with `--item-id`. Each per-item invocation must use its own item-scope in the experiment name — the 8-char hash of the single item ID — not the hash of the full requested subset. This prevents incomplete subset runs from being reused as if the full subset ran.
+When using `--manifest`, item filtering is handled automatically — the harness only runs the items listed in the manifest. When NOT using `--manifest` (sync was skipped), pass `--item-id <item-id>` to the harness (single item per invocation, partial match). For multiple specific items, run the harness once per item with `--item-id`. Each per-item invocation must use its own item-scope in the experiment name — the 8-char hash of the single item ID — not the hash of the full requested subset. This prevents incomplete subset runs from being reused as if the full subset ran.
 
 #### 5. Capture results
 
