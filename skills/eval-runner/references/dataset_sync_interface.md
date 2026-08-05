@@ -16,6 +16,7 @@ python src/dataset_sync.py --file <path-to-eval.yaml> [options]
 | `--langfuse-host` | No | `http://10.18.32.57:3000` | Langfuse host URL |
 | `--dry-run` | No | `False` | Parse and show what would be synced without API calls |
 | `--output-manifest` | No | — | Write a JSON manifest file (per-item timestamps) at the given path after sync |
+| `--items` | No | — | Comma-separated list of item IDs to sync. Only these items are upserted and included in the manifest. If omitted, all items in eval.yaml are synced. |
 
 ### Environment Variables
 
