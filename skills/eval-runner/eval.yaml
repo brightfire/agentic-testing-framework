@@ -273,15 +273,17 @@ items:
       The PR head has not changed since the previous eval. The user confirms they want to force a re-run.
     expected_output:
       behavior: |
-        The agent recognizes the re-run request and skips variant inference — reusing the previous variant spec directly. The recency check runs and finds that nothing has changed
-        since the prior run (same commit hash, all variants already tested). The agent indicates there are no changes and asks the user to confirm a forced re-run. The user confirms.
+        The agent recognizes the re-run request and skips variant inference — reusing the previous variant spec directly. Ref resolution always runs for branch refs, so the
+        agent re-fetches and re-pins all branch refs. The recency check runs against the resolved hashes and finds that nothing has changed since the prior run (same commit hash,
+        all variants already tested). The agent indicates there are no changes and asks the user to confirm a forced re-run. The user confirms.
         The agent proceeds to pre-flight checks, then syncs all variants that need re-execution (both baseline and after, since the user forced a full re-run). It then sets up the
         env for all requested variants.
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Variant Inference (skipped)
         - "Inference: skips variant inference — reuses previous variant spec"
-        - "Recency: runs the recency check and finds nothing has changed (same commit hash)"
+        - "Ref Resolution: always runs for branch refs — re-fetches and re-pins commit hashes even though this is a rerun"
+        - "Recency: runs the recency check against resolved hashes and finds nothing has changed (same commit hash)"
         - "Confirmation: indicates no changes since prior run and asks user to confirm forced re-run"
         - "Confirmation: user confirms — agent proceeds to pre-flight"
         # Phase: Pre-flight
@@ -314,17 +316,17 @@ items:
       The previous eval ran against PR head commit a1b2c3d. Since then, the PR branch has advanced — the current PR head is now e5f6g7h (2 new commits pushed to the branch).
     expected_output:
       behavior: |
-        The agent recognizes the re-run request and skips variant inference — reusing the previous variant spec. Before the recency check, it re-resolves all git refs
-        by re-fetching and re-pinning commit hashes for each variant. It detects that the PR head has advanced from a1b2c3d to e5f6g7h. The agent informs the user that the
-        PR head has advanced from a1b2c3d to e5f6g7h, updates the variant spec with the new hash, and proceeds with the updated commit. The recency check runs against the
-        new hash e5f6g7h — since no prior experiments exist for this commit, the new variant is included in the run matrix without needing a forced-rerun confirmation. The
-        base variant (main) ref is unchanged and its recency check proceeds normally against existing experiment names.
+        The agent recognizes the re-run request and skips variant inference — reusing the previous variant spec. Ref resolution always runs (for branch refs, regardless of
+        whether this is an initial run or a rerun), so the agent re-fetches and re-pins all branch refs. It detects that the PR head has advanced from a1b2c3d to e5f6g7h.
+        The agent informs the user that the PR head has advanced from a1b2c3d to e5f6g7h, updates the variant spec with the new hash, and proceeds with the updated commit.
+        The recency check runs against the new hash e5f6g7h — since no prior experiments exist for this commit, the new variant is included in the run matrix without needing
+        a forced-rerun confirmation. The base variant (main) ref is also re-resolved (its hash may have changed too); its recency check proceeds against the resolved hash.
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Variant Inference (skipped)
         - "Inference: skips variant inference — reuses previous variant spec"
-        # Phase: Ref Resolution
-        - "Ref Resolution: re-resolves all git refs before the recency check (re-fetches and re-pins commit hashes)"
+        # Phase: Ref Resolution (always runs for branch refs — initial runs and reruns alike)
+        - "Ref Resolution: always runs for branch refs — re-fetches and re-pins commit hashes even though this is a rerun"
         - "Ref Resolution: detects that the PR head has advanced from a1b2c3d to e5f6g7h"
         - "Ref Resolution: informs the user that the PR head has advanced from a1b2c3d to e5f6g7h"
         - "Ref Resolution: updates the variant spec with the new hash e5f6g7h (does NOT reuse the stale hash a1b2c3d)"
