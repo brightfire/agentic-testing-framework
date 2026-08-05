@@ -169,9 +169,9 @@ Prepares the eval environment so the harness can run variants in isolation.
 
 For each variant spec:
 
-1. **Extract the skill** — `git archive "<ref>" -- "<skill-path>/" | tar -x -C "<suffixed-dir>/"`
-2. **Create suffixed directory** in `~/.openclaw/workspace/eval-skills/<skill-name>-<label>-<7char-hash>-<4char-random>/`.
-3. **Rewrite the `name:` field** in the copied `SKILL.md` frontmatter to match the suffixed directory name.
+1. `SUFFIXED_DIR=$(mktemp -d ~/.openclaw/workspace/eval-skills/<skill-name>-<label>-<7char-hash>-XXXX/)`
+2. `git archive "<ref>" -- "<skill-path>/" | tar -x -C "$SUFFIXED_DIR/"`
+3. Rewrite the `name:` field in `$SUFFIXED_DIR/SKILL.md` frontmatter to match the suffixed directory name.
 
 ### Output
 
