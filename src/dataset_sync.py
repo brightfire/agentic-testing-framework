@@ -253,7 +253,7 @@ def get_server_version_timestamp(date_header, response_body=None):
     return datetime.now(timezone.utc)
 
 
-def write_manifest(output_path, dataset_name, manifest_items, sync_start):
+def write_manifest(output_path, dataset_name, manifest_items, sync_completed_at):
     """Write the sync manifest JSON file if --output-manifest was provided.
 
     Returns True on success or if no output path was given, False on write
@@ -264,7 +264,7 @@ def write_manifest(output_path, dataset_name, manifest_items, sync_start):
         return True
     manifest = {
         "dataset": dataset_name,
-        "synced_at": sync_start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "synced_at": sync_completed_at.isoformat(),
         "items": manifest_items,
     }
     try:
@@ -328,10 +328,26 @@ def main():
         "--output-manifest", default=None, metavar="PATH",
         help="Write a JSON manifest file at this path after sync (per-item timestamps)",
     )
+    parser.add_argument(
+        "--items", default=None,
+        help="Comma-separated list of item IDs to sync (from eval.yaml). Only these items are upserted and included in the manifest. If omitted, all items in eval.yaml are synced.",
+    )
     args = parser.parse_args()
 
     # ── Parse and validate eval.yaml (no credentials needed) ──────────────
     dataset_name, description, yaml_items = parse_eval_yaml(args.file)
+
+    # ── Filter to requested items if --items is specified ────────────────
+    if args.items:
+        requested_ids = set(id.strip() for id in args.items.split(",") if id.strip())
+        yaml_items = [item for item in yaml_items if item["id"] in requested_ids]
+        matched_ids = {item["id"] for item in yaml_items}
+        missing_ids = requested_ids - matched_ids
+        if missing_ids:
+            log(f"Requested item IDs not found in eval.yaml: {sorted(missing_ids)}", "ERROR")
+            sys.exit(1)
+        log(f"Filtered to {len(yaml_items)} requested item(s): {[item['id'] for item in yaml_items]}")
+
     yaml_api_ids = {make_api_id(dataset_name, item["id"]) for item in yaml_items}
 
     log(f"Parsed eval.yaml: dataset='{dataset_name}', {len(yaml_items)} items")
@@ -398,20 +414,26 @@ def main():
     log(f"Found {len(existing)} items in Langfuse after upsert")
 
     # ── Determine archive candidates from fresh snapshot ────────────────
-    to_archive = existing_api_ids - yaml_api_ids
-
-    to_archive_active = {
-        api_id for api_id in to_archive
-        if existing.get(api_id, {}).get("status", "ACTIVE").upper() == "ACTIVE"
-    }
+    # Skip archiving when --items is used — partial syncs should not remove other DSIs
+    if args.items:
+        to_archive_active = set()
+        log("Skipping archive step (--items filter active)")
+    else:
+        to_archive = existing_api_ids - yaml_api_ids
+        to_archive_active = {
+            api_id for api_id in to_archive
+            if existing.get(api_id, {}).get("status", "ACTIVE").upper() == "ACTIVE"
+        }
 
     if not to_archive_active:
         if failed:
             log(f"{failed} upsert(s) failed — fix errors and re-run.", "WARN")
-            write_manifest(args.output_manifest, dataset_name, manifest_items, sync_start)
+            sync_completed_at = datetime.now(timezone.utc)
+            write_manifest(args.output_manifest, dataset_name, manifest_items, sync_completed_at)
             sys.exit(1)
         log("Nothing to archive — dataset is in sync.", "INFO")
-        if not write_manifest(args.output_manifest, dataset_name, manifest_items, sync_start):
+        sync_completed_at = datetime.now(timezone.utc)
+        if not write_manifest(args.output_manifest, dataset_name, manifest_items, sync_completed_at):
             sys.exit(1)
         return
 
@@ -448,7 +470,8 @@ def main():
     log(f"Archived:  {archived}")
     log(f"Failed:    {failed}")
 
-    if not write_manifest(args.output_manifest, dataset_name, manifest_items, sync_start):
+    sync_completed_at = datetime.now(timezone.utc)
+    if not write_manifest(args.output_manifest, dataset_name, manifest_items, sync_completed_at):
         sys.exit(1)
 
     sys.exit(0 if failed == 0 else 1)
