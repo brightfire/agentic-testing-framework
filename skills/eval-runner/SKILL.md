@@ -60,7 +60,7 @@ After inference builds the full matrix (skill variants × models × dataset item
 - `<item-scope>`: `all` for full dataset, or 8-char SHA-256 prefix of sorted item IDs joined by `|` (e.g., items `['c','a','b']` → `a|b|c` → `sha256('a|b|c')[:8]`)
 - Example: `linear-create-eval__openrouter-z-ai-glm-5.2__pr-123__e5f6g7h__all`
 
-Query Langfuse for experiments whose names **start with** this prefix (using resolved commit hash, not wildcard). The harness appends ` - <timestamp>` and optionally ` - <run_idx>/<total>` for repeats, so use prefix match. Item-scope must match exactly. Only reuse experiments where all items succeeded (no partial failures) — a prior run with failed items must not skip re-running. If matching experiments with full success exist within 7 days, reuse them — skip running. Note reused variants and dates in the confirmation summary.
+Query Langfuse for experiments whose names **start with** this prefix (using resolved commit hash, not wildcard). The harness appends ` - <timestamp>` and optionally ` - <run_idx>/<total>` for repeats, so use prefix match. Item-scope must match exactly. Reuse experiments within 7 days only if the harness ran to completion (exit 0) — partial failures (some items failed but others succeeded) are still valid runs and eligible for reuse. Do not reuse if the harness crashed entirely or all items failed (exit non-zero). Note reused variants and dates in the confirmation summary.
 
 If experiments are missing or older than 7 days, include those variants in the run. First-time runs: check runs normally (nothing to reuse). Reruns: if nothing changed (same commit hash), tell the user and ask to confirm force re-run. If user confirms, prior results excluded, all variants execute.
 
