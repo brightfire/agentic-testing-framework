@@ -572,7 +572,9 @@ items:
       - Base branch: main
       - Files changed: skills/eval-runner/SKILL.md
 
-      Proceed with the eval.
+      Inference completed: skill A/B (main vs PR head), single model (agent default), all dataset items. Baseline included (no prior runs). User has confirmed the summary. Pre-flight and sync completed successfully — the dataset was synced to Langfuse.
+
+      User request: "Proceed with the eval."
     expected_output:
       behavior: |
         The agent proceeds through inference, confirmation, pre-flight, and sync (all succeed). After sync, it runs the evaluator check by invoking evaluator_check.py with the dataset name. The check fails (exit 1) — no enabled evaluation rule targets the dataset. The agent STOPS and does not proceed to env setup or execute. It reports to the user that no evaluator is configured for the dataset and instructs them to set one up in the Langfuse UI before re-running.
