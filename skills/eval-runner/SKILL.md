@@ -127,8 +127,6 @@ EVAL_FILE=$(mktemp)
 git show "<skill-version-ref>:<eval-yaml-path>" > "$EVAL_FILE"
 ```
 
-**Edge case — new eval.yaml:** If `git show` fails (file doesn't exist at that ref), skip sync for that skill version. Its manifest entry is `null` — the execute phase handles this. **Deleted eval.yaml:** If the file should exist but doesn't, flag it for human review.
-
 #### Sync each version to Langfuse
 
 Run `dataset_sync.py` sequentially — concurrent syncs to the same dataset can interleave version timestamps.
@@ -155,7 +153,7 @@ eval_yaml_path: <path within repo>
 manifests:
   - version: <version-label>
     ref: <git-hash>
-    manifest: <path or null if skipped>
+    manifest: <path>
   ...
 ```
 
@@ -215,7 +213,7 @@ For model A/B tests (Slack-triggered, single skill variant), the same suffixed s
 
 #### 3. Invoke the harness
 
-Run `eval_harness.py` for each (skill variant × model) combination. Run sequentially by default to avoid gateway overload. Skip combinations whose sync manifest is `null` (no eval.yaml at that ref).
+Run `eval_harness.py` for each (skill variant × model) combination. Run sequentially by default to avoid gateway overload.
 
 ```bash
 source ~/.openclaw/secrets/langfuse.env 2>/dev/null
