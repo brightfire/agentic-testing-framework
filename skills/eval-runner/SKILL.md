@@ -170,10 +170,10 @@ Prepares the eval environment so the harness can run skill versions in isolation
 For each skill version:
 
 ```bash
-SUFFIXED_DIR=$(bash ~/repos/agentic-testing-framework/src/setup_eval_skill.sh \
+bash ~/repos/agentic-testing-framework/src/setup_eval_skill.sh \
   --skill-dir "<skill-dir>" \
   --hash "<commit-hash>" \
-  --label "<version-label>")
+  --label "<version-label>"
 ```
 
 ### Output
