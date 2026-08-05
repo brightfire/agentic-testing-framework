@@ -83,6 +83,10 @@ SUFFIXED_DIR=$(mktemp -d "${EVAL_SKILLS_DIR}/${SKILL_NAME}-${LABEL_NORMALIZED}-$
   exit 1
 }
 
+# mktemp uses mixed case — normalize to lowercase for OpenClaw [a-z0-9-] charset
+LOWER_DIR=$(echo "$SUFFIXED_DIR" | tr 'A-Z' 'a-z')
+mv "$SUFFIXED_DIR" "$LOWER_DIR" 2>/dev/null && SUFFIXED_DIR="$LOWER_DIR"
+
 # --- Extract skill files via git archive, stripping the relative path prefix ---
 # Count path components in SKILL_REL to determine --strip-components
 COMPONENT_COUNT=$(echo "$SKILL_REL" | tr '/' '\n' | wc -l)
