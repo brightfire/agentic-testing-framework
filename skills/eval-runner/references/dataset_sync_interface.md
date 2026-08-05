@@ -16,6 +16,7 @@ python src/dataset_sync.py --file <path-to-eval.yaml> [options]
 | `--langfuse-host` | No | `http://10.18.32.57:3000` | Langfuse host URL |
 | `--dry-run` | No | `False` | Parse and show what would be synced without API calls |
 | `--output-manifest` | No | — | Write a JSON manifest file (per-item timestamps) at the given path after sync |
+| `--items` | No | — | Comma-separated list of item IDs to sync. Only these items are upserted and included in the manifest. If omitted, all items in eval.yaml are synced. |
 
 ### Environment Variables
 
@@ -31,13 +32,6 @@ python src/dataset_sync.py --file <path-to-eval.yaml> [options]
   capture). All other lines are human-readable log output.
 - **stderr:** Empty (logs go to stdout).
 
-### Manifest File
-
-When `--output-manifest <path>` is passed, a JSON file is written containing
-per-item timestamps from Langfuse server responses. The script prints the
-manifest path as the last line of stdout. This file is passed to the
-eval harness to pin experiment runs to exact dataset state.
-
 ## Exit Codes
 
 | Code | Meaning |
@@ -45,24 +39,5 @@ eval harness to pin experiment runs to exact dataset state.
 | 0 | Success (manifest file path printed to stdout) |
 | 1 | Failure (missing env vars, file not found, YAML parse error, or item operation failures) |
 
-Note: `--dry-run` always exits 0 without making API calls.
 
-## eval.yaml Schema
 
-```yaml
-dataset: <langfuse-dataset-name>
-description: <human-readable description of the eval>
-items:
-  - id: <unique-string-id>
-    input: <prompt text sent to the agent>
-    expected_output: <what a correct response looks like>
-```
-
-## Manifest File Usage
-
-Manifest files contain per-item server timestamps from Langfuse. These are
-passed to the execute phase to pin experiment runs to exact dataset state:
-- `get_dataset(version=<timestamp>)` returns the dataset as it was at that point
-- Enables concurrent test runs without interference
-- `manifest_before` pins the "before" dataset state
-- `manifest_after` pins the "after" dataset state

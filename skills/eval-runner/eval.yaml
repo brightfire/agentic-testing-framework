@@ -249,7 +249,14 @@ items:
         - "Env setup: copies all skill files preserving subdirectory structure"
         - "Env setup: rewrites the name: field in each copied SKILL.md to match suffixed dir name"
         - "Env setup: lists created suffixed directories with their git ref and label"
-        # Phase: Execute (add criteria when implemented)
+        # Phase: Execute
+        - "Execute: constructs base experiment name following the <dataset>__<model>__<variant-label>__<git-hash>__<item-scope> convention"
+        - "Execute: constructs attestation prefix directing agent to the suffixed skill name from env setup"
+        - "Execute: invokes eval_harness.py for each variant with --run-name, --prompt-prefix, --manifest"
+        - "Execute: passes the manifest from the sync phase to pin dataset version"
+        - "Execute: runs variants sequentially (not concurrently) by default"
+        - "Execute: captures completion status and per-item failures from harness output"
+        - "Execute: silent on success — does not post results to any channel (passed to report phase)"
         # Phase: Report (add criteria when implemented)
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
@@ -286,8 +293,118 @@ items:
         # Phase: Env Setup
         - "Env setup: creates suffixed directories for all requested variants"
         - "Env setup: copies all files and rewrites name: field"
-        # Phase: Execute (add criteria when implemented)
+        # Phase: Execute
+        - "Execute: constructs experiment names for all variants in the forced re-run"
+        - "Execute: invokes eval_harness.py with --repeat if repeat count > 1"
+        - "Execute: captures experiment run names and completion status"
+        - "Execute: silent on success — results passed to report phase"
         # Phase: Report (add criteria when implemented)
+      scoring_rules: |
+        Score 10 * (passed criteria / total criteria).
+
+  # ─── Execute phase edge cases ──────────────────────────────────────
+
+  - id: execute-harness-crash
+    input: |
+      PR context:
+      - Repo: brightfire/agentic-testing-framework
+      - PR branch: claw/vash/skill-improvement
+      - PR number: 123
+      - Base branch: main
+      - Files changed: skills/eval-runner/SKILL.md
+
+      Inference, confirmation, pre-flight, sync, and env setup all completed successfully. The user confirmed the eval.
+
+      During the execute phase, the first harness invocation (variant A / main) crashed with exit code 1 and a Python traceback — the harness hit an
+      unexpected error while spawning the `openclaw agent` subprocess for the first dataset item. The second variant (pr-123) has not yet been attempted.
+    expected_output:
+      behavior: |
+        The agent detects the harness crash from the non-zero exit code. It immediately reports the failure to the originating channel as an error
+        notification — including which variant failed, the error message, and the experiment name. It does NOT wait for the report phase. It then
+        continues with the remaining variant (pr-123) rather than aborting the entire execute phase, since the failure is variant-specific (not systemic).
+      scoring_type: pass_fail
+      scoring_criteria:
+        - "Execute: detects harness crash from non-zero exit code"
+        - "Execute: reports failure to originating channel immediately (does not wait for report phase)"
+        - "Execute: error notification includes variant label, error message, and experiment name"
+        - "Execute: continues with remaining variant rather than aborting entirely"
+        - "Execute: does not treat a single variant failure as a reason to skip remaining variants"
+      scoring_rules: |
+        Score 10 * (passed criteria / total criteria).
+
+  - id: execute-all-items-failed
+    input: |
+      PR context:
+      - Repo: brightfire/agentic-testing-framework
+      - PR branch: claw/vash/skill-improvement
+      - PR number: 123
+      - Base branch: main
+      - Files changed: skills/eval-runner/SKILL.md
+
+      Inference, confirmation, pre-flight, sync, and env setup all completed. The user confirmed the eval.
+
+      During the execute phase, the harness exited with code 1 because all dataset items failed — the summary shows "Total failures: 5" with 0 successful
+      items. This happened for both variants.
+    expected_output:
+      behavior: |
+        The agent recognizes that all items failed across all variants — this is an execution failure, not a partial failure. It reports the failure
+        to the originating channel immediately as an error notification, including the total failure count and the affected variants. It does not
+        proceed to the report phase with empty results.
+      scoring_type: pass_fail
+      scoring_criteria:
+        - "Execute: recognizes all-items-failed as an execution failure (not partial failure)"
+        - "Execute: reports immediately to originating channel (does not wait for report phase)"
+        - "Execute: error notification includes total failure count and affected variants"
+      scoring_rules: |
+        Score 10 * (passed criteria / total criteria).
+
+  - id: execute-partial-failure
+    input: |
+      PR context:
+      - Repo: brightfire/agentic-testing-framework
+      - PR branch: claw/vash/skill-improvement
+      - PR number: 123
+      - Base branch: main
+      - Files changed: skills/eval-runner/SKILL.md
+
+      Inference, confirmation, pre-flight, sync, and env setup all completed. The user confirmed the eval.
+
+      During the execute phase, the harness completed (exit 0) for both variants. Variant A (main) had 2 failed items out of 10. Variant B (pr-123)
+      had 0 failed items. The harness summary shows "Total failures: 2" for variant A.
+    expected_output:
+      behavior: |
+        The agent recognizes that partial failures (some items failed, but harness completed with exit 0) are NOT an immediate error condition. It
+        captures the per-item failures as part of the execute phase output and passes them to the report phase. It does not send an immediate error
+        notification — the report phase handles per-item failure analysis.
+      scoring_type: pass_fail
+      scoring_criteria:
+        - "Execute: recognizes partial failures (some items failed, harness exit 0) as NOT an immediate error"
+        - "Execute: captures per-item failures in the structured output"
+        - "Execute: does NOT send an immediate error notification to the originating channel"
+        - "Execute: passes failure details to the report phase"
+      scoring_rules: |
+        Score 10 * (passed criteria / total criteria).
+
+  - id: execute-model-ab-slack-triggered
+    input: |
+      Slack-triggered model A/B test. The user wants to compare openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6 for the eval-runner skill.
+
+      Inference, confirmation, pre-flight, sync, and env setup all completed. The user confirmed the eval. Env setup created a single suffixed skill
+      directory (skill unchanged between model variants).
+    expected_output:
+      behavior: |
+        The agent invokes the harness twice — once with --model openrouter/z-ai/glm-5.2 and once with --model anthropic/claude-sonnet-4-6. Both
+        invocations use the same suffixed skill name in the attestation prefix (since the skill doesn't change). Both use the same dataset version
+        timestamp (T1 from sync). The agent constructs two experiment names with different model-id segments but the same variant-label and git-hash.
+      scoring_type: pass_fail
+      scoring_criteria:
+        - "Execute: invokes harness twice — once per model"
+        - "Execute: both invocations use the same suffixed skill name (skill unchanged)"
+        - "Execute: --model flag differs between invocations"
+        - "Execute: experiment names differ only in the model-id segment"
+        - "Execute: both runs use the same dataset version timestamp (T1)"
+        - "Execute: both runs pass --manifest with the sync phase manifest for T1"
+        - "Execute: captures experiment run names and completion status for both runs"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
 
@@ -337,15 +454,14 @@ items:
       User request: "Run only the sync phase for this branch."
     expected_output:
       behavior: |
-        The agent attempts to extract the before version from main and finds it doesn't exist. It correctly handles this as a new eval definition: the manifests list
-        contains two entries — the base variant with `manifest: null` (no before version exists) and the after variant with `manifest: <path>`. Only the after version is synced.
+        The agent checks for eval.yaml at the base commit and finds it doesn't exist. It excludes the base variant from the matrix (nothing to test) and proceeds to sync only the after version. The confirmation prompt notes the excluded base variant. The manifests list contains one entry — the after variant with `manifest: <path>`.
       scoring_type: pass_fail
       scoring_criteria:
-        - "Recognizes the before version doesn't exist on base (new eval.yaml)"
-        - "manifests list contains two entries: base variant with manifest: null and after variant with manifest: <path>"
+        - "Recognizes eval.yaml doesn't exist on base branch (new eval.yaml)"
+        - "Excludes base variant from the matrix — not treated as error"
+        - "Confirmation prompt notes the excluded base variant"
         - "Only syncs the after version"
-        - "Does not treat the missing before version as an error"
-        - "Output structure includes dataset, skill, eval_yaml_path, and a manifests list with both entries (base with null manifest, after with manifest path)"
+        - "manifests list contains one entry: after variant with manifest: <path>"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
 
@@ -403,7 +519,7 @@ items:
         # Phase: Pre-flight (add criteria after user confirms)
         # Phase: Sync (add criteria after user confirms)
         # Phase: Env Setup (add criteria after user confirms)
-        # Phase: Execute (add criteria when implemented)
+        # Phase: Execute (add criteria after user confirms)
         # Phase: Report (add criteria when implemented)
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
