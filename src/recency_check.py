@@ -144,22 +144,30 @@ def fetch_run_items(langfuse_host, auth_header, dataset_id, run_name):
     """Fetch dataset run items to get the trace IDs for each item in the run.
 
     Uses GET /api/public/dataset-run-items?datasetId=X&runName=Y.
+    Paginates via meta.totalPages to fetch all items.
     Returns a list of dicts, each with at least 'traceId' and 'datasetItemId'.
     """
-    url = f"{langfuse_host}{API_BASE}/dataset-run-items"
-    params = {"datasetId": dataset_id, "runName": run_name, "limit": PAGE_LIMIT}
-    resp = requests.get(
-        url,
-        params=params,
-        headers={"Authorization": f"Basic {auth_header}"},
-        timeout=30,
-    )
-    if resp.status_code != 200:
-        raise RuntimeError(
-            f"Langfuse API error {resp.status_code} fetching run items for '{run_name}': {resp.text}"
+    all_items = []
+    page = 1
+    total_pages = 1
+    while page <= total_pages:
+        url = f"{langfuse_host}{API_BASE}/dataset-run-items"
+        params = {"datasetId": dataset_id, "runName": run_name, "limit": PAGE_LIMIT, "page": page}
+        resp = requests.get(
+            url,
+            params=params,
+            headers={"Authorization": f"Basic {auth_header}"},
+            timeout=30,
         )
-    data = resp.json()
-    return data.get("data", [])
+        if resp.status_code != 200:
+            raise RuntimeError(
+                f"Langfuse API error {resp.status_code} fetching run items for '{run_name}': {resp.text}"
+            )
+        data = resp.json()
+        all_items.extend(data.get("data", []))
+        total_pages = data.get("meta", {}).get("totalPages", 1)
+        page += 1
+    return all_items
 
 
 def check_item_scored(langfuse_host, auth_header, trace_id):
