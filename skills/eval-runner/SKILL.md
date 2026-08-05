@@ -119,11 +119,11 @@ Syncs eval definitions to Langfuse and captures manifest paths needed by the exe
 
 Sync each skill version that remains after the Recency Check prunes the run matrix. For reruns, sync all skill versions if the user confirmed a forced re-run; otherwise only sync new or changed versions.
 
-Use `git show` to extract each version to a temp file.
+Use `git show` to extract each version to a temp file and pass it to `dataset_sync.py`.
 
 ```bash
-WORK_DIR=$(mktemp -d /tmp/eval-sync.XXXXXX)
-git show "<skill-version-ref>:<eval-yaml-path>" > "$WORK_DIR/eval-<version-label>.yaml"
+EVAL_FILE=$(mktemp)
+git show "<skill-version-ref>:<eval-yaml-path>" > "$EVAL_FILE"
 ```
 
 **Edge case — new eval.yaml:** If `git show` fails (file doesn't exist at that ref), skip sync for that skill version. Its manifest entry is `null` — the execute phase handles this. **Deleted eval.yaml:** If the file should exist but doesn't, flag it for human review.
@@ -133,16 +133,16 @@ git show "<skill-version-ref>:<eval-yaml-path>" > "$WORK_DIR/eval-<version-label
 Run `dataset_sync.py` sequentially — concurrent syncs to the same dataset can interleave version timestamps.
 
 ```bash
+MANIFEST_FILE=$(mktemp)
 python ~/repos/agentic-testing-framework/src/dataset_sync.py \
-  --file "$WORK_DIR/eval-<version-label>.yaml" \
-  --output-manifest "$WORK_DIR/manifest-<version-label>.json"
+  --file "$EVAL_FILE" \
+  --output-manifest "$MANIFEST_FILE"
 ```
+
+Capture `$MANIFEST_FILE` — the execute phase needs it.
 
 For the full manifest file contract and CLI interface, see [`references/dataset_sync_interface.md`](references/dataset_sync_interface.md).
 
-#### Clean up temp files
-
-**Manifest files must be preserved** — the execute phase reads them via `--manifest`. Either write manifests to a durable location and clean up `$WORK_DIR` after copying, or keep `$WORK_DIR` alive until the cleanup phase removes it.
 
 ### Output
 
@@ -153,7 +153,7 @@ eval_yaml_path: <path within repo>
 manifests:
   - version: <version-label>
     ref: <git-hash>
-    manifest: <path to manifest-<version-label>.json or null if skipped>
+    manifest: <path or null if skipped>
   ...
 ```
 
