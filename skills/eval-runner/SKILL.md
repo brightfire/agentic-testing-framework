@@ -163,15 +163,20 @@ See [`references/gotchas.md`](references/gotchas.md) for Sync Phase error preven
 
 ## Environment Setup Phase
 
-Prepares the eval environment so the harness can run variants in isolation.
+Prepares the eval environment so the harness can run skill versions in isolation.
 
 ### Procedure
 
-For each variant spec:
+For each skill version, run the setup script:
 
-1. `SUFFIXED_DIR=$(mktemp -d ~/.openclaw/workspace/eval-skills/<skill-name>-<label>-<7char-hash>-XXXX/)`
-2. `git archive "<ref>" -- "<skill-path>/" | tar -x -C "$SUFFIXED_DIR/"`
-3. Rewrite the `name:` field in `$SUFFIXED_DIR/SKILL.md` frontmatter to match the suffixed directory name.
+```bash
+SUFFIXED_DIR=$(bash ~/repos/agentic-testing-framework/src/setup_eval_skill.sh \
+  --skill-dir "<skill-dir>" \
+  --hash "<commit-hash>" \
+  --label "<version-label>")
+```
+
+The script handles: extracting the skill from the git ref via `git archive`, creating the suffixed directory in `~/.openclaw/workspace/eval-skills/<skill-name>-<label>-<7char-hash>-<4char-random>/`, copying all skill files (preserving subdirectory structure), and rewriting the `name:` field in the copied `SKILL.md` to match the suffixed directory name.
 
 ### Output
 
