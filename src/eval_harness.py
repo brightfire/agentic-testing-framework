@@ -8,11 +8,18 @@ run_experiment method so that hosted evaluators (LLM-as-judge, code
 evaluators) are triggered automatically via OTel attribute propagation.
 
 Usage:
+    # Manifest mode (preferred — manifest is the source of truth):
+    python eval_harness.py \
+        --manifest /tmp/eval-sync/manifest-main.json \
+        --run-name linear-baseline-run-1 \
+        --prompt-prefix "Read skill linear-baseline. Then, " \
+        --langfuse-host http://10.18.32.57:3000
+
+    # Explicit mode (no manifest):
     python eval_harness.py \
         --dataset linear-skill-evaluation \
         --run-name linear-baseline-run-1 \
         --prompt-prefix "Read skill linear-baseline. Then, " \
-        --manifest /tmp/eval-sync/manifest-main.json \
         --langfuse-host http://10.18.32.57:3000
 
 Credentials:
@@ -38,48 +45,64 @@ import requests
 from langfuse import Langfuse
 
 
-def load_manifest_version(manifest_path, expected_dataset=None):
-    """Load a sync manifest file and extract the dataset version timestamp.
+def load_manifest(manifest_path):
+    """Load a sync manifest file and extract dataset name, item IDs, and
+    per-item version timestamps.
 
-    The manifest is produced by dataset_sync.py --output-manifest and contains
-    a 'synced_at' field (ISO 8601 UTC) representing when the sync completed.
-    This timestamp is passed to Langfuse get_dataset(version=...) to pin the
-    dataset state to exactly what was synced.
+    The manifest is produced by dataset_sync.py --output-manifest. It contains:
+      - "dataset": the Langfuse dataset name
+      - "synced_at": overall sync completion time (metadata only — not used
+        by the harness for version pinning)
+      - "items": list of {"id": <api_id>, "timestamp": <ISO 8601 UTC>}
 
-    Returns a timezone-aware UTC datetime, or None if the manifest is invalid
-    or the timestamp cannot be parsed.
+    The per-item timestamps are used to derive the dataset version for
+    Langfuse get_dataset(version=...) by taking the max timestamp across all
+    manifest items. This pins the dataset to the state at the last item write,
+    which is more precise than synced_at (which is a post-sync wall clock).
+
+    Returns (dataset_name, item_ids, version_datetime) or (None, None, None)
+    if the manifest is invalid.
     """
     try:
         with open(manifest_path) as f:
             manifest = json.load(f)
     except (OSError, json.JSONDecodeError) as e:
         log(f"Failed to load manifest '{manifest_path}': {e}", "ERROR")
-        return None
+        return None, None, None
 
-    # Reject manifests for a different dataset
-    manifest_dataset = manifest.get("dataset")
-    if expected_dataset and manifest_dataset and manifest_dataset != expected_dataset:
-        log(f"Manifest '{manifest_path}' is for dataset '{manifest_dataset}', expected '{expected_dataset}'", "ERROR")
-        return None
+    dataset_name = manifest.get("dataset")
+    if not dataset_name:
+        log(f"Manifest '{manifest_path}' has no 'dataset' field", "ERROR")
+        return None, None, None
 
-    synced_at = manifest.get("synced_at")
-    if not synced_at:
-        log(f"Manifest '{manifest_path}' has no 'synced_at' field", "ERROR")
-        return None
+    manifest_items = manifest.get("items")
+    if not manifest_items or not isinstance(manifest_items, list):
+        log(f"Manifest '{manifest_path}' has no 'items' list", "ERROR")
+        return None, None, None
 
-    try:
-        # Manifest timestamps are ISO 8601 with 'Z' suffix (UTC)
-        # datetime.fromisoformat doesn't handle 'Z' until Python 3.11,
-        # so replace with '+00:00' for compatibility
-        ts_str = synced_at.replace("Z", "+00:00")
-        version_dt = datetime.fromisoformat(ts_str)
-        if version_dt.tzinfo is None:
-            version_dt = version_dt.replace(tzinfo=timezone.utc)
-        log(f"Loaded manifest '{manifest_path}' — dataset version pinned to {synced_at}")
-        return version_dt
-    except ValueError as e:
-        log(f"Failed to parse manifest timestamp '{synced_at}': {e}", "ERROR")
-        return None
+    item_ids = []
+    item_timestamps = []
+    for entry in manifest_items:
+        item_id = entry.get("id")
+        item_ts = entry.get("timestamp")
+        if not item_id or not item_ts:
+            log(f"Manifest item missing 'id' or 'timestamp': {entry}", "ERROR")
+            return None, None, None
+        item_ids.append(item_id)
+        try:
+            ts_str = item_ts.replace("Z", "+00:00")
+            dt = datetime.fromisoformat(ts_str)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            item_timestamps.append(dt)
+        except ValueError as e:
+            log(f"Failed to parse item timestamp '{item_ts}': {e}", "ERROR")
+            return None, None, None
+
+    # Derive dataset version from the latest per-item timestamp
+    version_dt = max(item_timestamps)
+    log(f"Loaded manifest '{manifest_path}' — dataset '{dataset_name}', {len(item_ids)} items, version pinned to {version_dt.isoformat()} (max item timestamp)")
+    return dataset_name, item_ids, version_dt
 
 
 def log(msg, level="INFO"):
@@ -149,9 +172,9 @@ def get_dataset(langfuse_client, dataset_name, version=None):
     """Fetch a Langfuse dataset by name. Returns DatasetClient or exits.
 
     If version is provided (a timezone-aware UTC datetime), the dataset is
-    pinned to the state at that timestamp — matching what was synced by
-    dataset_sync.py. This ensures concurrent eval runs don't interfere
-    with each other if someone else updates the dataset in between.
+    pinned to the state at that timestamp. When using --manifest, the version
+    is derived from the max per-item timestamp in the manifest (not synced_at),
+    ensuring the dataset reflects exactly what was synced.
     """
     try:
         ds = langfuse_client.get_dataset(dataset_name, version=version)
@@ -262,8 +285,8 @@ def main():
         description="Skill Eval Harness — run a Langfuse dataset against the OpenClaw gateway"
     )
     parser.add_argument(
-        "--dataset", required=True,
-        help="Langfuse dataset name (e.g. linear-skill-evaluation)"
+        "--dataset", default=None,
+        help="Langfuse dataset name (e.g. linear-skill-evaluation). Required unless --manifest is used."
     )
     parser.add_argument(
         "--run-name", required=True,
@@ -314,19 +337,28 @@ def main():
     )
     parser.add_argument(
         "--item-id", default=None,
-        help="Only run a specific dataset item by ID (partial match supported)"
+        help="Only run a specific dataset item by ID (partial match supported). Cannot be used with --manifest."
     )
     parser.add_argument(
         "--manifest", default=None,
         help="Path to a sync manifest JSON file (from dataset_sync.py --output-manifest). "
-             "Pins the dataset to the version at sync time by passing the manifest's "
-             "synced_at timestamp to Langfuse get_dataset(version=...)."
+             "The manifest is the source of truth: dataset name, item IDs, and per-item "
+             "timestamps are read from it. Cannot be used with --dataset or --item-id."
     )
     parser.add_argument(
         "--dry-run", action="store_true",
         help="Load dataset and print prompts without submitting to the gateway"
     )
     args = parser.parse_args()
+
+    # --- Validate mutual exclusivity ---
+    if args.manifest and (args.dataset or args.item_id):
+        log("--manifest cannot be used with --dataset or --item-id. The manifest is the source of truth.", "ERROR")
+        sys.exit(1)
+
+    if not args.manifest and not args.dataset:
+        log("Either --manifest or --dataset must be specified.", "ERROR")
+        sys.exit(1)
 
     # --- Validate credentials ---
     public_key = os.environ.get("LANGFUSE_PUBLIC_KEY")
@@ -348,28 +380,46 @@ def main():
         host=args.langfuse_host,
     )
 
-    # --- Load manifest and extract dataset version (if provided) ---
+    # --- Load manifest or use explicit args ---
     dataset_version = None
+    manifest_item_ids = None  # None = no manifest; list = filter to these IDs
     if args.manifest:
-        dataset_version = load_manifest_version(args.manifest, expected_dataset=args.dataset)
-        if dataset_version is None:
+        manifest_dataset, manifest_item_ids, dataset_version = load_manifest(args.manifest)
+        if manifest_dataset is None:
             log(f"Failed to load manifest from '{args.manifest}' — aborting.", "ERROR")
             sys.exit(1)
+        dataset_name = manifest_dataset
+    else:
+        dataset_name = args.dataset
 
     # --- Fetch dataset ---
-    ds = get_dataset(langfuse_client, args.dataset, version=dataset_version)
+    ds = get_dataset(langfuse_client, dataset_name, version=dataset_version)
 
     if not ds.items:
         log("Dataset has no items. Nothing to run.", "WARN")
         sys.exit(0)
 
-    # --- Filter to specific item if --item-id is provided ---
-    if args.item_id:
+    # --- Filter to manifest items if --manifest is used ---
+    if manifest_item_ids is not None:
+        manifest_id_set = set(manifest_item_ids)
+        original_count = len(ds.items)
+        ds.items = [item for item in ds.items if item.id in manifest_id_set]
+        if not ds.items:
+            log(f"No dataset items matched the manifest's {len(manifest_item_ids)} item IDs in dataset '{dataset_name}'.", "ERROR")
+            log(f"Manifest item IDs: {sorted(manifest_item_ids)}", "ERROR")
+            log(f"Dataset item IDs: {[item.id for item in ds.items]}", "ERROR")
+            sys.exit(1)
+        missing = manifest_id_set - {item.id for item in ds.items}
+        if missing:
+            log(f"Warning: {len(missing)} manifest item IDs not found in dataset: {sorted(missing)}", "WARN")
+        log(f"Filtered to {len(ds.items)}/{original_count} items from manifest")
+    # --- Filter to specific item if --item-id is provided (no manifest) ---
+    elif args.item_id:
         original_count = len(ds.items)
         all_item_ids = [item.id for item in ds.items]
         ds.items = [item for item in ds.items if args.item_id in item.id]
         if not ds.items:
-            log(f"No dataset item matching '{args.item_id}' found in dataset '{args.dataset}'.", "ERROR")
+            log(f"No dataset item matching '{args.item_id}' found in dataset '{dataset_name}'.", "ERROR")
             log(f"Available items: {all_item_ids}", "ERROR")
             sys.exit(1)
         log(f"Filtered to {len(ds.items)}/{original_count} items matching '{args.item_id}'")
@@ -411,12 +461,12 @@ def main():
         else:
             exp_name = f"{args.run_name} - {batch_ts}"
 
-        log(f"=== Starting experiment '{exp_name}' on dataset '{args.dataset}' ({len(ds.items)} items) — run {run_idx}/{total} ===")
+        log(f"=== Starting experiment '{exp_name}' on dataset '{dataset_name}' ({len(ds.items)} items) — run {run_idx}/{total} ===")
 
         result = ds.run_experiment(
             name=exp_name,
             run_name=exp_name,
-            description=args.description or f"Eval harness run on dataset '{args.dataset}'",
+            description=args.description or f"Eval harness run on dataset '{dataset_name}'",
             task=task,
             max_concurrency=args.item_concurrency,
         )
@@ -444,7 +494,7 @@ def main():
 
     # --- Summary ---
     log("=== SUMMARY ===")
-    log(f"Dataset:       {args.dataset}")
+    log(f"Dataset:       {dataset_name}")
     log(f"Total runs:    {total}")
     log(f"Last run name: {result.run_name}")
     log(f"Items/run:     {len(result.item_results)}")
