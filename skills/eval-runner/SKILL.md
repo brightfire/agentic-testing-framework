@@ -69,11 +69,12 @@ source ~/.openclaw/secrets/langfuse.env 2>/dev/null
 
 python ~/repos/agentic-testing-framework/src/recency_check.py \
   --dataset "<dataset-name>" \
-  --filter "<base-experiment-name>" \
-  --since 7d \
-  --min-pass-percent 80 \
-  --langfuse-host "http://localhost:3000"
+  --filter "<base-experiment-name>"
 ```
+
+`--filter` is the full base experiment name following the naming convention (e.g. `linear-create-eval__openrouter-z-ai-glm-5.2__pr-123__e5f6g7h__all`). The script automatically appends ` - ` for prefix matching against run names — do not include the harness-added ` - <timestamp>` suffix.
+
+All other parameters (`--since`, `--min-pass-percent`, `--langfuse-host`) have sensible defaults and should be omitted unless the user explicitly requests a different value.
 
 **Interpreting output:**
 - **Empty stdout** → no matching runs found; include this combination in the run matrix.
