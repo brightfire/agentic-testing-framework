@@ -85,7 +85,7 @@ After inference and the recency check, present a summary of the pruned run matri
 
 The user can **confirm** (proceed to pre-flight) or **adjust** (modify any dimension and re-confirm, re-running the recency check if variants change).
 
-For reruns ("run same test again"), the skill skips variant inference — the user is confirming the previous variant set. The recency check still runs; if nothing changed, ask the user to confirm force re-run.
+For reruns ("run same test again"), the skill skips variant inference — the user is confirming the previous variant set. The recency check still runs; if nothing changed, ask the user to confirm force re-run. On confirmation, restore all pruned combinations to the matrix.
 
 ## Pre-flight Checks
 
