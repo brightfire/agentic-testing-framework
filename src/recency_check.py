@@ -35,7 +35,7 @@ import requests
 
 DEFAULT_LANGFUSE_HOST = "http://10.18.32.57:3000"
 DEFAULT_SINCE = "7d"
-DEFAULT_MIN_PASS_PERCENT = None
+DEFAULT_MIN_PASS_PERCENT = 0
 PAGE_LIMIT = 100
 API_BASE = "/api/public"
 
@@ -184,7 +184,7 @@ def main():
     parser.add_argument("--dataset", required=True, help="Langfuse dataset name")
     parser.add_argument("--filter", required=True, help="Experiment name prefix to match")
     parser.add_argument("--since", default=DEFAULT_SINCE, help="How far back to look (e.g. 7d, 24h, 2w). Default: 7d")
-    parser.add_argument("--min-pass-percent", type=float, default=None, help="Minimum %% of items with score > 0 to include a run (0-100)")
+    parser.add_argument("--min-pass-percent", type=float, default=0, help="Minimum %% of items with score > 0 to include a run (0-100, default: 0 = include all)")
     parser.add_argument("--langfuse-host", default=DEFAULT_LANGFUSE_HOST, help="Langfuse host URL")
     args = parser.parse_args()
 
@@ -196,7 +196,7 @@ def main():
         sys.exit(1)
 
     # Validate min-pass-percent range
-    if args.min_pass_percent is not None and not (0 <= args.min_pass_percent <= 100):
+    if not (0 <= args.min_pass_percent <= 100):
         log("--min-pass-percent must be between 0 and 100", "ERROR")
         sys.exit(1)
 
@@ -227,8 +227,8 @@ def main():
         # No matches — print nothing, exit 0
         sys.exit(0)
 
-    # If min-pass-percent is specified, check per-item score status
-    if args.min_pass_percent is not None:
+    # If min-pass-percent > 0, check per-item score status
+    if args.min_pass_percent > 0:
         passed_runs = []
         for run in matching_runs:
             run_id = run.get("id", "")
