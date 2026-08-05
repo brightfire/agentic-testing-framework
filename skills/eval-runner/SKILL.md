@@ -195,7 +195,7 @@ Invokes the eval harness for each variant in the pruned run matrix, directing th
 | Manifests | Sync phase output | Per-skill-version manifest paths (passed to harness via --manifest) |
 | Suffixed skills | Env setup output | Suffixed skill names (for the attestation prefix) |
 | Run matrix | Recency check output | Pruned list of (skill variant × model) combinations to execute |
-| Repeat count | User request or default | Number of repeats per variant (default: 10) |
+| Repeat count | User request or inference | Number of repeats per variant (default: 10 when not specified by inference) |
 
 ### Procedure
 
@@ -228,7 +228,7 @@ python ~/repos/agentic-testing-framework/src/eval_harness.py \
   --repeat "<repeat-count>"
 ```
 
-Omit `--model` for the agent's default model. Default repeat count is 10 — only specify `--repeat` when the user requests a different count.
+Omit `--model` for the agent's default model. Always pass `--repeat` — default is 10 when inference doesn't specify a count.
 
 #### 4. Item filtering
 
