@@ -21,7 +21,8 @@ Credentials:
 
 Exit codes:
     0 — at least one enabled evaluation rule targets the dataset
-    1 — no enabled evaluation rule targets the dataset (or error)
+    1 — no enabled evaluation rule targets the dataset
+    2 — API or operational error (credentials, network, etc.)
 """
 
 import argparse
@@ -56,30 +57,19 @@ def make_auth_header(public_key, secret_key):
 
 
 def fetch_dataset_id(langfuse_host, auth_headers, dataset_name):
-    """Fetch the dataset ID by name from the datasets API.
+    """Fetch the dataset ID by name via GET /api/public/datasets/{name}.
 
     Returns the dataset ID string, or None if not found.
     """
-    url = f"{langfuse_host}{API_BASE}/datasets"
-    page = 1
-    total_pages = 1
-
-    while page <= total_pages:
-        params = {"page": page, "limit": PAGE_LIMIT}
-        resp = requests.get(url, params=params, headers=auth_headers, timeout=30)
-        if resp.status_code != 200:
-            raise RuntimeError(
-                f"Langfuse API error {resp.status_code} fetching datasets: {resp.text}"
-            )
-        data = resp.json()
-        for ds in data.get("data", []):
-            if ds.get("name") == dataset_name:
-                return ds.get("id")
-        meta = data.get("meta", {})
-        total_pages = meta.get("totalPages", 1)
-        page += 1
-
-    return None
+    url = f"{langfuse_host}{API_BASE}/datasets/{dataset_name}"
+    resp = requests.get(url, headers=auth_headers, timeout=30)
+    if resp.status_code == 404:
+        return None
+    if resp.status_code != 200:
+        raise RuntimeError(
+            f"Langfuse API error {resp.status_code} fetching dataset '{dataset_name}': {resp.text}"
+        )
+    return resp.json().get("id")
 
 
 def fetch_evaluation_rules(langfuse_host, auth_headers):
@@ -110,12 +100,19 @@ def fetch_evaluation_rules(langfuse_host, auth_headers):
 
 
 def find_matching_rules(rules, dataset_id):
-    """Find enabled evaluation rules that filter on the given dataset ID.
+    """Find enabled evaluation rules that target the given dataset.
 
     A rule matches if:
       - rule["enabled"] is True
-      - rule["filter"] contains an entry with column="datasetId" whose
-        "value" array includes the dataset_id
+      - rule is not paused (status != "paused", if the field exists)
+      - rule has no filters (applies to all datasets), OR
+      - rule has a datasetId filter with operator "any of" (or no operator)
+        whose "value" array includes the dataset_id, OR
+      - rule has filters for other columns but no datasetId filter
+        (dataset is not excluded)
+
+    A rule is excluded if it has a datasetId filter with operator "none of"
+    whose "value" array includes the dataset_id.
 
     Returns a list of matching rule dicts.
     """
@@ -123,14 +120,33 @@ def find_matching_rules(rules, dataset_id):
     for rule in rules:
         if not rule.get("enabled", False):
             continue
+        # Defensive: skip paused rules if the field is present
+        if rule.get("status") == "paused":
+            continue
         filters = rule.get("filter", [])
+        # No filters = applies to all datasets
+        if not filters:
+            matching.append(rule)
+            continue
+        # Check datasetId filters
+        dataset_match = False
+        dataset_excluded = False
+        has_dataset_filter = False
         for f in filters:
             if f.get("column") != "datasetId":
                 continue
+            has_dataset_filter = True
             values = f.get("value", [])
-            if dataset_id in values:
-                matching.append(rule)
-                break
+            operator = f.get("operator", "any of")
+            if operator == "none of":
+                if dataset_id in values:
+                    dataset_excluded = True
+            elif dataset_id in values:
+                dataset_match = True
+        if dataset_excluded:
+            continue
+        if dataset_match or not has_dataset_filter:
+            matching.append(rule)
     return matching
 
 
@@ -154,7 +170,7 @@ def main():
     secret_key = os.environ.get("LANGFUSE_SECRET_KEY")
     if not public_key or not secret_key:
         log("LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY environment variables are required", "ERROR")
-        sys.exit(1)
+        sys.exit(2)
     auth_headers = make_auth_header(public_key, secret_key)
 
     log(f"Checking evaluator for dataset '{args.dataset}'")
@@ -163,12 +179,12 @@ def main():
     try:
         dataset_id = fetch_dataset_id(args.langfuse_host, auth_headers, args.dataset)
     except Exception as e:
-        log(f"Error fetching datasets: {e}", "ERROR")
-        sys.exit(1)
+        log(f"Error fetching dataset: {e}", "ERROR")
+        sys.exit(2)
 
     if not dataset_id:
         log(f"Dataset '{args.dataset}' not found in Langfuse", "ERROR")
-        sys.exit(1)
+        sys.exit(2)
 
     log(f"Found dataset '{args.dataset}' with ID: {dataset_id}")
 
@@ -177,7 +193,7 @@ def main():
         rules = fetch_evaluation_rules(args.langfuse_host, auth_headers)
     except Exception as e:
         log(f"Error fetching evaluation rules: {e}", "ERROR")
-        sys.exit(1)
+        sys.exit(2)
 
     log(f"Fetched {len(rules)} evaluation rule(s)")
 
