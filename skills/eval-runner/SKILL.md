@@ -37,18 +37,6 @@ This label appears in experiment names to distinguish variants, alongside the gi
 Variant inference produces raw refs (branch names, PR numbers, commit hashes) and labels for each variant. Ref resolution happens after inference, pinning those raw refs to commit hashes. The env setup phase receives the resolved list of (git ref, label) pairs for skill versions and handles the
 mechanics of creating suffixed copies. The label is used both for directory naming in env setup and as the variant-label component in experiment names.
 
-## Ref Resolution
-
-After variant inference, pin all git refs to commit hashes so subsequent phases use a fixed snapshot:
-
-1. For each variant spec, fetch from origin to ensure the ref is available locally: `git fetch origin "<ref>"`. If the ref is a branch name (not a commit hash), resolve it to a commit hash: `git rev-parse "origin/<ref>"` (or `git ls-remote origin "<ref>"`). If the ref is already a commit hash, `git fetch origin "<ref>"` ensures the commit is present in the local clone.
-2. Replace the branch ref with the resolved commit hash in the variant spec.
-3. All subsequent phases (recency check, pre-flight, sync, env setup) use the pinned commit hash — never the branch name.
-
-## Recency Check
-
-After inference builds the full matrix (skill variants × models × dataset items), check Langfuse for matching experiment results and prune combinations with recent results.
-
 **Experiment naming convention:**
 
 ```
@@ -60,11 +48,41 @@ After inference builds the full matrix (skill variants × models × dataset item
 - `<item-scope>`: `all` for full dataset, or 8-char SHA-256 prefix of sorted item IDs joined by `|` (e.g., items `['c','a','b']` → `a|b|c` → `sha256('a|b|c')[:8]`)
 - Example: `linear-create-eval__openrouter-z-ai-glm-5.2__pr-123__e5f6g7h__all`
 
-Query Langfuse for experiments whose names **start with** this prefix (using resolved commit hash, not wildcard). The harness appends ` - <timestamp>` and optionally ` - <run_idx>/<total>` for repeats, so use prefix match. Item-scope must match exactly. Reuse experiments within 7 days only if the harness ran to completion (exit 0) — partial failures (some items failed but others succeeded) are still valid runs and eligible for reuse. Do not reuse if the harness crashed entirely or all items failed (exit non-zero). Note reused variants and dates in the confirmation summary.
+The harness appends ` - <timestamp>` and optionally ` - <run_idx>/<total>` for repeats at runtime.
 
-If experiments are missing or older than 7 days, include those variants in the run. First-time runs: check runs normally (nothing to reuse). Reruns: if nothing changed (same commit hash), tell the user and ask to confirm force re-run. If user confirms, prior results excluded, all variants execute.
+## Ref Resolution
 
-Remaining skill variants × models multiply after pruning (e.g., 1 variant × 2 models = 2 runs instead of 4).
+After variant inference, pin all git refs to commit hashes so subsequent phases use a fixed snapshot:
+
+1. For each variant spec, fetch from origin to ensure the ref is available locally: `git fetch origin "<ref>"`. If the ref is a branch name (not a commit hash), resolve it to a commit hash: `git rev-parse "origin/<ref>"` (or `git ls-remote origin "<ref>"`). If the ref is already a commit hash, `git fetch origin "<ref>"` ensures the commit is present in the local clone.
+2. Replace the branch ref with the resolved commit hash in the variant spec.
+3. All subsequent phases (recency check, pre-flight, sync, env setup) use the pinned commit hash — never the branch name.
+
+## Recency Check
+
+After inference and ref resolution, check Langfuse for matching experiment results and prune combinations with recent results.
+
+Run `recency_check.py` for each (skill variant × model) combination:
+
+```bash
+source ~/.openclaw/secrets/langfuse.env 2>/dev/null
+
+python ~/repos/agentic-testing-framework/src/recency_check.py \
+  --dataset "<dataset-name>" \
+  --filter "<base-experiment-name>" \
+  --since 7d \
+  --min-pass-percent 80 \
+  --langfuse-host "http://10.18.32.57:3000"
+```
+
+**Interpreting output:**
+- **Empty stdout** → no matching runs found; include this combination in the run matrix.
+- **Run names on stdout** → recent runs exist. Count them to determine reuse vs. needing more: if the user requests 25 repeats and 10 matching runs exist, only 15 more are needed.
+- **Exit 1** → script error (not "no matches"). Report the error and stop.
+
+Prune combinations that have sufficient recent runs from the matrix. Note reused variants and their run count in the confirmation summary.
+
+If nothing changed since the last run (same commit hash), tell the user and ask to confirm force re-run. If user confirms, prior results are excluded and all variants execute.
 
 ## Confirmation
 
@@ -194,7 +212,7 @@ Third phase of the eval runner. Invokes the eval harness for each variant in the
 
 #### 1. Construct experiment names
 
-For each (skill variant × model) combination, construct the base experiment name following the naming convention defined in the Recency Check section. When no model override is specified, use the agent's current default model ID.
+For each (skill variant × model) combination, construct the base experiment name following the naming convention defined in the Variant Inference section. When no model override is specified, use the agent's current default model ID.
 
 The harness appends ` - <timestamp>` (and ` - <run_idx>/<total>` for repeats) at runtime — the base name passed via `--run-name` must NOT include these suffixes.
 
