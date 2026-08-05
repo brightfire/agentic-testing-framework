@@ -328,10 +328,24 @@ def main():
         "--output-manifest", default=None, metavar="PATH",
         help="Write a JSON manifest file at this path after sync (per-item timestamps)",
     )
+    parser.add_argument(
+        "--items", default=None,
+        help="Comma-separated list of item IDs to sync (from eval.yaml). Only these items are upserted and included in the manifest. If omitted, all items in eval.yaml are synced.",
+    )
     args = parser.parse_args()
 
     # ── Parse and validate eval.yaml (no credentials needed) ──────────────
     dataset_name, description, yaml_items = parse_eval_yaml(args.file)
+
+    # ── Filter to requested items if --items is specified ────────────────
+    if args.items:
+        requested_ids = set(id.strip() for id in args.items.split(",") if id.strip())
+        yaml_items = [item for item in yaml_items if item["id"] in requested_ids]
+        if not yaml_items:
+            log(f"No items in eval.yaml match the requested IDs: {sorted(requested_ids)}", "ERROR")
+            sys.exit(1)
+        log(f"Filtered to {len(yaml_items)} requested item(s): {[item['id'] for item in yaml_items]}")
+
     yaml_api_ids = {make_api_id(dataset_name, item["id"]) for item in yaml_items}
 
     log(f"Parsed eval.yaml: dataset='{dataset_name}', {len(yaml_items)} items")

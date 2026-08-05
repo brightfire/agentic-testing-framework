@@ -136,10 +136,11 @@ Run `dataset_sync.py` sequentially — concurrent syncs to the same dataset can 
 MANIFEST_FILE=$(mktemp)
 python ~/repos/agentic-testing-framework/src/dataset_sync.py \
   --file "$EVAL_FILE" \
+  --items "<comma-separated-item-ids>" \
   --output-manifest "$MANIFEST_FILE"
 ```
 
-Capture `$MANIFEST_FILE` — the execute phase needs it.
+Omit `--items` when syncing all DSIs. Capture `$MANIFEST_FILE` — the execute phase needs it.
 
 For the full manifest file contract and CLI interface, see [`references/dataset_sync_interface.md`](references/dataset_sync_interface.md).
 
