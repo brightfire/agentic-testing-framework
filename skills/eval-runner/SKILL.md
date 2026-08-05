@@ -171,10 +171,6 @@ See [`references/gotchas.md`](references/gotchas.md) for Sync Phase error preven
 
 After sync (the dataset must exist in Langfuse first) and before env setup/execute (to avoid wasted work), verify that at least one enabled evaluator is configured for the dataset in Langfuse.
 
-### Why
-
-The eval harness runs successfully even when no evaluator is configured — the dataset items execute, traces are created, but no scores are applied. This wastes time and tokens on unscored runs. Catching this early prevents the entire execute phase from running pointlessly.
-
 ### Procedure
 
 Run `evaluator_check.py` with the dataset name from the synced eval.yaml:
