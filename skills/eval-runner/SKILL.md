@@ -66,7 +66,8 @@ source ~/.openclaw/secrets/langfuse.env 2>/dev/null
 
 python ~/repos/agentic-testing-framework/src/recency_check.py \
   --dataset "<dataset-name>" \
-  --filter "<base-experiment-name>"
+  --filter "<base-experiment-name>" \
+  --min-pass-percent 75
 ```
 
 `--filter` is the full base experiment name from the naming convention above. Do not include the harness-added ` - <timestamp>` suffix.
