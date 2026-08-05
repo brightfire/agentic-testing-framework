@@ -100,7 +100,7 @@ git -C "$REPO_ROOT" archive "$HASH" -- "${SKILL_REL}/" | \
 
 # --- Rewrite name: field in SKILL.md to match suffixed dir name ---
 SUFFIXED_NAME=$(basename "$SUFFIXED_DIR")
-sed -i "s/^name:.*/name: ${SUFFIXED_NAME}/" "$SUFFIXED_DIR/SKILL.md" || {
+sed -i "0,/^name:.*/s/^name:.*/name: ${SUFFIXED_NAME}/" "$SUFFIXED_DIR/SKILL.md" || {
   echo "Error: failed to rewrite name: field in SKILL.md" >&2
   rm -rf "$SUFFIXED_DIR"
   exit 1
