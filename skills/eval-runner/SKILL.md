@@ -74,8 +74,6 @@ python ~/repos/agentic-testing-framework/src/recency_check.py \
 
 `--filter` is the full base experiment name following the naming convention (e.g. `linear-create-eval__openrouter-z-ai-glm-5.2__pr-123__e5f6g7h__all`). The script automatically appends ` - ` for prefix matching against run names — do not include the harness-added ` - <timestamp>` suffix.
 
-All other parameters (`--since`, `--min-pass-percent`, `--langfuse-host`) have sensible defaults and should be omitted unless the user explicitly requests a different value.
-
 **Interpreting output:**
 - **Empty stdout** → no matching runs found; include this combination in the run matrix.
 - **Run names on stdout** → recent runs exist. Count them to determine reuse vs. needing more: if the user requests 25 repeats and 10 matching runs exist, only 15 more are needed.
