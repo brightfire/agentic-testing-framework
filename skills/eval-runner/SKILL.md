@@ -169,10 +169,9 @@ Prepares the eval environment so the harness can run variants in isolation.
 
 For each variant spec:
 
-1. **Fetch the skill** — The git ref is already pinned to a commit hash by Ref Resolution. Fetch the skill from the git ref: `git show "<ref>:<skill-path>/SKILL.md"` and all files in the skill directory.
-2. **Create suffixed directory** in `~/.openclaw/workspace/eval-skills/<skill-name>-<label>-<7char-hash>-<4char-random>/`. Normalize the label to `[a-z0-9-]` (replace `/` with `-`, lowercase, strip dots and underscores).
-3. **Copy all skill files** into the suffixed directory (preserving subdirectory structure — references/, scripts/, etc.).
-4. **Rewrite the `name:` field** in the copied `SKILL.md` frontmatter to match the suffixed directory name (e.g., `linear-create` → `linear-create-main-a1b2c3d-x7k2`).
+1. **Extract the skill** — `git archive "<ref>" -- "<skill-path>/" | tar -x -C "<suffixed-dir>/"`
+2. **Create suffixed directory** in `~/.openclaw/workspace/eval-skills/<skill-name>-<label>-<7char-hash>-<4char-random>/`.
+3. **Rewrite the `name:` field** in the copied `SKILL.md` frontmatter to match the suffixed directory name.
 
 ### Output
 
