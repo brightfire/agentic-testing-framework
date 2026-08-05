@@ -149,7 +149,22 @@ def find_matching_rules(rules, dataset_id):
                 dataset_match = True
         if dataset_excluded:
             continue
+        # Match if: explicit any-of match, no dataset filter at all
+        # (other filters only), or only none-of filters that don't
+        # exclude us (rule targets "all datasets except X")
         if dataset_match or not has_dataset_filter:
+            matching.append(rule)
+            continue
+        # has_dataset_filter=True but no match or exclusion — check if
+        # all dataset filters are none-of and none listed our dataset
+        all_none_of = True
+        for f in filters:
+            if f.get("column") != "datasetId":
+                continue
+            if f.get("operator", "any of") != "none of":
+                all_none_of = False
+                break
+        if all_none_of:
             matching.append(rule)
     return matching
 
