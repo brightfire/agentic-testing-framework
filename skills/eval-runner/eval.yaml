@@ -574,8 +574,6 @@ items:
 
       Inference, confirmation, pre-flight, and sync all completed successfully. The dataset was synced to Langfuse. User has confirmed the summary and the agent has proceeded through pre-flight and sync.
 
-      The dataset exists in Langfuse but no evaluator has been configured for it — no evaluation rules target this dataset.
-
       Proceed with the eval.
     expected_output:
       behavior: |

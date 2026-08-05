@@ -169,7 +169,7 @@ See [`references/gotchas.md`](references/gotchas.md) for Sync Phase error preven
 
 ## Evaluator Check
 
-After sync (the dataset must exist in Langfuse first) and before env setup/execute (to avoid wasted work), verify that at least one enabled evaluator is configured for the dataset in Langfuse.
+After sync (the dataset must exist in Langfuse first) and before env setup/execute (to avoid wasted work), verify that at least one enabled evaluator is configured for the dataset in Langfuse. Skip this check for sync-only runs that will not proceed to execute.
 
 ### Procedure
 
@@ -182,12 +182,13 @@ python ~/repos/agentic-testing-framework/src/evaluator_check.py \
   --dataset "<dataset-name>"
 ```
 
-- **If the check passes (exit 0):** at least one enabled evaluation rule targets the dataset. Proceed to Environment Setup.
-- **If the check fails (exit 1):** no enabled evaluator is configured for the dataset. STOP — do not proceed to env setup or execute. Report to the user that no evaluator is configured and they need to set one up in the Langfuse UI before re-running.
+- **Exit 0:** at least one enabled evaluation rule targets the dataset. Proceed to Environment Setup.
+- **Exit 1:** no enabled evaluator is configured for the dataset. STOP — do not proceed to env setup or execute. Report to the user that no evaluator is configured and they need to set one up in the Langfuse UI before re-running.
+- **Exit 2:** API or operational error (credentials, network, rate limit). Report the error from stderr — do not tell the user to configure an evaluator. Retry or investigate the operational issue.
 
 ### Output
 
-On success, logs the matching rule name(s) and evaluator name(s) to stderr. On failure, prints a clear error message naming the dataset and instructing the user to configure an evaluator in the Langfuse UI.
+On success, logs the matching rule name(s) and evaluator name(s) to stderr. On no evaluator (exit 1), prints a clear error message naming the dataset and instructing the user to configure an evaluator in the Langfuse UI. On API error (exit 2), logs the error details to stderr.
 
 ## Environment Setup Phase
 
