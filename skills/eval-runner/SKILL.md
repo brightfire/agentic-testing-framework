@@ -103,7 +103,7 @@ For each variant spec:
 
 ## Sync Phase
 
-First phase of the eval runner. Syncs eval definitions to Langfuse and captures manifest paths needed by the execute phase.
+Syncs eval definitions to Langfuse and captures manifest paths needed by the execute phase.
 
 ### Inputs
 
@@ -165,7 +165,7 @@ See [`references/gotchas.md`](references/gotchas.md) for Sync Phase error preven
 
 ## Environment Setup Phase
 
-Second phase of the eval runner. Prepares the eval environment so the harness can run variants in isolation.
+Prepares the eval environment so the harness can run variants in isolation.
 
 ### Procedure
 
@@ -184,7 +184,7 @@ See [`references/gotchas.md`](references/gotchas.md) for Environment Setup error
 
 ## Execute Phase
 
-Third phase of the eval runner. Invokes the eval harness for each variant in the pruned run matrix, directing the agent to the appropriate suffixed skill via an attestation prefix. Silent on success — results passed to the report phase. Loud on failure — report back to the originating channel immediately as an error notification.
+Invokes the eval harness for each variant in the pruned run matrix, directing the agent to the appropriate suffixed skill via an attestation prefix. Silent on success — results passed to the report phase. Loud on failure — report back to the originating channel immediately as an error notification.
 
 ### Inputs
 
