@@ -8,8 +8,6 @@ metadata:
 
 # Eval Runner
 
-The eval runner orchestrates eval test phases. Each phase is a section below.
-
 ## Variant Inference
 
 The skill determines what to test based on the request, not the trigger source. Three independent dimensions:
@@ -54,7 +52,7 @@ The harness appends ` - <timestamp>` and optionally ` - <run_idx>/<total>` for r
 
 After variant inference, pin all git refs to commit hashes so subsequent phases use a fixed snapshot:
 
-1. For each variant spec, fetch from origin to ensure the ref is available locally: `git fetch origin "<ref>"`. If the ref is a branch name (not a commit hash), resolve it to a commit hash: `git rev-parse "origin/<ref>"` (or `git ls-remote origin "<ref>"`). If the ref is already a commit hash, `git fetch origin "<ref>"` ensures the commit is present in the local clone.
+1. Fetch and pin each ref to a commit hash: `git fetch origin "<ref>"` then `git rev-parse "origin/<ref>"` for branch refs. Commit hashes are used as-is.
 2. Replace the branch ref with the resolved commit hash in the variant spec.
 3. All subsequent phases (recency check, pre-flight, sync, env setup) use the pinned commit hash — never the branch name.
 
@@ -129,7 +127,7 @@ First phase of the eval runner. Syncs eval definitions to Langfuse and captures 
 
 Sync every variant that remains after the Recency Check prunes the run matrix. For reruns, sync all variants if the user confirmed a forced re-run; otherwise only sync new or changed variants.
 
-Use `git show` to extract each version to a temp file. This avoids modifying the working tree and works regardless of current checkout state.
+Use `git show` to extract each version to a temp file.
 
 Normalize the variant label to `[a-z0-9-]` before using it as a filename (replace `/` with `-`, lowercase, strip dots and underscores).
 
@@ -221,7 +219,7 @@ The harness appends ` - <timestamp>` (and ` - <run_idx>/<total>` for repeats) at
 Read the <suffixed-skill-name> skill from available_skills. When you respond, the first line of the response must be the path of the skill you read. Then,
 ```
 
-The trailing space after "Then," is intentional — the harness prepends this prefix directly to each dataset item's input. For model A/B tests (Slack-triggered, single skill variant), the same suffixed skill name is used for both model runs — only `--model` differs.
+For model A/B tests (Slack-triggered, single skill variant), the same suffixed skill name is used for both model runs — only `--model` differs.
 
 #### 3. Invoke the harness
 
@@ -245,11 +243,11 @@ Omit `--model` for the agent's default model. Omit `--repeat` when count is 1. W
 
 #### 4. Filter to specific dataset items (if applicable)
 
-When using `--manifest`, item selection comes from the manifest. When using `--dataset` (no manifest), pass `--item-id <item-id>` for subset runs (single item per invocation, partial match). For multiple specific items, run the harness once per item with `--item-id`. Each per-item invocation must use its own item-scope in the experiment name — the 8-char hash of the single item ID — not the hash of the full requested subset.
+When using `--dataset` (no manifest), pass `--item-id <item-id>` for subset runs (single item per invocation, partial match). For multiple specific items, run the harness once per item with `--item-id`. Each per-item invocation must use its own item-scope in the experiment name — the 8-char hash of the single item ID.
 
 #### 5. Capture results
 
-For each harness invocation, capture: experiment run name(s) from stdout (`Last run name: <name>`), completion status (exit 0 = success, non-zero = failure), per-item failures (harness logs `N failed items — indices: [...]` with item indices), and dataset run URL.
+For each harness invocation, capture: completion status (exit 0 = success, non-zero = failure), per-item failures (harness logs `N failed items — indices: [...]` with item indices), and dataset run URL.
 
 ### Output
 
@@ -258,7 +256,6 @@ runs:
   - variant: <variant-label>
     model: <model-id>
     experiment_name: <base-experiment-name>
-    harness_run_names: [<full names from harness stdout>]
     status: success | partial | failed
     failed_items: [<item indices or ids, if any>]
     error: <error message, if failed>

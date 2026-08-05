@@ -252,10 +252,10 @@ items:
         # Phase: Execute
         - "Execute: constructs base experiment name following the <dataset>__<model>__<variant-label>__<git-hash>__<item-scope> convention"
         - "Execute: constructs attestation prefix directing agent to the suffixed skill name from env setup"
-        - "Execute: invokes eval_harness.py for each variant with --dataset, --run-name, --prompt-prefix, --manifest"
+        - "Execute: invokes eval_harness.py for each variant with --run-name, --prompt-prefix, --manifest"
         - "Execute: passes the manifest from the sync phase to pin dataset version"
         - "Execute: runs variants sequentially (not concurrently) by default"
-        - "Execute: captures experiment run names and completion status from harness stdout"
+        - "Execute: captures completion status and per-item failures from harness output"
         - "Execute: silent on success — does not post results to any channel (passed to report phase)"
         # Phase: Report (add criteria when implemented)
       scoring_rules: |
