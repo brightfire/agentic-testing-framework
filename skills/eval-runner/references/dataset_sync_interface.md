@@ -31,13 +31,6 @@ python src/dataset_sync.py --file <path-to-eval.yaml> [options]
   capture). All other lines are human-readable log output.
 - **stderr:** Empty (logs go to stdout).
 
-### Manifest File
-
-When `--output-manifest <path>` is passed, a JSON file is written containing
-per-item timestamps from Langfuse server responses. The script prints the
-manifest path as the last line of stdout. This file is passed to the
-eval harness to pin experiment runs to exact dataset state.
-
 ## Exit Codes
 
 | Code | Meaning |
@@ -58,12 +51,3 @@ items:
     expected_output: <what a correct response looks like>
 ```
 
-## Manifest File
-
-When `--output-manifest <path>` is passed, a JSON file is written containing
-the dataset name, per-item server timestamps, and an overall `synced_at`
-completion timestamp. This file is passed to the eval harness via `--manifest`.
-
-The manifest is the source of truth for the harness — it determines the
-dataset name, which items to run, and the dataset version. `--manifest` is
-mutually exclusive with `--dataset` and `--item-id`.
