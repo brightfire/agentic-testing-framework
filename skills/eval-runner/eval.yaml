@@ -560,3 +560,33 @@ items:
         # Phase: Report (add criteria when implemented)
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
+
+  # ─── Evaluator check (post-sync gate) ─────────────────────────────
+
+  - id: no-evaluator-configured
+    input: |
+      PR context:
+      - Repo: brightfire/agentic-testing-framework
+      - PR branch: claw/vash/skill-improvement
+      - PR number: 77
+      - Base branch: main
+      - Files changed: skills/eval-runner/SKILL.md
+
+      Inference completed: skill A/B (main vs PR head), single model (agent default), all dataset items. Baseline included (no prior runs). User has confirmed the summary. Pre-flight and sync completed successfully — the dataset was synced to Langfuse.
+
+      User request: "Proceed with the eval."
+    expected_output:
+      behavior: |
+        The agent proceeds through inference, confirmation, pre-flight, and sync (all succeed). After sync, it runs the evaluator check by invoking evaluator_check.py with the dataset name. The check fails (exit 1) — no enabled evaluation rule targets the dataset. The agent STOPS and does not proceed to env setup or execute. It reports to the user that no evaluator is configured for the dataset and instructs them to set one up in the Langfuse UI before re-running.
+      scoring_type: pass_fail
+      scoring_criteria:
+        # Phase: Sync
+        - "Sync: completes successfully — dataset exists in Langfuse"
+        # Phase: Evaluator Check
+        - "Evaluator check: runs evaluator_check.py with the dataset name from the synced eval.yaml"
+        - "Evaluator check: detects that no enabled evaluation rule targets the dataset (exit 1)"
+        - "Evaluator check: does NOT proceed to env setup or execute after the check fails"
+        - "Evaluator check: reports to the user that no evaluator is configured for the dataset"
+        - "Evaluator check: instructs the user to configure an evaluator in the Langfuse UI before re-running"
+      scoring_rules: |
+        Score 10 * (passed criteria / total criteria).
