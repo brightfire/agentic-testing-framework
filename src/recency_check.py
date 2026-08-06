@@ -129,12 +129,12 @@ def fetch_dataset_runs(langfuse_host, auth_header, dataset, filter_prefix, cutof
 
     Returns a list of run dicts with at least ``name`` and ``id`` keys.
     """
-    matching_runs = []
     separator = " - "
 
-    # --- Try v4 experiments endpoint first ---
+    # --- Query v4 experiments endpoint ---
     # fromStartTime is required by the v4 experiments endpoint.
     # Use the cutoff timestamp as the fromStartTime.
+    runs_by_name = {}  # name -> run dict (v4 experiments take priority)
     cursor = None
     while True:
         url = f"{langfuse_host}{API_BASE}/experiments"
@@ -166,7 +166,7 @@ def fetch_dataset_runs(langfuse_host, auth_header, dataset, filter_prefix, cutof
                 continue
             name = run.get("name", "")
             if name.startswith(filter_prefix + separator):
-                matching_runs.append(run)
+                runs_by_name[name] = run
 
         if page_has_old:
             log(f"Encountered runs older than cutoff, stopping pagination.")
@@ -177,33 +177,36 @@ def fetch_dataset_runs(langfuse_host, auth_header, dataset, filter_prefix, cutof
             break
         cursor = next_cursor
 
-    if matching_runs:
-        return matching_runs
-
-    # --- Fallback: datasets endpoint (for v3 data not migrated to v4 experiments) ---
-    log(f"No runs from experiments endpoint; falling back to datasets endpoint.")
+    # --- Also query datasets endpoint for v3 runs not migrated to v4 experiments ---
     url = f"{langfuse_host}{API_BASE}/datasets/{dataset}"
     resp = requests.get(
         url,
         headers={"Authorization": f"Basic {auth_header}"},
         timeout=30,
     )
-    if resp.status_code != 200:
-        if resp.status_code == 404:
-            return []
+    if resp.status_code == 200:
+        data = resp.json()
+        run_names = data.get("runs", []) or []
+        fallback_count = 0
+        for name in run_names:
+            if not name.startswith(filter_prefix + separator):
+                continue
+            if name in runs_by_name:
+                continue  # already have the v4 version
+            created_at = _parse_timestamp_from_run_name(name)
+            if created_at and created_at < cutoff_ts:
+                continue
+            # Mark as fallback — no real v4 experiment ID, so threshold
+            # checks (which need experimentId for /experiment-items) can't
+            # verify these runs.
+            runs_by_name[name] = {"id": None, "name": name, "_fallback": True}
+            fallback_count += 1
+        if fallback_count:
+            log(f"Found {fallback_count} v3-only runs not in experiments endpoint")
+    elif resp.status_code != 404:
         raise RuntimeError(f"Langfuse API error {resp.status_code} fetching dataset: {resp.text}")
-    data = resp.json()
-    run_names = data.get("runs", []) or []
 
-    for name in run_names:
-        if not name.startswith(filter_prefix + separator):
-            continue
-        created_at = _parse_timestamp_from_run_name(name)
-        if created_at and created_at < cutoff_ts:
-            continue
-        matching_runs.append({"id": name, "name": name})
-
-    return matching_runs
+    return list(runs_by_name.values())
 
 
 def fetch_run_items(langfuse_host, auth_header, experiment_id, run_name, from_start_time=None):
@@ -341,10 +344,16 @@ def main():
     if args.min_pass_percent > 0:
         passed_runs = []
         for run in matching_runs:
-            run_id = run.get("id", "")
+            run_id = run.get("id")
             run_name = run.get("name", "")
-            if not run_id or not run_name:
-                log(f"Run missing id or name, skipping", "WARN")
+            if not run_name:
+                log(f"Run missing name, skipping", "WARN")
+                continue
+            if run.get("_fallback"):
+                log(f"Run '{run_name}' is a v3 fallback (no v4 experiment ID) — cannot check pass rate, skipping", "WARN")
+                continue
+            if not run_id:
+                log(f"Run '{run_name}' missing experiment ID, skipping", "WARN")
                 continue
             try:
                 items = fetch_run_items(
