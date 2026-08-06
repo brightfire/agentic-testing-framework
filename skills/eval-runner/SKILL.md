@@ -105,9 +105,16 @@ Use this template verbatim (adapt the content, keep the structure):
 
 ### Run Matrix
 
-- **Model:** `<model-id>` (agent default / specified)
 - **Dataset items:** All N (`<item1>`, `<item2>`, ...) / Specific: `<item-ids>`
-- **Repeats:** N (new / reused from <date> — N existing, N remaining / forced full re-run, ignoring recent runs per request)
+- **Repeats per combination:** N (default 10)
+
+| Model | Variant | Status | Runs |
+-------|---------|--------|------|
+| `<model-id>` | `<variant-label>` | ✅ Will run (new) / ♻️ Reused (N existing from <date>) | N |
+
+**Total runs:** N
+
+> ⚠️ After confirmation, an evaluator check will run to verify that at least one evaluator is configured for the dataset in Langfuse. If no evaluator is found, the run will stop after sync — no execution will occur.
 
 ---
 
@@ -120,13 +127,17 @@ The `@<github bot id>` mention is required on GitHub. Resolve your GitHub bot id
 gh auth status --hostname github.com --active --json hosts | jq -r '.hosts["github.com"][0].login' | sed 's/\[bot\]//'
 ```
 
+If the command returns `null`, fails, or produces an unexpected account, do not proceed with a placeholder. Ask the user for the bot's GitHub login explicitly (e.g., "What is the bot's GitHub username? Reply with @<username> confirm to start the run.").
+
 Do not include a mention prefix on Slack or webchat, where the bot receives all messages directly.
 
-If there are multiple models, list each on its own line in the Run Matrix. If there are multiple variants, include a row for each in the table.
+If there are multiple models, include one row per model × variant combination in the Run Matrix table. For single-model, single-variant runs, the table collapses to one row.
 
 For reruns where nothing changed and all variants have sufficient runs, replace the Run Matrix section with a note that all variants already have sufficient runs and ask the user to confirm a forced re-run.
 
 **Only proceed when the user replies with `confirm` or `proceed`** (or clearly indicates approval). On GitHub, the reply must include the bot's GitHub id as a mention (e.g. `@<github bot id> confirm`). On Slack or webchat, a bare `confirm`/`proceed` is sufficient. Do not post Slack handles or IDs on GitHub. If the user's reply is ambiguous, ask for explicit confirmation with the correct format for the platform. Do not interpret silence or a topic change as confirmation.
+
+**Post-confirmation messages:** If the user's message indicates confirmation has already been given (e.g., "User has confirmed the summary" or the input context states confirmation occurred), proceed without re-validating the confirmation format — the gate is already passed.
 
 The user can **adjust** (modify any dimension and re-confirm, re-running the recency check if variants change).
 
