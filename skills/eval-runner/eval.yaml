@@ -224,7 +224,7 @@ items:
       - Base branch: main
       - Files changed: skills/eval-runner/SKILL.md
 
-      Inference completed: skill A/B (main vs PR head), single model (agent default), all dataset items. Baseline included (no prior runs). User has confirmed the summary.
+      Inference completed: skill A/B (main vs PR head), single model (agent default), all dataset items. Baseline included (no prior runs). User has confirmed the summary (@vashbrightfire confirm).
 
       Proceed with the eval.
     expected_output:
@@ -270,7 +270,7 @@ items:
       - Base branch: main
 
       User request: "Re-run the previous eval for this PR."
-      The PR head has not changed since the previous eval. The user confirms they want to force a re-run.
+      The PR head has not changed since the previous eval. The user confirms they want to force a re-run (@vashbrightfire confirm).
     expected_output:
       behavior: |
         The agent recognizes the re-run request and skips variant inference — reusing the previous variant spec directly. Ref resolution always runs for branch refs, so the
@@ -456,7 +456,7 @@ items:
       - Files changed: skills/eval-runner/SKILL.md
       Note: The branch head version of skills/eval-runner/SKILL.md contains a self-reference in the body — line 42 says "This skill, eval-runner, handles..." (uses the skill name in prose).
 
-      Inference completed: skill A/B (main vs branch head), single model, all dataset items. User has confirmed the summary.
+      Inference completed: skill A/B (main vs branch head), single model, all dataset items. User has confirmed the summary (@vashbrightfire confirm).
 
       Proceed with the eval.
     expected_output:
@@ -572,7 +572,7 @@ items:
       - Base branch: main
       - Files changed: skills/eval-runner/SKILL.md
 
-      Inference completed: skill A/B (main vs PR head), single model (agent default), all dataset items. Baseline included (no prior runs). User has confirmed the summary. Pre-flight and sync completed successfully — the dataset was synced to Langfuse.
+      Inference completed: skill A/B (main vs PR head), single model (agent default), all dataset items. Baseline included (no prior runs). User has confirmed the summary (@vashbrightfire confirm). Pre-flight and sync completed successfully — the dataset was synced to Langfuse.
 
       User request: "Proceed with the eval."
     expected_output:
