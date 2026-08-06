@@ -66,7 +66,7 @@ After ref resolution, run `recency_check.py` for each (skill variant × model) c
 ```bash
 source ~/.openclaw/secrets/langfuse.env 2>/dev/null
 
-python ~/repos/agentic-testing-framework/src/recency_check.py \
+python3 ~/repos/agentic-testing-framework/src/recency_check.py \
   --dataset "<dataset-name>" \
   --filter "<base-experiment-name>" \
   --min-pass-percent 75
@@ -149,7 +149,7 @@ Run `dataset_sync.py` sequentially — concurrent syncs to the same dataset can 
 
 ```bash
 MANIFEST_FILE=$(mktemp)
-python ~/repos/agentic-testing-framework/src/dataset_sync.py \
+python3 ~/repos/agentic-testing-framework/src/dataset_sync.py \
   --file "$EVAL_FILE" \
   --items "<comma-separated-item-ids from inference>" \
   --output-manifest "$MANIFEST_FILE"
@@ -188,7 +188,7 @@ Run `evaluator_check.py` for every distinct dataset name produced by the sync ph
 ```bash
 source ~/.openclaw/secrets/langfuse.env 2>/dev/null
 
-python ~/repos/agentic-testing-framework/src/evaluator_check.py \
+python3 ~/repos/agentic-testing-framework/src/evaluator_check.py \
   --dataset "<dataset-name>"
 ```
 
@@ -257,7 +257,7 @@ Run `eval_harness.py` for each (skill variant × model) combination. Variants ru
 ```bash
 source ~/.openclaw/secrets/langfuse.env 2>/dev/null
 
-python ~/repos/agentic-testing-framework/src/eval_harness.py \
+python3 ~/repos/agentic-testing-framework/src/eval_harness.py \
   --manifest "<path-to-manifest-from-sync-phase>" \
   --run-name "<base-experiment-name>" \
   --prompt-prefix "Read the <suffixed-skill-name> skill from available_skills. When you respond, the first line of the response must be the path of the skill you read. Then, " \
