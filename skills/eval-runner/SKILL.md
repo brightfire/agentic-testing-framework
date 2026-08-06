@@ -3,7 +3,7 @@ name: eval-runner
 description: "Use when evaluating a skill or running tests for a skill — syncs eval definitions to Langfuse, prepares the eval environment, and orchestrates variant runs. SKIP for skill creation, editing, or auditing requests — use the skill-creator or skill-reviewer skills instead."
 metadata:
   author: brightfire
-  version: "2.3"
+  version: "2.4"
 ---
 
 # Eval Runner
@@ -78,9 +78,13 @@ Count the run names on stdout. If the count meets the requested repeat count, pr
 
 Exit 1 = script error. Report and stop.
 
-## Confirmation
+## Confirmation — HARD GATE
 
-After inference and the recency check, present a summary of the pruned run matrix and wait for user confirmation:
+⚠️ This is a mandatory stop point. Do NOT proceed to pre-flight, sync, env setup, or execute until the user explicitly confirms. No exceptions.
+
+After inference and the recency check, present a clear summary of the pruned run matrix and **STOP**. Do not run any further commands. Do not call dataset_sync.py, setup_eval_skill.sh, eval_harness.py, or evaluator_check.py. Wait for the user's reply.
+
+Present:
 
 - Skill variants (name, git ref, short hash)
 - Models to test
@@ -89,11 +93,15 @@ After inference and the recency check, present a summary of the pruned run matri
 - Excluded variants: skill versions where eval.yaml was not present at the commit (note which ref and that nothing can be tested)
 - Note: an evaluator check will run after sync to verify that at least one evaluator is configured for the dataset in Langfuse
 
-The user can **confirm** (proceed to pre-flight) or **adjust** (modify any dimension and re-confirm, re-running the recency check if variants change).
+End your message by asking the user to reply with `confirm` or `proceed` to start the run, or describe any adjustments.
 
-When asking for confirmation, instruct the user to reply with `confirm` or `proceed` to start the run, or describe any adjustments.
+**Only proceed when the user replies with `confirm` or `proceed`** (or clearly indicates approval). If the user's reply is ambiguous, ask for explicit confirmation. Do not interpret silence or a topic change as confirmation.
 
-For reruns ("run same test again"), the skill skips variant inference — the user is confirming the previous variant set. However, **ref resolution always runs** (see Ref Resolution above) — all branch refs are re-fetched and re-pinned, even on rerun. If any ref has changed since the previous run, treat it as a new variant — inform the user that the branch has advanced, update the variant spec with the new hash, and proceed with the updated commit (not the stale one). Only if all refs are unchanged should the recency check proceed against the existing experiment names. If nothing changed and all variants already have sufficient runs, ask the user to confirm a forced re-run. On confirmation, restore all pruned combinations to the matrix.
+The user can **adjust** (modify any dimension and re-confirm, re-running the recency check if variants change).
+
+For reruns ("run same test again"), the skill skips variant inference — but **the confirmation gate still applies**. After ref resolution and the recency check, present the same summary as above (variants, models, items, what's new vs reused, what's excluded) and **STOP**. The user must still reply with `confirm` or `proceed` before any sync or execute commands run. A rerun request is NOT itself confirmation — it's a request to prepare the rerun, not authorization to execute it.
+
+However, **ref resolution always runs** (see Ref Resolution above) — all branch refs are re-fetched and re-pinned, even on rerun. If any ref has changed since the previous run, treat it as a new variant — inform the user that the branch has advanced, update the variant spec with the new hash, and proceed with the updated commit (not the stale one). Only if all refs are unchanged should the recency check proceed against the existing experiment names. If nothing changed and all variants already have sufficient runs, ask the user to confirm a forced re-run. On confirmation, restore all pruned combinations to the matrix.
 
 ## Pre-flight Checks
 
@@ -244,7 +252,7 @@ For model A/B tests (Slack-triggered, single skill variant), the same suffixed s
 
 #### 3. Invoke the harness
 
-Run `eval_harness.py` for each (skill variant × model) combination. Variants run sequentially — one variant completes before the next begins. Within each variant, up to 5 dataset items run in parallel (`--item-concurrency 5`) and up to 5 experiment repeats run in parallel (`--experiment-concurrency 5`), for a maximum of 25 concurrent agent subprocesses. This balances throughput against gateway load.
+Run `eval_harness.py` for each (skill variant × model) combination. Variants run sequentially — one variant completes before the next begins. Within each variant, up to 5 dataset items run in parallel (`--item-concurrency 5`) and up to 3 experiment repeats run in parallel (`--experiment-concurrency 3`), for a maximum of 15 concurrent agent subprocesses.
 
 ```bash
 source ~/.openclaw/secrets/langfuse.env 2>/dev/null
@@ -256,7 +264,7 @@ python ~/repos/agentic-testing-framework/src/eval_harness.py \
   --model "<model-id>" \
   --repeat "<repeat-count>" \
   --item-concurrency 5 \
-  --experiment-concurrency 5
+  --experiment-concurrency 3
 ```
 
 Omit `--model` for the agent's default model. Always pass `--repeat` — default is 10 when inference doesn't specify a count. If recency found existing runs, subtract them from the repeat count (e.g., 10 requested, 4 found → `--repeat 6`).
