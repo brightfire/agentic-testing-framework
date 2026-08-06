@@ -38,22 +38,29 @@ def log(msg, level="INFO"):
 
 
 def fetch_all_scores(langfuse_host, auth_header, from_ts=None, to_ts=None, limit=100):
-    """Fetch all scores from Langfuse, paginating if needed.
+    """Fetch all scores from Langfuse, paginating via cursor.
 
-    The scores API uses offset-based pagination (page/totalPages), not cursor-based.
-    We detect which style the response uses and handle accordingly.
+    The scores API uses cursor-based pagination: each response includes
+    meta.cursor, which is passed as the `cursor` query param on the next
+    request. When meta.cursor is null, pagination is complete.
+
+    In Langfuse v4, the core score response does not include traceId.
+    We request `fields=subject,details` to get the `subject` object (which
+    contains `traceId` when kind is "observation" or "trace") and the
+    `metadata`/`comment` fields.
     """
     scores = []
-    page = 1
-    total_pages = 1  # updated after first request
-    while page <= total_pages:
-        params = {"limit": limit, "page": page}
+    cursor = None
+    while True:
+        params = {"limit": limit, "fields": "core,details,subject"}
+        if cursor:
+            params["cursor"] = cursor
         if from_ts:
             params["fromTimestamp"] = from_ts
         if to_ts:
             params["toTimestamp"] = to_ts
         resp = requests.get(
-            f"{langfuse_host}/api/public/scores",
+            f"{langfuse_host}/api/public/v3/scores",
             params=params,
             headers={"Authorization": f"Basic {auth_header}"},
             timeout=30,
@@ -62,38 +69,54 @@ def fetch_all_scores(langfuse_host, auth_header, from_ts=None, to_ts=None, limit
         data = resp.json()
         scores.extend(data.get("data", []))
         meta = data.get("meta", {})
-        # Offset-based pagination (self-hosted Langfuse): meta has page, limit, totalItems, totalPages
-        if "totalPages" in meta:
-            total_pages = meta["totalPages"]
-            page += 1
-        # Cursor-based pagination (Langfuse Cloud): meta has nextCursor
-        elif meta.get("nextCursor"):
-            params["cursor"] = meta["nextCursor"]
-            # cursor mode doesn't use page numbers; loop until no cursor
-            page += 1  # safety: prevent infinite loop
-            total_pages = page  # keep loop going
-        else:
+        next_cursor = meta.get("cursor")
+        if not next_cursor:
             break
+        cursor = next_cursor
     return scores
 
 
 def fetch_trace_metadata(langfuse_host, auth_header, trace_id):
-    """Fetch experiment metadata from a trace."""
+    """Fetch experiment metadata for a trace via the observations endpoint.
+
+    Queries /api/public/v2/observations with traceId to get all observations
+    for the trace, then reconstructs trace-level metadata from the root
+    observation (the one whose parentObservationId is null).
+
+    In Langfuse v4 events_only mode, traceContext may be empty for traces
+    migrated from v3. In that case, experiment_name and dataset_item_id will
+    be None, and callers should handle the missing metadata gracefully.
+    """
     try:
         resp = requests.get(
-            f"{langfuse_host}/api/public/traces/{trace_id}",
+            f"{langfuse_host}/api/public/v2/observations",
+            params={
+                "traceId": trace_id,
+                "fields": "core,basic,io,trace_context",
+                "limit": 100,
+            },
             headers={"Authorization": f"Basic {auth_header}"},
             timeout=10,
         )
         resp.raise_for_status()
-        t = resp.json()
-        md = t.get("metadata", {})
+        data = resp.json()
+        observations = data.get("data", [])
+        if not observations:
+            return {}
+        # The root observation (parentObservationId == null) carries
+        # trace-level metadata in its trace_context fields.
+        root = next(
+            (o for o in observations if o.get("parentObservationId") is None),
+            observations[0],
+        )
+        trace_ctx = root.get("traceContext", {}) or {}
+        md = trace_ctx.get("metadata", {}) or {}
         return {
             "experiment_name": md.get("experiment_name", None),
             "dataset_item_id": md.get("dataset_item_id", None),
             "openclaw_trace_id": md.get("openclaw_trace_id", None),
-            "trace_input": t.get("input"),
-            "trace_output": t.get("output"),
+            "trace_input": root.get("input"),
+            "trace_output": root.get("output"),
         }
     except Exception:
         return {}
@@ -107,7 +130,14 @@ def build_experiment_data(langfuse_host, auth_header, scores, name_prefix=None):
     experiments = defaultdict(lambda: defaultdict(list))
 
     for score in scores:
-        trace_id = score["traceId"]
+        # In v4, traceId is inside the subject object, not at the top level.
+        subject = score.get("subject", {})
+        trace_id = subject.get("traceId")
+        if not trace_id:
+            # v3 fallback: traceId was at top level in v3
+            trace_id = score.get("traceId")
+        if not trace_id:
+            continue
 
         if trace_id not in trace_cache:
             trace_cache[trace_id] = fetch_trace_metadata(
