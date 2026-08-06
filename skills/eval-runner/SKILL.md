@@ -225,6 +225,8 @@ See [`references/gotchas.md`](references/gotchas.md) for Environment Setup error
 
 Invokes the eval harness for each variant in the pruned run matrix, directing the agent to the appropriate suffixed skill via an attestation prefix. Silent on success — results passed to the report phase. Loud on failure — report back to the originating channel immediately as an error notification.
 
+**Monitoring:** The harness run is long-running. After invoking it, actively monitor to completion and report results without waiting for the user to ask. Use `process(action=poll, timeout=30000)` to check periodically, or set `yieldMs` high enough to catch completion in a single call. Never background the harness and go silent — the agent that started the run is responsible for bringing results back.
+
 ### Inputs
 
 | Input | Source | Description |
@@ -270,9 +272,9 @@ python3 ~/repos/agentic-testing-framework/src/eval_harness.py \
 Omit `--model` for the agent's default model. Always pass `--repeat` — default is 10 when inference doesn't specify a count. If recency found existing runs, subtract them from the repeat count (e.g., 10 requested, 4 found → `--repeat 6`).
 
 
-#### 4. Capture results
+#### 4. Monitor and capture results
 
-For each harness invocation, capture: completion status (exit 0 = success, non-zero = failure), per-item failures (harness logs `N failed items — indices: [...]` with item indices), and dataset run URL.
+The harness may take several minutes. After starting the harness, poll it to completion — do not background it and wait for the user to ask for status. Once complete, capture for each harness invocation: completion status (exit 0 = success, non-zero = failure), per-item failures (harness logs `N failed items — indices: [...]` with item indices), and dataset run URL.
 
 ### Output
 
