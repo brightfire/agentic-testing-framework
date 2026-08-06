@@ -92,21 +92,26 @@ def dataset_exists(langfuse_host, auth_header, dataset):
 
 
 def fetch_dataset_runs(langfuse_host, auth_header, dataset, filter_prefix, cutoff_ts):
-    """Fetch dataset runs from Langfuse, paginating and filtering by name prefix and cutoff.
+    """Fetch experiment runs from Langfuse, paginating and filtering by name prefix and cutoff.
 
-    Runs are returned newest-first by the API. We paginate using meta.totalPages
+    In Langfuse v4, /api/public/datasets/{name}/runs is removed; we use
+    /api/public/experiments instead, filtering by dataset name via query
+    params.  Pagination is cursor-based (meta.cursor).
+
+    Runs are returned newest-first by the API. We paginate using the cursor
     and stop early once the oldest run on a page is older than the cutoff.
 
     Returns a list of run dicts (each has at least 'id' and 'name' keys).
     """
     matching_runs = []
-    page = 1
-    total_pages = 1  # updated after first request
+    cursor = None
     separator = " - "
 
-    while page <= total_pages:
-        url = f"{langfuse_host}{API_BASE}/datasets/{dataset}/runs"
-        params = {"limit": PAGE_LIMIT, "page": page}
+    while True:
+        url = f"{langfuse_host}{API_BASE}/experiments"
+        params = {"limit": PAGE_LIMIT, "datasetName": dataset}
+        if cursor:
+            params["cursor"] = cursor
         resp = requests.get(
             url,
             params=params,
@@ -114,11 +119,10 @@ def fetch_dataset_runs(langfuse_host, auth_header, dataset, filter_prefix, cutof
             timeout=30,
         )
         if resp.status_code != 200:
-            raise RuntimeError(f"Langfuse API error {resp.status_code} fetching dataset runs: {resp.text}")
+            raise RuntimeError(f"Langfuse API error {resp.status_code} fetching experiments: {resp.text}")
         data = resp.json()
         runs = data.get("data", [])
         meta = data.get("meta", {})
-        total_pages = meta.get("totalPages", 1)
 
         page_has_old = False
         for run in runs:
@@ -132,27 +136,33 @@ def fetch_dataset_runs(langfuse_host, auth_header, dataset, filter_prefix, cutof
                 matching_runs.append(run)
 
         if page_has_old:
-            log(f"Page {page}: encountered runs older than cutoff, stopping pagination.")
+            log(f"Encountered runs older than cutoff, stopping pagination.")
             break
 
-        page += 1
+        next_cursor = meta.get("cursor")
+        if not next_cursor:
+            break
+        cursor = next_cursor
 
     return matching_runs
 
 
-def fetch_run_items(langfuse_host, auth_header, dataset_id, run_name):
-    """Fetch dataset run items to get the trace IDs for each item in the run.
+def fetch_run_items(langfuse_host, auth_header, experiment_id, run_name):
+    """Fetch experiment items to get the trace IDs for each item in the run.
 
-    Uses GET /api/public/dataset-run-items?datasetId=X&runName=Y.
-    Paginates via meta.totalPages to fetch all items.
+    In Langfuse v4, /api/public/dataset-run-items is removed; we use
+    /api/public/experiment-items instead, filtering by experimentId.
+    Pagination is cursor-based (meta.cursor).
+
     Returns a list of dicts, each with at least 'traceId' and 'datasetItemId'.
     """
     all_items = []
-    page = 1
-    total_pages = 1
-    while page <= total_pages:
-        url = f"{langfuse_host}{API_BASE}/dataset-run-items"
-        params = {"datasetId": dataset_id, "runName": run_name, "limit": PAGE_LIMIT, "page": page}
+    cursor = None
+    while True:
+        url = f"{langfuse_host}{API_BASE}/experiment-items"
+        params = {"experimentId": experiment_id, "limit": PAGE_LIMIT}
+        if cursor:
+            params["cursor"] = cursor
         resp = requests.get(
             url,
             params=params,
@@ -161,12 +171,15 @@ def fetch_run_items(langfuse_host, auth_header, dataset_id, run_name):
         )
         if resp.status_code != 200:
             raise RuntimeError(
-                f"Langfuse API error {resp.status_code} fetching run items for '{run_name}': {resp.text}"
+                f"Langfuse API error {resp.status_code} fetching experiment items for '{run_name}': {resp.text}"
             )
         data = resp.json()
         all_items.extend(data.get("data", []))
-        total_pages = data.get("meta", {}).get("totalPages", 1)
-        page += 1
+        meta = data.get("meta", {})
+        next_cursor = meta.get("cursor")
+        if not next_cursor:
+            break
+        cursor = next_cursor
     return all_items
 
 
@@ -265,12 +278,11 @@ def main():
         for run in matching_runs:
             run_id = run.get("id", "")
             run_name = run.get("name", "")
-            dataset_id = run.get("datasetId", "")
-            if not dataset_id or not run_name:
-                log(f"Run {run_id} missing datasetId or name, skipping", "WARN")
+            if not run_id or not run_name:
+                log(f"Run missing id or name, skipping", "WARN")
                 continue
             try:
-                items = fetch_run_items(args.langfuse_host, auth_header, dataset_id, run_name)
+                items = fetch_run_items(args.langfuse_host, auth_header, run_id, run_name)
             except Exception as e:
                 log(f"Error fetching run items for '{run_name}': {e}", "ERROR")
                 sys.exit(1)
