@@ -95,6 +95,8 @@ def fetch_dataset_runs(langfuse_host, auth_header, dataset, filter_prefix, cutof
     """Fetch experiment runs from Langfuse, paginating and filtering by name prefix and cutoff.
 
     Uses /api/public/experiments, filtering by dataset name via query params.
+    In Langfuse v4, the `fromStartTime` parameter is required — we pass the
+    cutoff timestamp as `fromStartTime` so the API only returns runs after the cutoff.
     Pagination is cursor-based (meta.cursor).
 
     Runs are returned newest-first by the API. We paginate using the cursor
@@ -105,10 +107,11 @@ def fetch_dataset_runs(langfuse_host, auth_header, dataset, filter_prefix, cutof
     matching_runs = []
     cursor = None
     separator = " - "
+    from_start = cutoff_ts.strftime('%Y-%m-%dT%H:%M:%SZ')
 
     while True:
         url = f"{langfuse_host}{API_BASE}/experiments"
-        params = {"limit": PAGE_LIMIT, "datasetName": dataset}
+        params = {"limit": PAGE_LIMIT, "datasetName": dataset, "fromStartTime": from_start}
         if cursor:
             params["cursor"] = cursor
         resp = requests.get(
@@ -146,10 +149,12 @@ def fetch_dataset_runs(langfuse_host, auth_header, dataset, filter_prefix, cutof
     return matching_runs
 
 
-def fetch_run_items(langfuse_host, auth_header, experiment_id, run_name):
+def fetch_run_items(langfuse_host, auth_header, experiment_id, run_name, from_start_time=None):
     """Fetch experiment items to get the trace IDs for each item in the run.
 
     Uses /api/public/experiment-items, filtering by experimentId.
+    In Langfuse v4, `fromStartTime` is required — pass a wide range to get
+    all items for the specified experiment.
     Pagination is cursor-based (meta.cursor).
 
     Returns a list of dicts, each with at least 'traceId' and 'datasetItemId'.
@@ -159,6 +164,8 @@ def fetch_run_items(langfuse_host, auth_header, experiment_id, run_name):
     while True:
         url = f"{langfuse_host}{API_BASE}/experiment-items"
         params = {"experimentId": experiment_id, "limit": PAGE_LIMIT}
+        if from_start_time:
+            params["fromStartTime"] = from_start_time
         if cursor:
             params["cursor"] = cursor
         resp = requests.get(
@@ -280,7 +287,10 @@ def main():
                 log(f"Run missing id or name, skipping", "WARN")
                 continue
             try:
-                items = fetch_run_items(args.langfuse_host, auth_header, run_id, run_name)
+                items = fetch_run_items(
+                    args.langfuse_host, auth_header, run_id, run_name,
+                    from_start_time=cutoff_ts.strftime('%Y-%m-%dT%H:%M:%SZ'),
+                )
             except Exception as e:
                 log(f"Error fetching run items for '{run_name}': {e}", "ERROR")
                 sys.exit(1)
