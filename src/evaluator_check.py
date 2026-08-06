@@ -141,36 +141,21 @@ def find_matching_rules(rules, dataset_id):
             matching.append(rule)
             continue
 
-        # Multiple datasetId filters are ANDed by Langfuse — a trace belongs to
-        # exactly one dataset, so multiple "any of" datasetId filters can never
-        # both match. This is a misconfiguration (likely the user meant to combine
-        # them into a single filter with an array). Skip the rule and warn.
-        if len(dataset_filters) > 1:
-            rule_name = rule.get("name", "(unnamed)")
-            log(
-                f"Rule '{rule_name}' has {len(dataset_filters)} datasetId filters "
-                f"(ANDed by Langfuse). A trace belongs to exactly one dataset, "
-                f"so this rule can never match. Skipping — likely a misconfiguration. "
-                f"Combine into a single filter with operator 'any of' and an array value.",
-                "WARN",
-            )
-            continue
-
-        # Single datasetId filter — check if our dataset is included
-        df = dataset_filters[0]
-        values = df.get("value", [])
-        operator = df.get("operator", "any of")
-
-        if operator == "none of":
-            if dataset_id in values:
-                continue  # our dataset is explicitly excluded
-            else:
-                matching.append(rule)  # "all datasets except X" — we're not excluded
-                continue
-        elif dataset_id in values:
+        # Evaluate each datasetId filter (all must pass — they're ANDed by Langfuse)
+        all_pass = True
+        for df in dataset_filters:
+            values = df.get("value", [])
+            operator = df.get("operator", "any of")
+            if operator == "none of":
+                if dataset_id in values:
+                    all_pass = False  # our dataset is explicitly excluded
+                    break
+                # "all datasets except X" — we're not excluded, this filter passes
+            elif dataset_id not in values:
+                all_pass = False  # "any of" that doesn't include us
+                break
+        if all_pass:
             matching.append(rule)
-            continue
-        # Single "any of" filter that doesn't include us — no match
         continue
     return matching
 
