@@ -82,24 +82,55 @@ Exit 1 = script error. Report and stop.
 
 ⚠️ This is a mandatory stop point. Do NOT proceed to pre-flight, sync, env setup, or execute until the user explicitly confirms. No exceptions.
 
-After inference and the recency check, present a clear summary of the pruned run matrix and **STOP**. Do not run any further commands. Do not call dataset_sync.py, setup_eval_skill.sh, eval_harness.py, or evaluator_check.py. Wait for the user's reply.
+After inference and the recency check, present a confirmation dialog using this exact format and **STOP**. Do not run any further commands. Do not call dataset_sync.py, setup_eval_skill.sh, eval_harness.py, or evaluator_check.py. Wait for the user's reply.
 
-Present:
+### Confirmation Format
 
-- Skill variants (name, git ref, short hash)
-- Models to test
-- Dataset items (all or specific ids)
-- For each variant: testing (new) or reused (from when — user can override and force re-run)
-- Excluded variants: skill versions where eval.yaml was not present at the commit (note which ref and that nothing can be tested)
-- Note: an evaluator check will run after sync to verify that at least one evaluator is configured for the dataset in Langfuse
+Use this template verbatim (adapt the content, keep the structure):
 
-End your message by asking the user to reply with `confirm` or `proceed` to start the run, or describe any adjustments.
+```
+## Eval Run Summary — Confirmation Required
 
-**Only proceed when the user replies with `confirm` or `proceed`** (or clearly indicates approval). If the user's reply is ambiguous, ask for explicit confirmation. Do not interpret silence or a topic change as confirmation.
+**Skill:** `<skill-name>`
+**Eval YAML:** `<path/to/eval.yaml>`
+**Request:** <one-line summary of what was asked, including any special instructions like forced re-run>
+
+### Skill Variants
+
+| Variant | Git Ref | Has eval.yaml? | Status |
+|---------|---------|----------------|--------|
+| `<variant-label>` (<source>) | `<short-hash>` | ✅ Yes / ❌ No | **Will run** / Excluded — nothing to test |
+
+<If single variant: note which variant and why. If multiple: note all. If any excluded: explain why.>
+
+### Run Matrix
+
+- **Model:** `<model-id>` (agent default / specified)
+- **Dataset items:** All N (`<item1>`, `<item2>`, ...) / Specific: `<item-ids>`
+- **Repeats:** N (new / reused from <date> — N existing, N remaining / forced full re-run, ignoring recent runs per request)
+
+---
+
+Reply with `@<github bot id> confirm` or `@<github bot id> proceed` to start the run.
+```
+
+The `@<github bot id>` mention is required on GitHub. Resolve your GitHub bot id by running:
+
+```bash
+gh auth status --hostname github.com --active --json hosts | jq -r '.hosts["github.com"][0].login' | sed 's/\[bot\]//'
+```
+
+Do not include a mention prefix on Slack or webchat, where the bot receives all messages directly.
+
+If there are multiple models, list each on its own line in the Run Matrix. If there are multiple variants, include a row for each in the table.
+
+For reruns where nothing changed and all variants have sufficient runs, replace the Run Matrix section with a note that all variants already have sufficient runs and ask the user to confirm a forced re-run.
+
+**Only proceed when the user replies with `confirm` or `proceed`** (or clearly indicates approval). On GitHub, the reply must include the bot's GitHub id as a mention (e.g. `@<github bot id> confirm`). On Slack or webchat, a bare `confirm`/`proceed` is sufficient. Do not post Slack handles or IDs on GitHub. If the user's reply is ambiguous, ask for explicit confirmation with the correct format for the platform. Do not interpret silence or a topic change as confirmation.
 
 The user can **adjust** (modify any dimension and re-confirm, re-running the recency check if variants change).
 
-For reruns ("run same test again"), the skill skips variant inference — but **the confirmation gate still applies**. After ref resolution and the recency check, present the same summary as above (variants, models, items, what's new vs reused, what's excluded) and **STOP**. The user must still reply with `confirm` or `proceed` before any sync or execute commands run. A rerun request is NOT itself confirmation — it's a request to prepare the rerun, not authorization to execute it.
+For reruns ("run same test again"), the skill skips variant inference — but **the confirmation gate still applies**. After ref resolution and the recency check, present the same confirmation dialog format as above and **STOP**. The user must still reply with `confirm` or `proceed` before any sync or execute commands run. A rerun request is NOT itself confirmation — it's a request to prepare the rerun, not authorization to execute it.
 
 However, **ref resolution always runs** (see Ref Resolution above) — all branch refs are re-fetched and re-pinned, even on rerun. If any ref has changed since the previous run, treat it as a new variant — inform the user that the branch has advanced, update the variant spec with the new hash, and proceed with the updated commit (not the stale one). Only if all refs are unchanged should the recency check proceed against the existing experiment names. If nothing changed and all variants already have sufficient runs, ask the user to confirm a forced re-run. On confirmation, restore all pruned combinations to the matrix.
 
