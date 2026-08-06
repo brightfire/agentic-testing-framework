@@ -145,23 +145,36 @@ def find_openclaw_trace_id(langfuse_host, auth_header, session_id, max_wait=15):
     """Look up the OpenClaw trace ID by session ID via the Langfuse REST API.
 
     The OpenClaw gateway emits traces with `openclaw.sessionId` as a span
-    attribute, which Langfuse maps to the trace's top-level `sessionId` field.
+    attribute, which Langfuse maps to observation metadata.  In Langfuse v4
+    the /api/public/traces endpoint is removed; we query
+    /api/public/v2/observations instead, filtering by sessionId, and
+    extract the traceId from the first matching observation.
+
     We poll the API for a few seconds after the CLI call returns because the
     OTel exporter may not have flushed yet.
     """
     import time as _time
+    from datetime import timedelta
+
+    filter_json = json.dumps([
+        {"type": "string", "column": "sessionId", "operator": "=", "value": session_id}
+    ])
     for attempt in range(max_wait):
         try:
             resp = requests.get(
-                f"{langfuse_host}/api/public/traces",
-                params={"sessionId": session_id, "limit": 1},
+                f"{langfuse_host}/api/public/v2/observations",
+                params={
+                    "filter": filter_json,
+                    "limit": 1,
+                    "fields": "core,basic,trace_context",
+                },
                 headers={"Authorization": f"Basic {auth_header}"},
                 timeout=5,
             )
             data = resp.json()
-            traces = data.get("data", [])
-            if traces:
-                return traces[0]["id"]
+            observations = data.get("data", [])
+            if observations:
+                return observations[0].get("traceId")
         except Exception:
             pass
         _time.sleep(1)
@@ -377,7 +390,7 @@ def main():
     langfuse_client = Langfuse(
         public_key=public_key,
         secret_key=secret_key,
-        host=args.langfuse_host,
+        base_url=args.langfuse_host,
     )
 
     # --- Load manifest or use explicit args ---
