@@ -336,12 +336,103 @@ Status: `success` (all items completed, exit 0) | `partial` (some items failed, 
 
 See [`references/execute-failure-handling.md`](references/execute-failure-handling.md) for the full failure handling procedure.
 
+## Report Phase
+
+The terminal phase — fetches scores from Langfuse, compares variants, produces a verdict, generates improvement suggestions for regressions, and posts results to the originating channel.
+
+### Inputs
+
+| Input | Source | Description |
+|-------|--------|-------------|
+| Experiment run names | Execute phase output | Base experiment name prefixes (without timestamp/repeat suffixes) — one per variant |
+| Dataset name | Sync phase output | Langfuse dataset name |
+| Originating channel | Request context | PR comment, Slack reply, web chat, or webhook — results posted through the same path |
+| Skill diff | Git | `git diff <base-ref> <head-ref> -- <skill-path>` — used for improvement suggestion generation |
+
+### Procedure
+
+#### 1. Wait for evaluator scoring
+
+After the execute phase completes, wait ~30 seconds for the Langfuse evaluator to finish scoring all traces.
+
+```bash
+sleep 30
+```
+
+#### 2. Fetch scores and compare variants
+
+Run `eval_report.py` with `--variants` passing the experiment name prefixes from the execute phase, `--by-dimension`, and `--json` flags:
+
+```bash
+source ~/.openclaw/secrets/langfuse.env 2>/dev/null
+
+python ~/repos/agentic-testing-framework/src/eval_report.py \
+  --dataset "<dataset-name>" \
+  --variants "<base-variant-prefix>" "<head-variant-prefix>" \
+  --by-dimension \
+  --json
+```
+
+The `--variants` flag accepts any number of prefixes (2 or more). The first prefix is the baseline (typically the base branch). The `--json` flag produces structured output suitable for programmatic parsing.
+
+See [`references/report-format.md`](references/report-format.md) for the full JSON output schema.
+
+#### 3. Parse the JSON output
+
+Parse the JSON output from eval_report.py. The structure contains:
+- `variants`: per-variant composite scores, dimension breakdowns, and per-item data
+- `deltas`: per-item and overall deltas (variant[n] - variant[0])
+
+#### 4. Generate verdict
+
+Based on the deltas, determine the verdict:
+
+- **Improvement:** No variant regressed significantly (delta > -2.0 on any dimension or item), and at least one variant improved significantly (delta > +2.0)
+- **Regression:** Any variant regressed significantly (delta < -2.0) on composite or any dimension
+- **Neutral:** All deltas within ±2.0 — no significant changes
+
+The threshold of 2.0 points (on a scale where 10.0 is passing) represents a meaningful change. Note this threshold in the report.
+
+#### 5. Generate improvement suggestions
+
+For each item where any dimension's delta < -2.0:
+
+1. Identify which dimension regressed
+2. Obtain the skill diff: `git diff <base-ref> <head-ref> -- <skill-path>`
+3. Review the diff for changes that could affect the regressed dimension
+4. Suggest a specific fix or area to investigate
+5. If the regression is in a dimension unrelated to the skill changes, note that it may be noise
+
+The agent reasons over the scores and the skill/eval diff to provide targeted, specific suggestions.
+
+#### 6. Format the report
+
+Format the report as Markdown using the template in [`references/report-format.md`](references/report-format.md).
+
+#### 7. Post to the originating channel
+
+- **PR-triggered:** Post as a comment on the PR (via `gh api -X POST repos/<owner>/<repo>/issues/<pr-number>/comments` with a JSON body containing the report markdown)
+- **Slack-triggered:** Reply in the Slack thread/channel
+- **Web chat:** Reply in the chat session
+- **Webhook:** Return as the webhook response (just reply normally)
+
+### Output
+
+Results posted to originating channel. No data passed to a next phase — terminal.
+
+### Failure Handling
+
+- **No scores (all experiments have no scores):** Report that scoring hasn't completed yet and suggest waiting longer or checking evaluator configuration.
+- **eval_report.py exits non-zero:** Report the error from stderr.
+- **Some variants have scores and others don't:** Note which variants are missing data and proceed with available data.
+
 ## Cleanup
 
-After execute and report phases complete, remove the suffixed directories created during Environment Setup. Track which directories were created and `trash` only those — do not remove directories from other concurrent runs. If the run aborts after env setup, cleanup should still run. Also clean up `$WORK_DIR` if it was preserved for the execute phase.
+After the Report Phase posts results, remove the suffixed directories created during Environment Setup. Track which directories were created and `trash` only those — do not remove directories from other concurrent runs. If the run aborts after env setup, cleanup should still run. Also clean up `$WORK_DIR` if it was preserved for the execute phase.
 
 ## References
 
 - [`references/dataset_sync_interface.md`](references/dataset_sync_interface.md) — CLI interface for `dataset_sync.py`: arguments, env vars, output format, exit codes, eval.yaml schema.
 - [`references/execute-failure-handling.md`](references/execute-failure-handling.md) — Execute phase error handling: immediate notifications, partial failures, multi-variant abort rules.
 - [`references/gotchas.md`](references/gotchas.md) — Error-prevention notes for Sync and Environment Setup phases.
+- [`references/report-format.md`](references/report-format.md) — Report Phase output format, JSON schema, verdict criteria, and improvement suggestion guidance.
