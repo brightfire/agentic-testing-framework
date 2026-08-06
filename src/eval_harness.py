@@ -332,8 +332,8 @@ def main():
              "calls your gateway can handle."
     )
     parser.add_argument(
-        "--experiment-concurrency", type=int, default=1,
-        help="Number of experiment repeats to run in parallel (default: 1). "
+        "--experiment-concurrency", type=int, default=3,
+        help="Number of experiment repeats to run in parallel (default: 3). "
              "Combined with --item-concurrency, the total concurrent agent calls "
              "is experiment-concurrency x item-concurrency. For example, with "
              "--experiment-concurrency 2 --item-concurrency 2, up to 4 agent "
