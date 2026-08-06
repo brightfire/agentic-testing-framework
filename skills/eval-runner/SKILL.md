@@ -87,6 +87,7 @@ After inference and the recency check, present a summary of the pruned run matri
 - Dataset items (all or specific ids)
 - For each variant: testing (new) or reused (from when — user can override and force re-run)
 - Excluded variants: skill versions where eval.yaml was not present at the commit (note which ref and that nothing can be tested)
+- Note: an evaluator check will run after sync to verify that at least one evaluator is configured for the dataset in Langfuse
 
 The user can **confirm** (proceed to pre-flight) or **adjust** (modify any dimension and re-confirm, re-running the recency check if variants change).
 
@@ -166,6 +167,29 @@ Pass manifest paths to the execute phase.
 
 See [`references/gotchas.md`](references/gotchas.md) for Sync Phase error prevention.
 
+## Evaluator Check
+
+After sync (the dataset must exist in Langfuse first) and before env setup/execute (to avoid wasted work), verify that at least one enabled evaluator is configured for the dataset in Langfuse. This check always runs after sync — lack of evaluators means the dataset is not ready for eval and should fail regardless of whether execute is intended.
+
+### Procedure
+
+Run `evaluator_check.py` for every distinct dataset name produced by the sync phase (before and after variants may use different dataset names if the eval.yaml was renamed). If any check fails, STOP — do not proceed to env setup or execute.
+
+```bash
+source ~/.openclaw/secrets/langfuse.env 2>/dev/null
+
+python ~/repos/agentic-testing-framework/src/evaluator_check.py \
+  --dataset "<dataset-name>"
+```
+
+- **Exit 0:** at least one enabled evaluation rule targets the dataset. Proceed to Environment Setup.
+- **Exit 1:** no enabled evaluator is configured for the dataset. STOP — do not proceed to env setup or execute. Report to the user that no evaluator is configured and they need to set one up in the Langfuse UI before re-running.
+- **Exit 2:** API or operational error (credentials, network, rate limit). Report the error from stderr — do not tell the user to configure an evaluator. Retry or investigate the operational issue.
+
+### Output
+
+On success, logs the matching rule name(s) and evaluator name(s) to stderr. On no evaluator (exit 1), prints a clear error message naming the dataset and instructing the user to configure an evaluator in the Langfuse UI. On API error (exit 2), logs the error details to stderr.
+
 ## Environment Setup Phase
 
 Prepares the eval environment so the harness can run skill versions in isolation.
@@ -218,7 +242,7 @@ For model A/B tests (Slack-triggered, single skill variant), the same suffixed s
 
 #### 3. Invoke the harness
 
-Run `eval_harness.py` for each (skill variant × model) combination. Run sequentially by default to avoid gateway overload.
+Run `eval_harness.py` for each (skill variant × model) combination. Variants run sequentially — one variant completes before the next begins. Within each variant, up to 5 dataset items run in parallel (`--item-concurrency 5`) and up to 5 experiment repeats run in parallel (`--experiment-concurrency 5`), for a maximum of 25 concurrent agent subprocesses. This balances throughput against gateway load.
 
 ```bash
 source ~/.openclaw/secrets/langfuse.env 2>/dev/null
@@ -228,7 +252,9 @@ python ~/repos/agentic-testing-framework/src/eval_harness.py \
   --run-name "<base-experiment-name>" \
   --prompt-prefix "Read the <suffixed-skill-name> skill from available_skills. When you respond, the first line of the response must be the path of the skill you read. Then, " \
   --model "<model-id>" \
-  --repeat "<repeat-count>"
+  --repeat "<repeat-count>" \
+  --item-concurrency 5 \
+  --experiment-concurrency 5
 ```
 
 Omit `--model` for the agent's default model. Always pass `--repeat` — default is 10 when inference doesn't specify a count. If recency found existing runs, subtract them from the repeat count (e.g., 10 requested, 4 found → `--repeat 6`).
