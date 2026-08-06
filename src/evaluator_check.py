@@ -133,40 +133,30 @@ def find_matching_rules(rules, dataset_id):
         if not filters:
             matching.append(rule)
             continue
-        # Check datasetId filters
-        dataset_match = False
-        dataset_excluded = False
-        has_dataset_filter = False
-        for f in filters:
-            if f.get("column") != "datasetId":
-                continue
-            has_dataset_filter = True
-            values = f.get("value", [])
-            operator = f.get("operator", "any of")
+        # Collect all datasetId filters (there can be multiple, ANDed by Langfuse)
+        dataset_filters = [f for f in filters if f.get("column") == "datasetId"]
+
+        if not dataset_filters:
+            # No datasetId filter = applies to all datasets (other filters may narrow)
+            matching.append(rule)
+            continue
+
+        # Evaluate each datasetId filter (all must pass — they're ANDed by Langfuse)
+        all_pass = True
+        for df in dataset_filters:
+            values = df.get("value", [])
+            operator = df.get("operator", "any of")
             if operator == "none of":
                 if dataset_id in values:
-                    dataset_excluded = True
-            elif dataset_id in values:
-                dataset_match = True
-        if dataset_excluded:
-            continue
-        # Match if: explicit any-of match, no dataset filter at all
-        # (other filters only), or only none-of filters that don't
-        # exclude us (rule targets "all datasets except X")
-        if dataset_match or not has_dataset_filter:
-            matching.append(rule)
-            continue
-        # has_dataset_filter=True but no match or exclusion — check if
-        # all dataset filters are none-of and none listed our dataset
-        all_none_of = True
-        for f in filters:
-            if f.get("column") != "datasetId":
-                continue
-            if f.get("operator", "any of") != "none of":
-                all_none_of = False
+                    all_pass = False  # our dataset is explicitly excluded
+                    break
+                # "all datasets except X" — we're not excluded, this filter passes
+            elif dataset_id not in values:
+                all_pass = False  # "any of" that doesn't include us
                 break
-        if all_none_of:
+        if all_pass:
             matching.append(rule)
+        continue
     return matching
 
 
