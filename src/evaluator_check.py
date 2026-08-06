@@ -133,40 +133,45 @@ def find_matching_rules(rules, dataset_id):
         if not filters:
             matching.append(rule)
             continue
-        # Check datasetId filters
-        dataset_match = False
-        dataset_excluded = False
-        has_dataset_filter = False
-        for f in filters:
-            if f.get("column") != "datasetId":
-                continue
-            has_dataset_filter = True
-            values = f.get("value", [])
-            operator = f.get("operator", "any of")
-            if operator == "none of":
-                if dataset_id in values:
-                    dataset_excluded = True
-            elif dataset_id in values:
-                dataset_match = True
-        if dataset_excluded:
-            continue
-        # Match if: explicit any-of match, no dataset filter at all
-        # (other filters only), or only none-of filters that don't
-        # exclude us (rule targets "all datasets except X")
-        if dataset_match or not has_dataset_filter:
+        # Collect all datasetId filters (there can be multiple, ANDed by Langfuse)
+        dataset_filters = [f for f in filters if f.get("column") == "datasetId"]
+
+        if not dataset_filters:
+            # No datasetId filter = applies to all datasets (other filters may narrow)
             matching.append(rule)
             continue
-        # has_dataset_filter=True but no match or exclusion — check if
-        # all dataset filters are none-of and none listed our dataset
-        all_none_of = True
-        for f in filters:
-            if f.get("column") != "datasetId":
+
+        # Multiple datasetId filters are ANDed by Langfuse — a trace belongs to
+        # exactly one dataset, so multiple "any of" datasetId filters can never
+        # both match. This is a misconfiguration (likely the user meant to combine
+        # them into a single filter with an array). Skip the rule and warn.
+        if len(dataset_filters) > 1:
+            rule_name = rule.get("name", "(unnamed)")
+            log(
+                f"Rule '{rule_name}' has {len(dataset_filters)} datasetId filters "
+                f"(ANDed by Langfuse). A trace belongs to exactly one dataset, "
+                f"so this rule can never match. Skipping — likely a misconfiguration. "
+                f"Combine into a single filter with operator 'any of' and an array value.",
+                "WARN",
+            )
+            continue
+
+        # Single datasetId filter — check if our dataset is included
+        df = dataset_filters[0]
+        values = df.get("value", [])
+        operator = df.get("operator", "any of")
+
+        if operator == "none of":
+            if dataset_id in values:
+                continue  # our dataset is explicitly excluded
+            else:
+                matching.append(rule)  # "all datasets except X" — we're not excluded
                 continue
-            if f.get("operator", "any of") != "none of":
-                all_none_of = False
-                break
-        if all_none_of:
+        elif dataset_id in values:
             matching.append(rule)
+            continue
+        # Single "any of" filter that doesn't include us — no match
+        continue
     return matching
 
 
