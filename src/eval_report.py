@@ -391,7 +391,7 @@ def output_json(dataset_name, variant_data_list):
     print(json.dumps(result, indent=2))
 
 
-def print_variant_comparison(dataset_name, variant_data_list, by_dimension=False):
+def print_variant_comparison(dataset_name, variant_data_list, by_dimension=False, threshold=0.5):
     """Print a multi-variant comparison table.
 
     variant_data_list: list of (label, variant_data_dict) tuples.
@@ -483,7 +483,7 @@ def print_variant_comparison(dataset_name, variant_data_list, by_dimension=False
 
                 # Note regressions
                 notes = []
-                if by_dimension and delta < -2.0:
+                if by_dimension and delta < -threshold:
                     base_item = baseline["items"].get(item_id, {"dimensions": {}})
                     for sname in dim_names:
                         base_dim = base_item.get("dimensions", {}).get(sname, {}).get("avg", 0.0)
@@ -492,9 +492,9 @@ def print_variant_comparison(dataset_name, variant_data_list, by_dimension=False
                             item = vd["items"].get(item_id, {"dimensions": {}})
                             dim_sum += item.get("dimensions", {}).get(sname, {}).get("avg", 0.0)
                         dim_avg = dim_sum / n if n > 0 else 0.0
-                        if dim_avg - base_dim < -2.0:
+                        if dim_avg - base_dim < -threshold:
                             notes.append(f"\u26a0\ufe0f Regression in {sname}")
-                elif delta < -2.0:
+                elif delta < -threshold:
                     notes.append("\u26a0\ufe0f Regression")
 
                 row += f" {'; '.join(notes)[:30]:>30}"
@@ -585,6 +585,10 @@ def main():
         "--per-item", action="store_true",
         help="Show per-dataset-item aggregation across all experiments"
     )
+    parser.add_argument(
+        "--threshold", type=float, default=0.5,
+        help="Delta threshold (in points on a 0-10 scale) for flagging improvements/regressions. Default: 0.5"
+    )
     args = parser.parse_args()
 
     # Validate flag combinations
@@ -635,7 +639,7 @@ def main():
         if args.output_json:
             output_json(args.dataset, variant_data_list)
         else:
-            print_variant_comparison(args.dataset, variant_data_list, by_dimension=args.by_dimension)
+            print_variant_comparison(args.dataset, variant_data_list, by_dimension=args.by_dimension, threshold=args.threshold)
         print()
         return
 
