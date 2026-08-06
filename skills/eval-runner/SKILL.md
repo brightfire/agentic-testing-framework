@@ -91,7 +91,7 @@ After inference and the recency check, present a summary of the pruned run matri
 
 The user can **confirm** (proceed to pre-flight) or **adjust** (modify any dimension and re-confirm, re-running the recency check if variants change).
 
-When asking for confirmation, instruct the user to **reply with a message** — not a reaction. On platforms like Slack, reactions do not trigger webhooks, so a 👍 reaction would never reach the agent. Use phrasing like "Reply with `yes` or `confirm` to start the run, or describe any adjustments."
+When asking for confirmation, instruct the user to reply with `confirm` or `proceed` to start the run, or describe any adjustments.
 
 For reruns ("run same test again"), the skill skips variant inference — the user is confirming the previous variant set. However, **ref resolution always runs** (see Ref Resolution above) — all branch refs are re-fetched and re-pinned, even on rerun. If any ref has changed since the previous run, treat it as a new variant — inform the user that the branch has advanced, update the variant spec with the new hash, and proceed with the updated commit (not the stale one). Only if all refs are unchanged should the recency check proceed against the existing experiment names. If nothing changed and all variants already have sufficient runs, ask the user to confirm a forced re-run. On confirmation, restore all pruned combinations to the matrix.
 
