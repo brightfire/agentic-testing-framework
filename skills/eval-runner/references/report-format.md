@@ -68,15 +68,15 @@ Deltas are computed as `variant[n] - variant[0]` for each item and dimension, wh
 
 ## Verdict Criteria
 
-The verdict uses a threshold of **2.0 points** (on a scale where 10.0 is passing) to identify meaningful changes.
+The verdict uses a configurable threshold (default **0.5 points** on a 0–10 scale where 10.0 is passing) to identify meaningful changes. Pass `--threshold <value>` to eval_report.py to adjust sensitivity.
 
 | Verdict | Criteria |
 |---------|----------|
-| **Improvement** | No variant regressed significantly (delta > -2.0 on any dimension or item), AND at least one variant improved significantly (delta > +2.0) |
-| **Regression** | Any variant regressed significantly (delta < -2.0) on composite or any dimension |
-| **Neutral** | All deltas within ±2.0 — no significant changes |
+| **Improvement** | No variant regressed significantly (delta > -threshold on any dimension or item), AND at least one variant improved significantly (delta > +threshold) |
+| **Regression** | Any variant regressed significantly (delta < -threshold) on composite or any dimension |
+| **Neutral** | All deltas within ±threshold — no significant changes |
 
-The skill should note the threshold in the report so the reader understands what "significant" means.
+The skill should note the threshold used in the report so the reader understands what "significant" means.
 
 ## Report Template (Markdown)
 
@@ -106,9 +106,9 @@ The skill should note the threshold in the report so the reader understands what
 
 ## Improvement Suggestion Generation
 
-For each item where any dimension's delta < -2.0:
+For each item where any dimension's delta < -threshold (default 0.5):
 
-1. **Identify the regressed dimension** — which `score_name` has a delta < -2.0
+1. **Identify the regressed dimension** — which `score_name` has a delta < -threshold (default 0.5)
 2. **Obtain the skill diff** — run `git diff <base-ref> <head-ref> -- <skill-path>` to see what changed between variants
 3. **Review the diff** — look for changes that could affect the regressed dimension:
    - `task_completion` regressions: look for removed steps, weakened instructions, or changes that could cause the agent to skip required actions
@@ -168,6 +168,7 @@ The diff shows what changed in the skill between the two variants. This is essen
 | `--per-item` | Show per-dataset-item aggregation (single-variant mode) |
 | `--since <iso>` | Only include scores after this timestamp |
 | `--until <iso>` | Only include scores before this timestamp |
+| `--threshold <float>` | Delta threshold for flagging improvements/regressions (default: 0.5) |
 | `--langfuse-host <url>` | Langfuse host URL (default: http://localhost:3000) |
 
 ### Flag Compatibility

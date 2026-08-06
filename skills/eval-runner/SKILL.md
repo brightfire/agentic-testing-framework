@@ -370,6 +370,7 @@ python ~/repos/agentic-testing-framework/src/eval_report.py \
   --dataset "<dataset-name>" \
   --variants "<base-variant-prefix>" "<head-variant-prefix>" \
   --by-dimension \
+  --threshold 0.5 \
   --json
 ```
 
@@ -387,15 +388,15 @@ Parse the JSON output from eval_report.py. The structure contains:
 
 Based on the deltas, determine the verdict:
 
-- **Improvement:** No variant regressed significantly (delta > -2.0 on any dimension or item), and at least one variant improved significantly (delta > +2.0)
-- **Regression:** Any variant regressed significantly (delta < -2.0) on composite or any dimension
-- **Neutral:** All deltas within ±2.0 — no significant changes
+- **Improvement:** No variant regressed significantly (delta > -threshold on any dimension or item), and at least one variant improved significantly (delta > +threshold)
+- **Regression:** Any variant regressed significantly (delta < -threshold) on composite or any dimension
+- **Neutral:** All deltas within ±threshold — no significant changes
 
-The threshold of 2.0 points (on a scale where 10.0 is passing) represents a meaningful change. Note this threshold in the report.
+The default threshold is **0.5 points** (on a 0–10 scale where 10.0 is passing). Pass `--threshold <value>` to eval_report.py to adjust sensitivity. Note the threshold used in the report so the reader understands what "significant" means.
 
 #### 5. Generate improvement suggestions
 
-For each item where any dimension's delta < -2.0:
+For each item where any dimension's delta < -threshold (default 0.5):
 
 1. Identify which dimension regressed
 2. Obtain the skill diff: `git diff <base-ref> <head-ref> -- <skill-path>`
