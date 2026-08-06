@@ -276,8 +276,6 @@ Omit `--model` for the agent's default model. Always pass `--repeat` — default
 
 The harness may take several minutes. After starting the harness, poll it to completion — do not background it and wait for the user to ask for status. Once complete, capture for each harness invocation: completion status (exit 0 = success, non-zero = failure), per-item failures (harness logs `N failed items — indices: [...]` with item indices), and dataset run URL.
 
-For each harness invocation, capture: completion status (exit 0 = success, non-zero = failure), per-item failures (harness logs `N failed items — indices: [...]` with item indices), and dataset run URL.
-
 ### Output
 
 ```
