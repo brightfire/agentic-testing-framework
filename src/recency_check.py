@@ -91,27 +91,58 @@ def dataset_exists(langfuse_host, auth_header, dataset):
     raise RuntimeError(f"Langfuse API error {resp.status_code} checking dataset existence: {resp.text}")
 
 
+def _parse_timestamp_from_run_name(name):
+    """Extract a UTC datetime from a run name that contains an ISO timestamp.
+
+    Run names follow the pattern ``<prefix> - <ISO timestamp> - <suffix>``
+    e.g. ``linear-baseline - 2026-07-22T12:15:42Z - 1/10``.  Returns None if
+    no parseable timestamp is found.
+    """
+    import re as _re
+    # Match ISO 8601 timestamps with optional fractional seconds and trailing Z
+    match = _re.search(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)", name)
+    if not match:
+        return None
+    ts_str = match.group(1)
+    try:
+        dt = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except ValueError:
+        return None
+
+
 def fetch_dataset_runs(langfuse_host, auth_header, dataset, filter_prefix, cutoff_ts):
-    """Fetch experiment runs from Langfuse, paginating and filtering by name prefix and cutoff.
+    """Fetch experiment runs from Langfuse, filtering by name prefix and cutoff.
 
-    Uses /api/public/experiments, filtering by dataset name via query params.
-    In Langfuse v4, the `fromStartTime` parameter is required — we pass the
-    cutoff timestamp as `fromStartTime` so the API only returns runs after the cutoff.
-    Pagination is cursor-based (meta.cursor).
+    In Langfuse v4, /api/public/datasets/{name}/runs is removed; the
+    replacement is /api/public/experiments.  However, on self-hosted
+    deployments that upgraded from v3, old dataset runs may not have been
+    migrated to the v4 experiments table — the experiments endpoint returns
+    empty even though runs are still listed by /api/public/datasets/{name}.
 
-    Runs are returned newest-first by the API. We paginate using the cursor
-    and stop early once the oldest run on a page is older than the cutoff.
+    We try /api/public/experiments first (the v4-native path).  If it returns
+    no matching runs, we fall back to /api/public/datasets/{name}, which
+    includes a ``runs`` list of name strings.  Timestamps are parsed from
+    the run names for the cutoff filter.
 
-    Returns a list of run dicts (each has at least 'id' and 'name' keys).
+    Returns a list of run dicts with at least ``name`` and ``id`` keys.
     """
     matching_runs = []
-    cursor = None
     separator = " - "
-    from_start = cutoff_ts.strftime('%Y-%m-%dT%H:%M:%SZ')
 
+    # --- Try v4 experiments endpoint first ---
+    # fromStartTime is required by the v4 experiments endpoint.
+    # Use the cutoff timestamp as the fromStartTime.
+    cursor = None
     while True:
         url = f"{langfuse_host}{API_BASE}/experiments"
-        params = {"limit": PAGE_LIMIT, "datasetName": dataset, "fromStartTime": from_start}
+        params = {
+            "limit": PAGE_LIMIT,
+            "datasetName": dataset,
+            "fromStartTime": cutoff_ts.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
         if cursor:
             params["cursor"] = cursor
         resp = requests.get(
@@ -146,6 +177,32 @@ def fetch_dataset_runs(langfuse_host, auth_header, dataset, filter_prefix, cutof
             break
         cursor = next_cursor
 
+    if matching_runs:
+        return matching_runs
+
+    # --- Fallback: datasets endpoint (for v3 data not migrated to v4 experiments) ---
+    log(f"No runs from experiments endpoint; falling back to datasets endpoint.")
+    url = f"{langfuse_host}{API_BASE}/datasets/{dataset}"
+    resp = requests.get(
+        url,
+        headers={"Authorization": f"Basic {auth_header}"},
+        timeout=30,
+    )
+    if resp.status_code != 200:
+        if resp.status_code == 404:
+            return []
+        raise RuntimeError(f"Langfuse API error {resp.status_code} fetching dataset: {resp.text}")
+    data = resp.json()
+    run_names = data.get("runs", []) or []
+
+    for name in run_names:
+        if not name.startswith(filter_prefix + separator):
+            continue
+        created_at = _parse_timestamp_from_run_name(name)
+        if created_at and created_at < cutoff_ts:
+            continue
+        matching_runs.append({"id": name, "name": name})
+
     return matching_runs
 
 
@@ -153,8 +210,8 @@ def fetch_run_items(langfuse_host, auth_header, experiment_id, run_name, from_st
     """Fetch experiment items to get the trace IDs for each item in the run.
 
     Uses /api/public/experiment-items, filtering by experimentId.
-    In Langfuse v4, `fromStartTime` is required — pass a wide range to get
-    all items for the specified experiment.
+    In Langfuse v4, `fromStartTime` and `toStartTime` are required — we pass
+    a wide default range to get all items for the specified experiment.
     Pagination is cursor-based (meta.cursor).
 
     Returns a list of dicts, each with at least 'traceId' and 'datasetItemId'.
@@ -163,9 +220,12 @@ def fetch_run_items(langfuse_host, auth_header, experiment_id, run_name, from_st
     cursor = None
     while True:
         url = f"{langfuse_host}{API_BASE}/experiment-items"
-        params = {"experimentId": experiment_id, "limit": PAGE_LIMIT}
-        if from_start_time:
-            params["fromStartTime"] = from_start_time
+        params = {
+            "experimentId": experiment_id,
+            "limit": PAGE_LIMIT,
+            "fromStartTime": from_start_time or "2000-01-01T00:00:00Z",
+            "toStartTime": "2100-01-01T00:00:00Z",
+        }
         if cursor:
             params["cursor"] = cursor
         resp = requests.get(

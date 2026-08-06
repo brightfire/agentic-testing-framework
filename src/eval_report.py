@@ -52,7 +52,7 @@ def fetch_all_scores(langfuse_host, auth_header, from_ts=None, to_ts=None, limit
     scores = []
     cursor = None
     while True:
-        params = {"limit": limit, "fields": "subject,details"}
+        params = {"limit": limit, "fields": "core,details,subject"}
         if cursor:
             params["cursor"] = cursor
         if from_ts:
