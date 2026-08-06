@@ -43,11 +43,16 @@ def fetch_all_scores(langfuse_host, auth_header, from_ts=None, to_ts=None, limit
     The scores API uses cursor-based pagination: each response includes
     meta.cursor, which is passed as the `cursor` query param on the next
     request. When meta.cursor is null, pagination is complete.
+
+    In Langfuse v4, the core score response does not include traceId.
+    We request `fields=subject,details` to get the `subject` object (which
+    contains `traceId` when kind is "observation" or "trace") and the
+    `metadata`/`comment` fields.
     """
     scores = []
     cursor = None
     while True:
-        params = {"limit": limit}
+        params = {"limit": limit, "fields": "subject,details"}
         if cursor:
             params["cursor"] = cursor
         if from_ts:
@@ -77,6 +82,10 @@ def fetch_trace_metadata(langfuse_host, auth_header, trace_id):
     Queries /api/public/v2/observations with traceId to get all observations
     for the trace, then reconstructs trace-level metadata from the root
     observation (the one whose parentObservationId is null).
+
+    In Langfuse v4 events_only mode, traceContext may be empty for traces
+    migrated from v3. In that case, experiment_name and dataset_item_id will
+    be None, and callers should handle the missing metadata gracefully.
     """
     try:
         resp = requests.get(
@@ -121,7 +130,14 @@ def build_experiment_data(langfuse_host, auth_header, scores, name_prefix=None):
     experiments = defaultdict(lambda: defaultdict(list))
 
     for score in scores:
-        trace_id = score["traceId"]
+        # In v4, traceId is inside the subject object, not at the top level.
+        subject = score.get("subject", {})
+        trace_id = subject.get("traceId")
+        if not trace_id:
+            # v3 fallback: traceId was at top level in v3
+            trace_id = score.get("traceId")
+        if not trace_id:
+            continue
 
         if trace_id not in trace_cache:
             trace_cache[trace_id] = fetch_trace_metadata(
