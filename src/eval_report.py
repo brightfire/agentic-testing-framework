@@ -38,11 +38,11 @@ def log(msg, level="INFO"):
 
 
 def fetch_all_scores(langfuse_host, auth_header, from_ts=None, to_ts=None, limit=100):
-    """Fetch all scores from Langfuse v3 scores endpoint, paginating via cursor.
+    """Fetch all scores from Langfuse, paginating via cursor.
 
-    The v3 scores API uses cursor-based pagination: each response includes
+    The scores API uses cursor-based pagination: each response includes
     meta.cursor, which is passed as the `cursor` query param on the next
-    request.  When meta.cursor is null, pagination is complete.
+    request. When meta.cursor is null, pagination is complete.
     """
     scores = []
     cursor = None
@@ -72,11 +72,10 @@ def fetch_all_scores(langfuse_host, auth_header, from_ts=None, to_ts=None, limit
 
 
 def fetch_trace_metadata(langfuse_host, auth_header, trace_id):
-    """Fetch experiment metadata for a trace via the v2 observations endpoint.
+    """Fetch experiment metadata for a trace via the observations endpoint.
 
-    In Langfuse v4, /api/public/traces/{id} is removed.  We query
-    /api/public/v2/observations with traceId to get all observations
-    for the trace, then reconstruct trace-level metadata from the root
+    Queries /api/public/v2/observations with traceId to get all observations
+    for the trace, then reconstructs trace-level metadata from the root
     observation (the one whose parentObservationId is null).
     """
     try:

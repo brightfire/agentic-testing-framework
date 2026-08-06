@@ -94,9 +94,8 @@ def dataset_exists(langfuse_host, auth_header, dataset):
 def fetch_dataset_runs(langfuse_host, auth_header, dataset, filter_prefix, cutoff_ts):
     """Fetch experiment runs from Langfuse, paginating and filtering by name prefix and cutoff.
 
-    In Langfuse v4, /api/public/datasets/{name}/runs is removed; we use
-    /api/public/experiments instead, filtering by dataset name via query
-    params.  Pagination is cursor-based (meta.cursor).
+    Uses /api/public/experiments, filtering by dataset name via query params.
+    Pagination is cursor-based (meta.cursor).
 
     Runs are returned newest-first by the API. We paginate using the cursor
     and stop early once the oldest run on a page is older than the cutoff.
@@ -150,8 +149,7 @@ def fetch_dataset_runs(langfuse_host, auth_header, dataset, filter_prefix, cutof
 def fetch_run_items(langfuse_host, auth_header, experiment_id, run_name):
     """Fetch experiment items to get the trace IDs for each item in the run.
 
-    In Langfuse v4, /api/public/dataset-run-items is removed; we use
-    /api/public/experiment-items instead, filtering by experimentId.
+    Uses /api/public/experiment-items, filtering by experimentId.
     Pagination is cursor-based (meta.cursor).
 
     Returns a list of dicts, each with at least 'traceId' and 'datasetItemId'.

@@ -145,10 +145,9 @@ def find_openclaw_trace_id(langfuse_host, auth_header, session_id, max_wait=15):
     """Look up the OpenClaw trace ID by session ID via the Langfuse REST API.
 
     The OpenClaw gateway emits traces with `openclaw.sessionId` as a span
-    attribute, which Langfuse maps to observation metadata.  In Langfuse v4
-    the /api/public/traces endpoint is removed; we query
-    /api/public/v2/observations instead, filtering by sessionId, and
-    extract the traceId from the first matching observation.
+    attribute, which Langfuse maps to observation metadata. We query
+    /api/public/v2/observations, filtering by sessionId, and extract the
+    traceId from the first matching observation.
 
     We poll the API for a few seconds after the CLI call returns because the
     OTel exporter may not have flushed yet.
