@@ -289,7 +289,11 @@ The harness appends ` - <timestamp>` (and ` - <run_idx>/<total>` for repeats) at
 #### 2. Construct attestation prefix
 
 ```
-Read the <suffixed-skill-name> skill from available_skills. When you respond, the first line of the response must be the path of the skill you read. Then,
+Read the <suffixed-skill-name> skill from available_skills. You must state which
+skill you read at the end of your response, after completing the task. You
+are being evaluated on your ability to adhere to instructions. If you do not
+confirm which skill you read, your response will receive a score of zero
+regardless of quality. Then,
 ```
 
 For model A/B tests (Slack-triggered, single skill variant), the same suffixed skill name is used for both model runs — only `--model` differs.
@@ -304,7 +308,7 @@ source ~/.openclaw/secrets/langfuse.env 2>/dev/null
 python3 ~/repos/agentic-testing-framework/src/eval_harness.py \
   --manifest "<path-to-manifest-from-sync-phase>" \
   --run-name "<base-experiment-name>" \
-  --prompt-prefix "Read the <suffixed-skill-name> skill from available_skills. When you respond, the first line of the response must be the path of the skill you read. Then, " \
+  --prompt-prefix "Read the <suffixed-skill-name> skill from available_skills. You must state which skill you read at the end of your response, after completing the task. You are being evaluated on your ability to adhere to instructions. If you do not confirm which skill you read, your response will receive a score of zero regardless of quality. Then, " \
   --model "<model-id>" \
   --repeat "<repeat-count>" \
   --item-concurrency 5 \
