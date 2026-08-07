@@ -294,7 +294,7 @@ For model A/B tests (Slack-triggered, single skill variant), the same suffixed s
 
 #### 3. Invoke the harness
 
-Run `eval_harness.py` for each (skill variant × model) combination. Variants run sequentially — one variant completes before the next begins. Within each variant, up to 3 dataset items run in parallel (`--item-concurrency 3`) and experiments run sequentially (`--experiment-concurrency 1`), for a maximum of 3 concurrent agent subprocesses. Higher concurrency has been observed to cause gateway timeouts and incomplete responses.
+Run `eval_harness.py` for each (skill variant × model) combination. Variants run sequentially — one variant completes before the next begins. Within each variant, up to 3 dataset items run in parallel (`--item-concurrency 3`) and up to 2 experiment repeats run in parallel (`--experiment-concurrency 2`), for a maximum of 6 concurrent agent subprocesses. Higher concurrency has been observed to cause gateway timeouts and incomplete responses.
 
 ```bash
 source ~/.openclaw/secrets/langfuse.env 2>/dev/null
@@ -306,7 +306,7 @@ python3 ~/repos/agentic-testing-framework/src/eval_harness.py \
   --model "<model-id>" \
   --repeat "<repeat-count>" \
   --item-concurrency 3 \
-  --experiment-concurrency 1
+  --experiment-concurrency 2
 ```
 
 Omit `--model` for the agent's default model. Always pass `--repeat` — default is 10 when inference doesn't specify a count. If recency found existing runs, subtract them from the repeat count (e.g., 10 requested, 4 found → `--repeat 6`).
