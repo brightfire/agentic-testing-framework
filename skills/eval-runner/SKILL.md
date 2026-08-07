@@ -353,11 +353,24 @@ The terminal phase — fetches scores from Langfuse, compares variants, produces
 
 #### 1. Wait for evaluator scoring
 
-After the execute phase completes, wait ~30 seconds for the Langfuse evaluator to finish scoring all traces.
+After the execute phase completes, the Langfuse evaluator runs asynchronously. Instead of a fixed sleep, poll the Langfuse scores API until all expected scores are present (or a 3-minute timeout is reached).
 
 ```bash
-sleep 30
+source ~/.openclaw/secrets/langfuse.env 2>/dev/null
+
+python3 ~/repos/agentic-testing-framework/src/wait_for_scores.py \
+  --dataset "<dataset-name>" \
+  --prefix "<variant-prefix-1>" \
+  --prefix "<variant-prefix-2>" \
+  --expected-items <item-count-from-manifest> \
+  --timeout 180
 ```
+
+Pass one `--prefix` per experiment variant (the same prefixes used for `--compare` in the next step). `--expected-items` is the number of dataset items from the manifest. If the item count is unknown, omit `--expected-items` and the script will wait for the total score count to stabilize between two consecutive polls instead.
+
+The script polls every 10 seconds and logs per-prefix progress (e.g. `pr-15: 3/5 items scored`). It exits 0 when all prefixes have scores for all expected items, or exits 1 on timeout.
+
+**If the script times out (exit 1):** Proceed to fetch scores anyway — the report will reflect whatever scores are available. Note the timeout in the report so the reader knows scoring may be incomplete. If no scores are present at all, check that the evaluator is configured and running in Langfuse.
 
 #### 2. Fetch scores and compare variants
 
