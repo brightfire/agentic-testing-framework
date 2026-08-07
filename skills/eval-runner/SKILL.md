@@ -41,10 +41,10 @@ mechanics of creating suffixed copies. The label is used both for directory nami
 <dataset-name>__<model-id>__<variant-label>__<git-hash>__<item-scope>
 ```
 
-- `<model-id>`: provider-qualified model ID with `/` → `-` (e.g., `openrouter-z-ai-glm-5.2`)
+- `<model-id>`: provider-qualified model ID with `/` → `-`, `@` preserved (e.g., `openrouter-@preset-conversation-default`, `openrouter-z-ai-glm-5.2`)
 - `<variant-label>`: base branch name, `pr-<number>`, or commit ref — with `/` → `-`
 - `<item-scope>`: `all` for full dataset, or 8-char SHA-256 prefix of sorted item IDs joined by `|` (e.g., items `['c','a','b']` → `a|b|c` → `sha256('a|b|c')[:8]`)
-- Example: `linear-create-eval__openrouter-z-ai-glm-5.2__pr-123__e5f6g7h__all`
+- Example: `linear-create-eval__openrouter-@preset-conversation-default__pr-123__e5f6g7h__all`
 
 The harness appends ` - <timestamp>` and optionally ` - <run_idx>/<total>` for repeats at runtime.
 
