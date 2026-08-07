@@ -202,7 +202,8 @@ def get_dataset(langfuse_client, dataset_name, version=None):
 
 
 def make_task(prompt_prefix, agent_id, timeout_seconds,
-              langfuse_client, langfuse_host, auth_header, model=None):
+              langfuse_client, langfuse_host, auth_header, model=None,
+              max_retries=2):
     """
     Build a task function for run_experiment.
 
@@ -214,18 +215,14 @@ def make_task(prompt_prefix, agent_id, timeout_seconds,
     trace by session ID and stamps it onto the experiment observation's
     metadata so you can navigate from the experiment run item to the
     full OpenClaw agent trace.
+
+    Harness-level failures (CLI errors, timeouts, no output, JSON parse
+    errors) are retried up to max_retries times before raising. A fresh
+    session key is generated for each attempt.
     """
 
-    def task(*, item, **kwargs):
-        prompt = item.input
-        if not prompt:
-            raise ValueError("Dataset item has no input")
-
-        if prompt_prefix:
-            prompt = prompt_prefix + prompt
-
-        session_key = f"eval-{uuid.uuid4().hex[:12]}-{item.id[:8]}"
-
+    def run_cli(prompt, session_key):
+        """Execute a single CLI call. Returns response_text or raises RuntimeError."""
         cmd = [
             "openclaw", "agent",
             "--agent", agent_id,
@@ -267,6 +264,31 @@ def make_task(prompt_prefix, agent_id, timeout_seconds,
 
         if not response_text:
             raise RuntimeError("No finalAssistantVisibleText in CLI output")
+
+        return response_text, meta
+
+    def task(*, item, **kwargs):
+        prompt = item.input
+        if not prompt:
+            raise ValueError("Dataset item has no input")
+
+        if prompt_prefix:
+            prompt = prompt_prefix + prompt
+
+        last_error = None
+        for attempt in range(1, max_retries + 2):
+            session_key = f"eval-{uuid.uuid4().hex[:12]}-{item.id[:8]}"
+            try:
+                response_text, meta = run_cli(prompt, session_key)
+                break
+            except RuntimeError as e:
+                last_error = e
+                if attempt <= max_retries:
+                    log(f"  Item {item.id}: attempt {attempt}/{max_retries + 1} failed — {e}. Retrying...", "WARN")
+                else:
+                    log(f"  Item {item.id}: all {max_retries + 1} attempts failed — {e}", "ERROR")
+        else:
+            raise last_error
 
         # --- Link the OpenClaw trace to the experiment observation ---
         openclaw_session_id = meta.get("agentMeta", {}).get("sessionId")
