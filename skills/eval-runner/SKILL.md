@@ -363,10 +363,13 @@ python3 ~/repos/agentic-testing-framework/src/wait_for_scores.py \
   --prefix "<variant-prefix-1>" \
   --prefix "<variant-prefix-2>" \
   --expected-items <item-count-from-manifest> \
+  --repeat <repeat-count-from-execute-phase> \
+  --dimensions <scoring-dimension-count> \
+  --since "<execute-phase-start-iso-timestamp>" \
   --timeout 180
 ```
 
-Pass one `--prefix` per experiment variant (the same prefixes used for `--compare` in the next step). `--expected-items` is the number of dataset items from the manifest. If the item count is unknown, omit `--expected-items` and the script will wait for the total score count to stabilize between two consecutive polls instead.
+Pass one `--prefix` per experiment variant (the same prefixes used for `--compare` in the next step). `--expected-items` is the number of dataset items from the manifest. `--repeat` should match the repeat count used in the execute phase (default: 1). `--dimensions` is the number of scoring dimensions the evaluator uses per trace (default: 1); the waiter multiplies `--repeat × --dimensions` to determine how many scores each item needs before it is considered ready. `--since` restricts the score query to the current execution, preventing stale historical scores from satisfying the expected count. If the item count is unknown, omit `--expected-items` and the script will wait for the total score count to stabilize between two consecutive polls instead.
 
 The script polls every 10 seconds and logs per-prefix progress (e.g. `pr-15: 3/5 items scored`). It exits 0 when all prefixes have scores for all expected items, or exits 1 on timeout.
 
