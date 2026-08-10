@@ -344,7 +344,7 @@ The terminal phase — fetches scores from Langfuse, compares variants, produces
 
 | Input | Source | Description |
 |-------|--------|-------------|
-| Experiment run names | Execute phase output | Base experiment name prefixes (without timestamp/repeat suffixes) — one per variant |
+| Experiment run names | Execute phase output + Recency Check pruned variants | Base experiment name prefixes (without timestamp/repeat suffixes) — one per variant. Variants pruned by the Recency Check (sufficient runs already exist) did not run in Execute but have existing scores in Langfuse and must still be included in the report. Their prefixes come from the Recency Check output (the same experiment names that were checked). |
 | Dataset name | Sync phase output | Langfuse dataset name |
 | Originating channel | Request context | PR comment, Slack reply, web chat, or webhook — results posted through the same path |
 | Skill diff | Git | `git diff <base-ref> <head-ref> -- <skill-path>` — used for improvement suggestion generation |
@@ -369,7 +369,7 @@ python3 ~/repos/agentic-testing-framework/src/wait_for_scores.py \
   --timeout 180
 ```
 
-Pass one `--prefix` per experiment variant (the same prefixes used for `--compare` in the next step). `--expected-items` is the number of dataset items from the manifest. `--repeat` should match the repeat count used in the execute phase (default: 1). `--dimensions` is the number of scoring dimensions the evaluator uses per trace (default: 1); the waiter multiplies `--repeat × --dimensions` to determine how many scores each item needs before it is considered ready. `--since` restricts the score query to the current execution, preventing stale historical scores from satisfying the expected count. If the item count is unknown, omit `--expected-items` and the script will wait for the total score count to stabilize between two consecutive polls instead.
+Pass one `--prefix` per experiment variant — include both executed variants and recency-pruned variants. For pruned variants, their scores already exist in Langfuse from prior runs, so the waiter will find them immediately (the `--since` timestamp may need to be earlier or omitted for pruned variants whose scores predate the current execute phase). The same full set of variant prefixes must be used for `--variants` in the `eval_report.py` invocation below. `--expected-items` is the number of dataset items from the manifest. `--repeat` should match the repeat count used in the execute phase (default: 1). `--dimensions` is the number of scoring dimensions the evaluator uses per trace (default: 1); the waiter multiplies `--repeat × --dimensions` to determine how many scores each item needs before it is considered ready. `--since` restricts the score query to the current execution, preventing stale historical scores from satisfying the expected count. If the item count is unknown, omit `--expected-items` and the script will wait for the total score count to stabilize between two consecutive polls instead.
 
 The script polls every 10 seconds and logs per-prefix progress (e.g. `pr-15: 3/5 items scored`). It exits 0 when all prefixes have scores for all expected items, or exits 1 on timeout.
 
@@ -377,7 +377,7 @@ The script polls every 10 seconds and logs per-prefix progress (e.g. `pr-15: 3/5
 
 #### 2. Fetch scores and compare variants
 
-Run `eval_report.py` with `--variants` passing the experiment name prefixes from the execute phase, `--by-dimension`, and `--json` flags. Pass `--since` with the ISO timestamp of when the execute phase started to avoid fetching stale historical scores from previous runs:
+Run `eval_report.py` with `--variants` passing the full set of experiment name prefixes — both variants that ran in the Execute phase AND variants that were pruned by the Recency Check (which already have existing scores in Langfuse). Use `--by-dimension` and `--json` flags. Pass `--since` with the ISO timestamp of when the execute phase started to avoid fetching stale historical scores from previous runs. For pruned variants, their scores predate the current execute phase, so use a `--since` value early enough to encompass their original runs (or omit `--since` for pruned-only variants if the recency window is known).:
 
 ```bash
 source ~/.openclaw/secrets/langfuse.env 2>/dev/null
@@ -392,6 +392,8 @@ python ~/repos/agentic-testing-framework/src/eval_report.py \
 ```
 
 If the execute phase start time is unavailable, pass `--since` with a timestamp a few minutes before the earliest experiment run to ensure all relevant scores are included while excluding historical runs.
+
+**Recency-pruned variants:** Variants pruned by the Recency Check did not run in the Execute phase but already have existing scores in Langfuse from prior runs. They must be included in the report comparison — omitting them would turn an A/B comparison into a standalone report. Their experiment name prefixes come from the Recency Check output (the same names that were checked). When passing `--since` for pruned variants, use a timestamp early enough to encompass their original scoring runs, or omit `--since` for those variants if the recency window is known.
 
 The `--variants` flag accepts any number of prefixes (2 or more). The first prefix is the baseline (typically the base branch). The `--json` flag produces structured output suitable for programmatic parsing.
 

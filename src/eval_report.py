@@ -368,7 +368,13 @@ def output_json(dataset_name, variant_data_list):
             deltas["overall"]["composite"][label] = comp_delta
             overall_composite_avg += comp_delta
             for sname, st in vd["dimensions"].items():
-                base_dim = baseline["dimensions"].get(sname, {"avg": 0.0})["avg"]
+                if sname not in baseline["dimensions"]:
+                    # Dimension absent from baseline — not comparable
+                    if sname not in deltas["overall"]["dimensions"]:
+                        deltas["overall"]["dimensions"][sname] = {}
+                    deltas["overall"]["dimensions"][sname][label] = None
+                    continue
+                base_dim = baseline["dimensions"][sname]["avg"]
                 dim_delta = round(st["avg"] - base_dim, 4)
                 if sname not in deltas["overall"]["dimensions"]:
                     deltas["overall"]["dimensions"][sname] = {}
@@ -381,7 +387,12 @@ def output_json(dataset_name, variant_data_list):
         # Average across non-baseline variants (for backward compatibility)
         deltas["overall"]["composite"]["_avg"] = round(overall_composite_avg, 4)
         for sname in overall_dims_avg:
-            deltas["overall"]["dimensions"].setdefault(sname, {})["_avg"] = round(overall_dims_avg[sname], 4)
+            # Only average dimensions that have at least one non-None delta
+            dim_vals = [v for k, v in deltas["overall"]["dimensions"].setdefault(sname, {}).items() if k != "_avg" and v is not None]
+            if dim_vals:
+                deltas["overall"]["dimensions"][sname]["_avg"] = round(sum(dim_vals) / len(dim_vals), 4)
+            else:
+                deltas["overall"]["dimensions"][sname]["_avg"] = None
 
         # Per-item deltas
         all_item_ids = set()
@@ -413,7 +424,13 @@ def output_json(dataset_name, variant_data_list):
                 item_delta["composite"][label] = comp_delta
                 composite_sum += comp_delta
                 for sname, st in item["dimensions"].items():
-                    base_dim = baseline_item.get("dimensions", {}).get(sname, {}).get("avg", 0.0)
+                    if sname not in baseline_item.get("dimensions", {}):
+                        # Dimension absent from baseline item — not comparable
+                        if sname not in item_delta["dimensions"]:
+                            item_delta["dimensions"][sname] = {}
+                        item_delta["dimensions"][sname][label] = None
+                        continue
+                    base_dim = baseline_item["dimensions"][sname]["avg"]
                     dim_delta = round(st["avg"] - base_dim, 4)
                     if sname not in item_delta["dimensions"]:
                         item_delta["dimensions"][sname] = {}
@@ -478,8 +495,10 @@ def print_variant_comparison(dataset_name, variant_data_list, by_dimension=False
                 continue
             row = f"  {label[:25]:<25} {comp['avg']:>10.2f}"
             for d in dim_names:
-                dst = vd["dimensions"].get(d, {"avg": 0.0})
-                row += f" {dst['avg']:>15.2f}"
+                if d in vd["dimensions"]:
+                    row += f" {vd['dimensions'][d]['avg']:>15.2f}"
+                else:
+                    row += f" {'N/A':>15}"
             row += f" {comp['pass_rate']:>6.0f}%"
             print(row)
 
@@ -500,9 +519,12 @@ def print_variant_comparison(dataset_name, variant_data_list, by_dimension=False
                     delta_comp = vd["composite"]["avg"] - baseline["composite"]["avg"]
                     delta_row = f"  {'Δ ' + label[:22]:<25} {delta_comp:>+10.2f}"
                     for d in dim_names:
-                        base_val = baseline["dimensions"].get(d, {"avg": 0.0})["avg"]
-                        diff = vd["dimensions"].get(d, {"avg": 0.0})["avg"] - base_val
-                        delta_row += f" {diff:>+15.2f}"
+                        if d not in baseline["dimensions"] or d not in vd["dimensions"]:
+                            delta_row += f" {'N/A':>15}"
+                        else:
+                            base_val = baseline["dimensions"][d]["avg"]
+                            diff = vd["dimensions"][d]["avg"] - base_val
+                            delta_row += f" {diff:>+15.2f}"
                     delta_row += f" {'':>7}"
                     print(delta_row)
             else:
@@ -517,9 +539,12 @@ def print_variant_comparison(dataset_name, variant_data_list, by_dimension=False
                     delta_comp = variant_data_list[1][1]["composite"]["avg"] - baseline["composite"]["avg"]
                     delta_row = f"  {'Delta':<25} {delta_comp:>+10.2f}"
                     for d in dim_names:
-                        base_val = baseline["dimensions"].get(d, {"avg": 0.0})["avg"]
-                        diff = variant_data_list[1][1]["dimensions"].get(d, {"avg": 0.0})["avg"] - base_val
-                        delta_row += f" {diff:>+15.2f}"
+                        if d not in baseline["dimensions"] or d not in variant_data_list[1][1]["dimensions"]:
+                            delta_row += f" {'N/A':>15}"
+                        else:
+                            base_val = baseline["dimensions"][d]["avg"]
+                            diff = variant_data_list[1][1]["dimensions"][d]["avg"] - base_val
+                            delta_row += f" {diff:>+15.2f}"
                     delta_row += f" {'':>7}"
                     print(delta_row)
     else:
@@ -602,13 +627,16 @@ def print_variant_comparison(dataset_name, variant_data_list, by_dimension=False
                     base_item = baseline["items"].get(item_id, {"dimensions": {}})
                     any_reg = False
                     for sname in dim_names:
-                        base_dim = base_item.get("dimensions", {}).get(sname, {}).get("avg", 0.0)
+                        if sname not in base_item.get("dimensions", {}):
+                            # Dimension absent from baseline item — skip regression check
+                            continue
+                        base_dim = base_item["dimensions"][sname]["avg"]
                         if multi_variant:
                             # Check each variant's dimension delta independently
                             for i, (label, vd) in enumerate(variant_data_list[1:]):
                                 item = vd["items"].get(item_id)
-                                if item is not None:
-                                    dim_val = item.get("dimensions", {}).get(sname, {}).get("avg", 0.0)
+                                if item is not None and sname in item.get("dimensions", {}):
+                                    dim_val = item["dimensions"][sname]["avg"]
                                     if dim_val - base_dim < -threshold:
                                         notes.append(f"\u26a0\ufe0f {label[:10]} regressed in {sname}")
                                         any_reg = True
@@ -616,8 +644,8 @@ def print_variant_comparison(dataset_name, variant_data_list, by_dimension=False
                             dim_vals = []
                             for _, vd in variant_data_list[1:]:
                                 item = vd["items"].get(item_id)
-                                if item is not None:
-                                    dim_vals.append(item.get("dimensions", {}).get(sname, {}).get("avg", 0.0))
+                                if item is not None and sname in item.get("dimensions", {}):
+                                    dim_vals.append(item["dimensions"][sname]["avg"])
                             if dim_vals:
                                 dim_avg = sum(dim_vals) / len(dim_vals)
                                 if dim_avg - base_dim < -threshold:
