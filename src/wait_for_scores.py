@@ -278,6 +278,7 @@ def main():
 
     deadline = time.monotonic() + args.timeout
     prev_total = None
+    stable_count = 0
     # Persist trace metadata cache across polling iterations to avoid re-fetching
     # metadata for traces already seen in previous polls. Only new traces
     # (those that appeared since the last poll) require metadata requests.
@@ -328,9 +329,13 @@ def main():
         else:
             # Mode 2: wait until each prefix has >= 1 score AND prefix-matched count stabilized
             all_have_scores = all(len(prefix_items[p]) >= 1 for p in prefixes)
-            stabilized = prev_total is not None and prefix_score_count == prev_total
+            if prev_total is not None and prefix_score_count == prev_total:
+                stable_count += 1
+            else:
+                stable_count = 0
+            stabilized = stable_count >= 2
             if all_have_scores and stabilized:
-                log(f"Score count stabilized at {prefix_score_count} (prefix-matched). ✓")
+                log(f"Score count stabilized at {prefix_score_count} (prefix-matched, {stable_count} consecutive unchanged polls). ✓")
                 sys.exit(0)
             prev_total = prefix_score_count
 
