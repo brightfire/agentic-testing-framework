@@ -355,6 +355,8 @@ The terminal phase — fetches scores from Langfuse, compares variants, produces
 
 After the execute phase completes, the Langfuse evaluator runs asynchronously. Instead of a fixed sleep, poll the Langfuse scores API until all expected scores are present (or a 3-minute timeout is reached).
 
+**If all variants share the same repeat count,** a single `wait_for_scores.py` invocation covering all prefixes is sufficient:
+
 ```bash
 source ~/.openclaw/secrets/langfuse.env 2>/dev/null
 
@@ -369,7 +371,23 @@ python3 ~/repos/agentic-testing-framework/src/wait_for_scores.py \
   --timeout 180
 ```
 
-Pass one `--prefix` per experiment variant — include both executed variants and recency-pruned variants. For pruned variants, their scores already exist in Langfuse from prior runs, so the waiter will find them immediately (the `--since` timestamp may need to be earlier or omitted for pruned variants whose scores predate the current execute phase). The same full set of variant prefixes must be used for `--variants` in the `eval_report.py` invocation below. `--expected-items` is the number of dataset items from the manifest. `--repeat` should match the repeat count used in the execute phase (default: 1). `--dimensions` is the number of scoring dimensions the evaluator uses per trace (default: 1); the waiter multiplies `--repeat × --dimensions` to determine how many scores each item needs before it is considered ready. `--since` restricts the score query to the current execution, preventing stale historical scores from satisfying the expected count. If the item count is unknown, omit `--expected-items` and the script will wait for the total score count to stabilize between two consecutive polls instead.
+**If variants have different repeat counts** (e.g., after recency subtractions variant A needs 6 repeats while variant B needs 10), call `wait_for_scores.py` once **per variant** with per-variant `--repeat` and `--expected-items` values. Each call should pass only the prefix(es) for that variant:
+
+```bash
+python3 ~/repos/agentic-testing-framework/src/wait_for_scores.py \
+  --dataset "<dataset-name>" \
+  --prefix "<variant-A-prefix>" \
+  --expected-items <item-count> --repeat 6 \
+  --dimensions <dim-count> --since "<ts>" --timeout 180
+
+python3 ~/repos/agentic-testing-framework/src/wait_for_scores.py \
+  --dataset "<dataset-name>" \
+  --prefix "<variant-B-prefix>" \
+  --expected-items <item-count> --repeat 10 \
+  --dimensions <dim-count> --since "<ts>" --timeout 180
+```
+
+Pass one `--prefix` per experiment variant — include both executed variants and recency-pruned variants. For pruned variants, their scores already exist in Langfuse from prior runs, so the waiter will find them immediately (the `--since` timestamp may need to be earlier or omitted for pruned variants whose scores predate the current execute phase). `--expected-items` is the number of dataset items from the manifest. `--repeat` should match the repeat count used in the execute phase for that variant (default: 1). `--dimensions` is the number of scoring dimensions the evaluator uses per trace (default: 1); the waiter multiplies `--repeat × --dimensions` to determine how many scores each item needs before it is considered ready. `--since` restricts the score query to the current execution, preventing stale historical scores from satisfying the expected count. If the item count is unknown, omit `--expected-items` and the script will wait for the total score count to stabilize between two consecutive polls instead.
 
 The script polls every 10 seconds and logs per-prefix progress (e.g. `pr-15: 3/5 items scored`). It exits 0 when all prefixes have scores for all expected items, or exits 1 on timeout.
 
@@ -377,19 +395,35 @@ The script polls every 10 seconds and logs per-prefix progress (e.g. `pr-15: 3/5
 
 #### 2. Fetch scores and compare variants
 
-Run `eval_report.py` with `--variants` passing the full set of experiment name prefixes — both variants that ran in the Execute phase AND variants that were pruned by the Recency Check (which already have existing scores in Langfuse). Use `--by-dimension` and `--json` flags. Pass `--since` with the ISO timestamp of when the execute phase started to avoid fetching stale historical scores from previous runs. For pruned variants, their scores predate the current execute phase, so use a `--since` value early enough to encompass their original runs (or omit `--since` for pruned-only variants if the recency window is known).:
+**Compare skill variants WITHIN each model, not across models.** For a multi-model eval (e.g., 2 skill-variant × 2-model run matrix = 4 combinations), do NOT pass all experiment prefixes through one flat `--variants` call — that would make the first combination the baseline for everything, incorrectly comparing cross-model score differences as skill-level regressions or improvements.
+
+Instead, run a **separate `eval_report.py --variants` call per model.** Each call compares baseline-vs-head for that model only. For a 2-variant × 2-model matrix, that's two `--variants` calls (one per model). This isolates skill-variant deltas from model-quality differences.
+
+For each model, run `eval_report.py` with `--variants` passing the base and head experiment name prefixes **for that model only** — including both variants that ran in the Execute phase AND variants that were pruned by the Recency Check (which already have existing scores in Langfuse). Use `--by-dimension` and `--json` flags. Pass `--since` with the ISO timestamp of when the execute phase started to avoid fetching stale historical scores from previous runs. For pruned variants, their scores predate the current execute phase, so use a `--since` value early enough to encompass their original runs (or omit `--since` for pruned-only variants if the recency window is known):
 
 ```bash
 source ~/.openclaw/secrets/langfuse.env 2>/dev/null
 
+# Per-model comparison: model A
 python ~/repos/agentic-testing-framework/src/eval_report.py \
   --dataset "<dataset-name>" \
-  --variants "<base-variant-prefix>" "<head-variant-prefix>" \
+  --variants "<model-A-base-variant-prefix>" "<model-A-head-variant-prefix>" \
+  --by-dimension \
+  --threshold 0.5 \
+  --since "<execute-phase-start-iso-timestamp>" \
+  --json
+
+# Per-model comparison: model B
+python ~/repos/agentic-testing-framework/src/eval_report.py \
+  --dataset "<dataset-name>" \
+  --variants "<model-B-base-variant-prefix>" "<model-B-head-variant-prefix>" \
   --by-dimension \
   --threshold 0.5 \
   --since "<execute-phase-start-iso-timestamp>" \
   --json
 ```
+
+For a single-model eval (the common case), there is only one `--variants` call comparing baseline-vs-head for that model.
 
 If the execute phase start time is unavailable, pass `--since` with a timestamp a few minutes before the earliest experiment run to ensure all relevant scores are included while excluding historical runs.
 
