@@ -711,6 +711,9 @@ def main():
 
     if not scores:
         log("No scores found.", "WARN", force_stderr=args.output_json)
+        if args.output_json:
+            import json
+            print(json.dumps({"dataset": args.dataset, "variants": [], "deltas": {"per_item": {}, "overall": {}}}, indent=2))
         sys.exit(0)
 
     log("Fetching trace metadata for experiment grouping...", force_stderr=args.output_json)
@@ -748,10 +751,15 @@ def main():
             args.langfuse_host, auth_header, scores, name_prefix=args.compare[1]
         )
 
+        vd_a = build_variant_data(experiments_a)
+        vd_b = build_variant_data(experiments_b)
+        variant_data_list = [(args.compare[0], vd_a), (args.compare[1], vd_b)]
+
         if args.output_json:
-            vd_a = build_variant_data(experiments_a)
-            vd_b = build_variant_data(experiments_b)
-            output_json(args.dataset, [(args.compare[0], vd_a), (args.compare[1], vd_b)])
+            output_json(args.dataset, variant_data_list)
+        elif args.by_dimension:
+            # Honor --by-dimension by routing through the dimension-aware printer
+            print_variant_comparison(args.dataset, variant_data_list, by_dimension=True, threshold=args.threshold)
         else:
             print_compare(experiments_a, experiments_b, args.compare[0], args.compare[1])
         print()

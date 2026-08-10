@@ -50,17 +50,23 @@ def log(msg, level="INFO"):
     print(f"[{ts}] [{level}] {msg}", flush=True)
 
 
-def fetch_all_scores(langfuse_host, auth_header, limit=100):
+def fetch_all_scores(langfuse_host, auth_header, limit=100, from_ts=None):
     """Fetch all scores from Langfuse, paginating via cursor.
 
     The scores API uses cursor-based pagination: each response includes
     meta.cursor, which is passed as the `cursor` query param on the next
     request. When meta.cursor is null, pagination is complete.
+
+    If from_ts is provided (ISO 8601 string), only scores created at or after
+    that timestamp are fetched, preventing stale historical scores from
+    satisfying the expected count.
     """
     scores = []
     cursor = None
     while True:
         params = {"limit": limit, "fields": "core,details,subject"}
+        if from_ts:
+            params["from"] = from_ts
         if cursor:
             params["cursor"] = cursor
         resp = requests.get(
@@ -199,6 +205,12 @@ def main():
         "--langfuse-host", default="http://localhost:3000",
         help="Langfuse host URL (default: http://localhost:3000)"
     )
+    parser.add_argument(
+        "--since", default=None,
+        help="Only include scores created at or after this ISO timestamp "
+             "(e.g. 2026-08-10T00:00:00Z). Prevents stale historical scores "
+             "from satisfying the expected count."
+    )
     args = parser.parse_args()
 
     # Build auth header
@@ -219,6 +231,8 @@ def main():
     scores_per_item = args.repeat * args.dimensions
     log(f"Waiting for scores on dataset '{args.dataset}' for {len(prefixes)} prefix(es)")
     log(f"  Timeout: {args.timeout}s | Interval: {args.interval}s")
+    if args.since:
+        log(f"  Since: {args.since}")
     if args.expected_items:
         log(f"  Expected items per prefix: {args.expected_items} (repeat={args.repeat}, dims={args.dimensions}, scores/item={scores_per_item})")
     else:
@@ -229,7 +243,7 @@ def main():
 
     while True:
         try:
-            scores = fetch_all_scores(args.langfuse_host, auth_header)
+            scores = fetch_all_scores(args.langfuse_host, auth_header, from_ts=args.since)
         except Exception as e:
             log(f"Error fetching scores: {e}", "WARN")
             if time.monotonic() >= deadline:
@@ -243,6 +257,8 @@ def main():
         )
 
         total_scores = len(scores)
+        # For stabilization, count only scores matching requested prefixes
+        prefix_score_count = sum(sum(prefix_items[p].values()) for p in prefixes)
 
         # Log progress
         for p in prefixes:
@@ -255,7 +271,7 @@ def main():
                 )
                 log(f"  {p}: {ready_items}/{args.expected_items} items fully scored ({n_items} items with some scores)")
             else:
-                log(f"  {p}: {n_items} items scored (total scores: {total_scores})")
+                log(f"  {p}: {n_items} items scored (prefix scores: {sum(prefix_items[p].values())})")
 
         if args.expected_items:
             # Mode 1: wait until each prefix has enough scores for expected_items unique items.
@@ -268,13 +284,13 @@ def main():
                 log("All prefixes have sufficient scores for all expected items. ✓")
                 sys.exit(0)
         else:
-            # Mode 2: wait until each prefix has >= 1 score AND total count stabilized
+            # Mode 2: wait until each prefix has >= 1 score AND prefix-matched count stabilized
             all_have_scores = all(len(prefix_items[p]) >= 1 for p in prefixes)
-            stabilized = prev_total is not None and total_scores == prev_total
+            stabilized = prev_total is not None and prefix_score_count == prev_total
             if all_have_scores and stabilized:
-                log(f"Score count stabilized at {total_scores}. ✓")
+                log(f"Score count stabilized at {prefix_score_count} (prefix-matched). ✓")
                 sys.exit(0)
-            prev_total = total_scores
+            prev_total = prefix_score_count
 
         if time.monotonic() >= deadline:
             log("Timeout reached — not all scores are present yet.", "ERROR")
