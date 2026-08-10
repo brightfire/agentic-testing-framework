@@ -237,7 +237,7 @@ Count the experiment prefixes (variants). The report mode depends on the count:
 
 **1 variant — standalone report:** Invoke `eval_report.py` with `--prefix`, `--dataset`, `--by-dimension`, `--per-item`, `--since`, and `--json`. Report per-item scores and dimension breakdowns. Skip verdict and improvement steps.
 
-**3+ variants — raw score report:** Invoke `eval_report.py` with `--prefix` per variant, `--dataset`, `--by-dimension`, `--per-item`, `--since`, and `--json`. Report per-variant scores and breakdowns without deltas, verdict, or improvement suggestions. The user reviews the raw data to draw conclusions.
+**3+ variants — raw score report:** Invoke `eval_report.py` with `--variants` (all prefixes, first is baseline), `--dataset`, `--by-dimension`, `--since`, and `--json`. Report per-variant scores and breakdowns. Skip verdict and improvement steps — the user reviews the raw data to draw conclusions.
 
 For all modes: if execute start time is unavailable, use a timestamp a few minutes before the earliest experiment run. First prefix is baseline in `--variants` mode. `--json` for structured output.
 
