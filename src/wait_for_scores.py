@@ -145,12 +145,14 @@ def build_prefix_item_map(langfuse_host, auth_header, scores, prefixes):
         if not trace_id:
             continue
 
-        if trace_id not in trace_cache:
-            trace_cache[trace_id] = fetch_trace_metadata(
+        if trace_id not in trace_cache or not trace_cache[trace_id]:
+            md = fetch_trace_metadata(
                 langfuse_host, auth_header, trace_id
             )
+            if md:
+                trace_cache[trace_id] = md
 
-        md = trace_cache[trace_id]
+        md = trace_cache.get(trace_id, {})
         exp_name = md.get("experiment_name")
         dataset_item_id = md.get("dataset_item_id")
 
@@ -183,12 +185,14 @@ def build_prefix_item_map_cached(langfuse_host, auth_header, scores, prefixes, m
         if not trace_id:
             continue
 
-        if trace_id not in metadata_cache:
-            metadata_cache[trace_id] = fetch_trace_metadata(
+        if trace_id not in metadata_cache or not metadata_cache[trace_id]:
+            md = fetch_trace_metadata(
                 langfuse_host, auth_header, trace_id
             )
+            if md:
+                metadata_cache[trace_id] = md
 
-        md = metadata_cache[trace_id]
+        md = metadata_cache.get(trace_id, {})
         exp_name = md.get("experiment_name")
         dataset_item_id = md.get("dataset_item_id")
 
