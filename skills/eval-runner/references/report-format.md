@@ -78,32 +78,6 @@ The verdict uses a configurable threshold (default **0.5 points** on a 0–10 sc
 
 The skill should note the threshold used in the report so the reader understands what "significant" means.
 
-## Report Template (Markdown)
-
-```markdown
-## Eval Results: <skill-name> — <dataset-name>
-
-### Variants
-| Variant | Composite | <dim-1> | <dim-2> | <dim-3> |
-|---------|-----------|---------|---------|---------|
-| <label-a> | <avg> | <avg> | <avg> | <avg> |
-| <label-b> | <avg> | <avg> | <avg> | <avg> |
-| Delta | <+/-delta> | <+/-delta> | <+/-delta> | <+/-delta> |
-
-### Per-Item Deltas
-| Item | <label-a> | <label-b> | Delta | Notes |
-|------|-----------|-----------|-------|-------|
-| <item-id> | <avg> | <avg> | <+/-delta> | ⚠️ Regression in <dimension> |
-
-### Verdict: <Improvement | Regression | Neutral>
-
-<Explanation>
-
-### Improvement Suggestions
-- **<item-id>** (<dimension>): <suggestion>
-  - Related change: <diff reference>
-```
-
 ## Improvement Suggestion Generation
 
 For each item where any dimension's delta < -threshold (default 0.5):
