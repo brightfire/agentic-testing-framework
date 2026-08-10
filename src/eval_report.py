@@ -351,50 +351,7 @@ def output_json(dataset_name, variant_data_list):
         baseline_missing = baseline["total_runs"] == 0
         non_baseline = variant_data_list[1:]
 
-        # Overall deltas: per-variant for the composite, plus average across non-baseline
-        deltas["overall"]["composite"] = {}
-        deltas["overall"]["dimensions"] = {}
-        overall_composite_avg = 0.0
-        overall_dims_avg = defaultdict(float)
-        n_valid = 0
-        for label, vd in non_baseline:
-            if baseline_missing or vd["total_runs"] == 0:
-                deltas["overall"]["composite"][label] = None
-                for sname in vd["dimensions"]:
-                    deltas["overall"]["dimensions"].setdefault(sname, {})[label] = None
-                continue
-            n_valid += 1
-            comp_delta = round(vd["composite"]["avg"] - baseline["composite"]["avg"], 4)
-            deltas["overall"]["composite"][label] = comp_delta
-            overall_composite_avg += comp_delta
-            for sname, st in vd["dimensions"].items():
-                if sname not in baseline["dimensions"]:
-                    # Dimension absent from baseline — not comparable
-                    if sname not in deltas["overall"]["dimensions"]:
-                        deltas["overall"]["dimensions"][sname] = {}
-                    deltas["overall"]["dimensions"][sname][label] = None
-                    continue
-                base_dim = baseline["dimensions"][sname]["avg"]
-                dim_delta = round(st["avg"] - base_dim, 4)
-                if sname not in deltas["overall"]["dimensions"]:
-                    deltas["overall"]["dimensions"][sname] = {}
-                deltas["overall"]["dimensions"][sname][label] = dim_delta
-                overall_dims_avg[sname] += dim_delta
-        if n_valid > 0:
-            overall_composite_avg /= n_valid
-            for sname in overall_dims_avg:
-                overall_dims_avg[sname] /= n_valid
-        # Average across non-baseline variants (for backward compatibility)
-        deltas["overall"]["composite"]["_avg"] = round(overall_composite_avg, 4)
-        for sname in overall_dims_avg:
-            # Only average dimensions that have at least one non-None delta
-            dim_vals = [v for k, v in deltas["overall"]["dimensions"].setdefault(sname, {}).items() if k != "_avg" and v is not None]
-            if dim_vals:
-                deltas["overall"]["dimensions"][sname]["_avg"] = round(sum(dim_vals) / len(dim_vals), 4)
-            else:
-                deltas["overall"]["dimensions"][sname]["_avg"] = None
-
-        # Per-item deltas
+        # Per-item deltas (computed first; overall deltas aggregate from these)
         all_item_ids = set()
         for _, vd in variant_data_list:
             all_item_ids.update(vd["items"].keys())
@@ -447,6 +404,63 @@ def output_json(dataset_name, variant_data_list):
                     item_delta["dimensions"].setdefault(sname, {})["_avg"] = round(dim_sums[sname] / dim_counts[sname], 4)
 
             deltas["per_item"][item_id] = item_delta
+
+        # Overall deltas: aggregated from per-item deltas of matched items only.
+        # Only items present in BOTH baseline and a non-baseline variant contribute,
+        # so the delta is not skewed by items that exist in just one variant.
+        deltas["overall"]["composite"] = {}
+        deltas["overall"]["dimensions"] = {}
+        overall_composite_avg = 0.0
+        overall_dims_avg = defaultdict(float)
+        n_valid = 0
+        for label, vd in non_baseline:
+            if baseline_missing or vd["total_runs"] == 0:
+                deltas["overall"]["composite"][label] = None
+                for sname in vd["dimensions"]:
+                    deltas["overall"]["dimensions"].setdefault(sname, {})[label] = None
+                continue
+            n_valid += 1
+            # Aggregate composite delta from matched per-item deltas
+            matched_comp_deltas = []
+            for item_id, item_delta in deltas["per_item"].items():
+                if isinstance(item_delta["composite"], dict):
+                    val = item_delta["composite"].get(label)
+                    if val is not None:
+                        matched_comp_deltas.append(val)
+            comp_delta = round(sum(matched_comp_deltas) / len(matched_comp_deltas), 4) if matched_comp_deltas else None
+            deltas["overall"]["composite"][label] = comp_delta
+            if comp_delta is not None:
+                overall_composite_avg += comp_delta
+            # Aggregate dimension deltas from matched per-item deltas
+            all_dim_names = set()
+            for item_id, item_delta in deltas["per_item"].items():
+                if isinstance(item_delta.get("dimensions"), dict):
+                    all_dim_names.update(item_delta["dimensions"].keys())
+            for sname in sorted(all_dim_names):
+                matched_dim_deltas = []
+                for item_id, item_delta in deltas["per_item"].items():
+                    dims = item_delta.get("dimensions", {})
+                    if isinstance(dims, dict) and sname in dims:
+                        val = dims[sname].get(label)
+                        if val is not None:
+                            matched_dim_deltas.append(val)
+                dim_delta = round(sum(matched_dim_deltas) / len(matched_dim_deltas), 4) if matched_dim_deltas else None
+                deltas["overall"]["dimensions"].setdefault(sname, {})[label] = dim_delta
+                if dim_delta is not None:
+                    overall_dims_avg[sname] += dim_delta
+        if n_valid > 0:
+            overall_composite_avg /= n_valid
+            for sname in overall_dims_avg:
+                overall_dims_avg[sname] /= n_valid
+        # Average across non-baseline variants (for backward compatibility)
+        deltas["overall"]["composite"]["_avg"] = round(overall_composite_avg, 4)
+        for sname in overall_dims_avg:
+            # Only average dimensions that have at least one non-None delta
+            dim_vals = [v for k, v in deltas["overall"]["dimensions"].setdefault(sname, {}).items() if k != "_avg" and v is not None]
+            if dim_vals:
+                deltas["overall"]["dimensions"][sname]["_avg"] = round(sum(dim_vals) / len(dim_vals), 4)
+            else:
+                deltas["overall"]["dimensions"][sname]["_avg"] = None
 
     result = {
         "dataset": dataset_name,
