@@ -466,24 +466,30 @@ def print_variant_comparison(dataset_name, variant_data_list, by_dimension=False
             row += f" {comp['pass_rate']:>6.0f}%"
             print(row)
 
-        # Delta row (variant[n] avg - variant[0] avg)
+        # Delta row(s): per-variant when 3+ variants, single averaged when 2
         if len(variant_data_list) >= 2:
             baseline = variant_data_list[0][1]
-            delta_comp = 0.0
-            n = len(variant_data_list) - 1
-            for _, vd in variant_data_list[1:]:
-                delta_comp += vd["composite"]["avg"]
-            delta_comp = delta_comp / n - baseline["composite"]["avg"]
-
-            delta_row = f"  {'Delta':<25} {delta_comp:>+10.2f}"
-            for d in dim_names:
-                base_val = baseline["dimensions"].get(d, {"avg": 0.0})["avg"]
-                diff_sum = 0.0
-                for _, vd in variant_data_list[1:]:
-                    diff_sum += vd["dimensions"].get(d, {"avg": 0.0})["avg"]
-                delta_row += f" {(diff_sum / n - base_val):>+15.2f}"
-            delta_row += f" {'':>7}"
-            print(delta_row)
+            if len(variant_data_list) >= 3:
+                # Per-variant delta rows — averaging masks individual regressions
+                for label, vd in variant_data_list[1:]:
+                    delta_comp = vd["composite"]["avg"] - baseline["composite"]["avg"]
+                    delta_row = f"  {'Δ ' + label[:22]:<25} {delta_comp:>+10.2f}"
+                    for d in dim_names:
+                        base_val = baseline["dimensions"].get(d, {"avg": 0.0})["avg"]
+                        diff = vd["dimensions"].get(d, {"avg": 0.0})["avg"] - base_val
+                        delta_row += f" {diff:>+15.2f}"
+                    delta_row += f" {'':>7}"
+                    print(delta_row)
+            else:
+                # Single delta row (2 variants — averaging is equivalent)
+                delta_comp = variant_data_list[1][1]["composite"]["avg"] - baseline["composite"]["avg"]
+                delta_row = f"  {'Delta':<25} {delta_comp:>+10.2f}"
+                for d in dim_names:
+                    base_val = baseline["dimensions"].get(d, {"avg": 0.0})["avg"]
+                    diff = variant_data_list[1][1]["dimensions"].get(d, {"avg": 0.0})["avg"] - base_val
+                    delta_row += f" {diff:>+15.2f}"
+                delta_row += f" {'':>7}"
+                print(delta_row)
     else:
         print(f"\n  {'Variant':<25} {'Composite':>10} {'Min':>8} {'Max':>8} {'Pass%':>7}")
         print(f"  {'-' * 25} {'-' * 10} {'-' * 8} {'-' * 8} {'-' * 7}")
@@ -499,13 +505,20 @@ def print_variant_comparison(dataset_name, variant_data_list, by_dimension=False
 
         if all_item_ids:
             baseline = variant_data_list[0][1]
+            multi_variant = len(variant_data_list) >= 3
             print(f"\n  Per-Item Deltas:")
             header = f"  {'Item':<30}"
             for label, _ in variant_data_list:
                 header += f" {label[:15]:>15}"
-            header += f" {'Delta':>8} {'Notes':>30}"
+            if multi_variant:
+                for label, _ in variant_data_list[1:]:
+                    header += f" {'Δ'+label[:6]:>8}"
+            else:
+                header += f" {'Delta':>8}"
+            header += f" {'Notes':>30}"
             print(header)
-            print(f"  {'-' * 30}" + (f" {'-' * 15}" * len(variant_data_list)) + f" {'-' * 8} {'-' * 30}")
+            n_delta_cols = len(variant_data_list) - 1 if multi_variant else 1
+            print(f"  {'-' * 30}" + (f" {'-' * 15}" * len(variant_data_list)) + (f" {'-' * 8}" * n_delta_cols) + f" {'-' * 30}")
 
             for item_id in sorted(all_item_ids):
                 row = f"  {item_id[:30]:<30}"
@@ -519,43 +532,65 @@ def print_variant_comparison(dataset_name, variant_data_list, by_dimension=False
                         item_avgs.append(item["avg"])
                         row += f" {item['avg']:>15.2f}"
 
-                n = len(variant_data_list) - 1
-                # Exclude missing items from delta calculation
+                # Per-variant deltas
                 if item_avgs[0] is None:
-                    delta = None
-                    row += f" {'N/A':>8}"
-                elif n > 0:
-                    non_baseline_vals = [v for v in item_avgs[1:] if v is not None]
-                    if non_baseline_vals:
-                        delta = sum(non_baseline_vals) / len(non_baseline_vals) - item_avgs[0]
-                        row += f" {delta:>+8.2f}"
-                    else:
-                        delta = None
+                    # Baseline missing — all deltas N/A
+                    for _ in variant_data_list[1:]:
                         row += f" {'N/A':>8}"
+                    any_reg_delta = None
                 else:
-                    delta = 0.0
-                    row += f" {delta:>+8.2f}"
+                    per_variant_deltas = []
+                    for v in item_avgs[1:]:
+                        if v is not None:
+                            per_variant_deltas.append(v - item_avgs[0])
+                        else:
+                            per_variant_deltas.append(None)
+
+                    if multi_variant:
+                        for d in per_variant_deltas:
+                            if d is not None:
+                                row += f" {d:>+8.2f}"
+                            else:
+                                row += f" {'N/A':>8}"
+                    else:
+                        valid_deltas = [d for d in per_variant_deltas if d is not None]
+                        if valid_deltas:
+                            avg_delta = sum(valid_deltas) / len(valid_deltas)
+                            row += f" {avg_delta:>+8.2f}"
+                        else:
+                            row += f" {'N/A':>8}"
+                    any_reg_delta = next((d for d in per_variant_deltas if d is not None), None)
 
                 # Note regressions — check each dimension independently of composite delta
                 notes = []
-                if delta is not None and by_dimension:
+                if any_reg_delta is not None and by_dimension:
                     base_item = baseline["items"].get(item_id, {"dimensions": {}})
                     any_reg = False
                     for sname in dim_names:
                         base_dim = base_item.get("dimensions", {}).get(sname, {}).get("avg", 0.0)
-                        dim_vals = []
-                        for _, vd in variant_data_list[1:]:
-                            item = vd["items"].get(item_id)
-                            if item is not None:
-                                dim_vals.append(item.get("dimensions", {}).get(sname, {}).get("avg", 0.0))
-                        if dim_vals:
-                            dim_avg = sum(dim_vals) / len(dim_vals)
-                            if dim_avg - base_dim < -threshold:
-                                notes.append(f"\u26a0\ufe0f Regression in {sname}")
-                                any_reg = True
-                    if not any_reg and delta < -threshold:
+                        if multi_variant:
+                            # Check each variant's dimension delta independently
+                            for i, (label, vd) in enumerate(variant_data_list[1:]):
+                                item = vd["items"].get(item_id)
+                                if item is not None:
+                                    dim_val = item.get("dimensions", {}).get(sname, {}).get("avg", 0.0)
+                                    if dim_val - base_dim < -threshold:
+                                        notes.append(f"\u26a0\ufe0f {label[:10]} regressed in {sname}")
+                                        any_reg = True
+                        else:
+                            dim_vals = []
+                            for _, vd in variant_data_list[1:]:
+                                item = vd["items"].get(item_id)
+                                if item is not None:
+                                    dim_vals.append(item.get("dimensions", {}).get(sname, {}).get("avg", 0.0))
+                            if dim_vals:
+                                dim_avg = sum(dim_vals) / len(dim_vals)
+                                if dim_avg - base_dim < -threshold:
+                                    notes.append(f"\u26a0\ufe0f Regression in {sname}")
+                                    any_reg = True
+                    if not any_reg and any_reg_delta < -threshold:
                         notes.append("\u26a0\ufe0f Composite regression")
-                elif delta is not None and delta < -threshold:
+                elif any_reg_delta is not None and any_reg_delta < -threshold:
                     notes.append("\u26a0\ufe0f Regression")
 
                 row += f" {'; '.join(notes)[:30]:>30}"
