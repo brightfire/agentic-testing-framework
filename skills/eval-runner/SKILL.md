@@ -425,6 +425,22 @@ python ~/repos/agentic-testing-framework/src/eval_report.py \
 
 For a single-model eval (the common case), there is only one `--variants` call comparing baseline-vs-head for that model.
 
+**Single-variant runs (no base/head pair):** When inference selects only one skill version (e.g., "just the PR version"), there is no comparison to make. Use `--prefix` mode instead of `--variants` mode to produce a standalone report:
+
+```bash
+source ~/.openclaw/secrets/langfuse.env 2>/dev/null
+
+python ~/repos/agentic-testing-framework/src/eval_report.py \
+  --dataset "<dataset-name>" \
+  --prefix "<single-variant-prefix>" \
+  --by-dimension \
+  --per-item \
+  --since "<execute-phase-start-iso-timestamp>" \
+  --json
+```
+
+The standalone report shows per-item scores and dimension breakdowns without deltas or verdicts (there is no baseline to compare against). Skip the verdict and improvement suggestion steps below — report the scores and any observations about item-level performance instead.
+
 If the execute phase start time is unavailable, pass `--since` with a timestamp a few minutes before the earliest experiment run to ensure all relevant scores are included while excluding historical runs.
 
 **Recency-pruned variants:** Variants pruned by the Recency Check did not run in the Execute phase but already have existing scores in Langfuse from prior runs. They must be included in the report comparison — omitting them would turn an A/B comparison into a standalone report. Their experiment name prefixes come from the Recency Check output (the same names that were checked). When passing `--since` for pruned variants, use a timestamp early enough to encompass their original scoring runs, or omit `--since` for those variants if the recency window is known.
