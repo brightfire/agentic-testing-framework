@@ -509,34 +509,53 @@ def print_variant_comparison(dataset_name, variant_data_list, by_dimension=False
 
             for item_id in sorted(all_item_ids):
                 row = f"  {item_id[:30]:<30}"
-                item_avgs = []
+                item_avgs = []  # None for missing items, float for present
                 for label, vd in variant_data_list:
-                    item = vd["items"].get(item_id, {"avg": 0.0})
-                    item_avgs.append(item["avg"])
-                    row += f" {item['avg']:>15.2f}"
+                    item = vd["items"].get(item_id)
+                    if item is None:
+                        item_avgs.append(None)
+                        row += f" {'N/A':>15}"
+                    else:
+                        item_avgs.append(item["avg"])
+                        row += f" {item['avg']:>15.2f}"
 
                 n = len(variant_data_list) - 1
-                delta = sum(item_avgs[1:]) / n - item_avgs[0] if n > 0 else 0.0
-                row += f" {delta:>+8.2f}"
+                # Exclude missing items from delta calculation
+                if item_avgs[0] is None:
+                    delta = None
+                    row += f" {'N/A':>8}"
+                elif n > 0:
+                    non_baseline_vals = [v for v in item_avgs[1:] if v is not None]
+                    if non_baseline_vals:
+                        delta = sum(non_baseline_vals) / len(non_baseline_vals) - item_avgs[0]
+                        row += f" {delta:>+8.2f}"
+                    else:
+                        delta = None
+                        row += f" {'N/A':>8}"
+                else:
+                    delta = 0.0
+                    row += f" {delta:>+8.2f}"
 
                 # Note regressions — check each dimension independently of composite delta
                 notes = []
-                if by_dimension:
+                if delta is not None and by_dimension:
                     base_item = baseline["items"].get(item_id, {"dimensions": {}})
                     any_reg = False
                     for sname in dim_names:
                         base_dim = base_item.get("dimensions", {}).get(sname, {}).get("avg", 0.0)
-                        dim_sum = 0.0
+                        dim_vals = []
                         for _, vd in variant_data_list[1:]:
-                            item = vd["items"].get(item_id, {"dimensions": {}})
-                            dim_sum += item.get("dimensions", {}).get(sname, {}).get("avg", 0.0)
-                        dim_avg = dim_sum / n if n > 0 else 0.0
-                        if dim_avg - base_dim < -threshold:
-                            notes.append(f"\u26a0\ufe0f Regression in {sname}")
-                            any_reg = True
+                            item = vd["items"].get(item_id)
+                            if item is not None:
+                                dim_vals.append(item.get("dimensions", {}).get(sname, {}).get("avg", 0.0))
+                        if dim_vals:
+                            dim_avg = sum(dim_vals) / len(dim_vals)
+                            if dim_avg - base_dim < -threshold:
+                                notes.append(f"\u26a0\ufe0f Regression in {sname}")
+                                any_reg = True
                     if not any_reg and delta < -threshold:
                         notes.append("\u26a0\ufe0f Composite regression")
-                elif delta < -threshold:
+                elif delta is not None and delta < -threshold:
                     notes.append("\u26a0\ufe0f Regression")
 
                 row += f" {'; '.join(notes)[:30]:>30}"
