@@ -338,7 +338,7 @@ See [`references/execute-failure-handling.md`](references/execute-failure-handli
 
 ## Report Phase
 
-The terminal phase — fetches scores from Langfuse, compares variants, produces a verdict, generates improvement suggestions for regressions, and posts results to the originating channel.
+Fetches scores from Langfuse, compares variants, produces a verdict, generates improvement suggestions for regressions, and posts results to the originating channel.
 
 ### Inputs
 
@@ -490,7 +490,7 @@ Format the report as Markdown. For comparison reports (2+ variants), read [`refe
 
 ### Output
 
-Results posted to originating channel. No data passed to a next phase — terminal.
+Results posted to originating channel. No data passed to a next phase.
 
 ### Failure Handling
 
