@@ -331,13 +331,16 @@ def output_json(dataset_name, variant_data_list):
 
     variants_json = []
     for label, vd in variant_data_list:
-        variants_json.append({
+        vj = {
             "label": label,
             "composite": vd["composite"],
             "dimensions": vd["dimensions"],
             "items": vd["items"],
             "total_runs": vd["total_runs"],
-        })
+        }
+        if vd["total_runs"] == 0:
+            vj["missing"] = True
+        variants_json.append(vj)
 
     # Compute deltas: variant[n] - variant[0] for each item and dimension
     # Missing items are represented as None (null) and excluded from delta calculations.
@@ -345,6 +348,7 @@ def output_json(dataset_name, variant_data_list):
     deltas = {"per_item": {}, "overall": {}}
     if len(variant_data_list) >= 2:
         baseline_label, baseline = variant_data_list[0]
+        baseline_missing = baseline["total_runs"] == 0
         non_baseline = variant_data_list[1:]
 
         # Overall deltas: per-variant for the composite, plus average across non-baseline
@@ -352,7 +356,14 @@ def output_json(dataset_name, variant_data_list):
         deltas["overall"]["dimensions"] = {}
         overall_composite_avg = 0.0
         overall_dims_avg = defaultdict(float)
+        n_valid = 0
         for label, vd in non_baseline:
+            if baseline_missing or vd["total_runs"] == 0:
+                deltas["overall"]["composite"][label] = None
+                for sname in vd["dimensions"]:
+                    deltas["overall"]["dimensions"].setdefault(sname, {})[label] = None
+                continue
+            n_valid += 1
             comp_delta = round(vd["composite"]["avg"] - baseline["composite"]["avg"], 4)
             deltas["overall"]["composite"][label] = comp_delta
             overall_composite_avg += comp_delta
@@ -363,11 +374,10 @@ def output_json(dataset_name, variant_data_list):
                     deltas["overall"]["dimensions"][sname] = {}
                 deltas["overall"]["dimensions"][sname][label] = dim_delta
                 overall_dims_avg[sname] += dim_delta
-        n = len(non_baseline)
-        if n > 0:
-            overall_composite_avg /= n
+        if n_valid > 0:
+            overall_composite_avg /= n_valid
             for sname in overall_dims_avg:
-                overall_dims_avg[sname] /= n
+                overall_dims_avg[sname] /= n_valid
         # Average across non-baseline variants (for backward compatibility)
         deltas["overall"]["composite"]["_avg"] = round(overall_composite_avg, 4)
         for sname in overall_dims_avg:
@@ -459,6 +469,13 @@ def print_variant_comparison(dataset_name, variant_data_list, by_dimension=False
 
         for label, vd in variant_data_list:
             comp = vd["composite"]
+            if vd["total_runs"] == 0:
+                row = f"  {label[:25]:<25} {'No data':>10}"
+                for _ in dim_names:
+                    row += f" {'-':>15}"
+                row += f" {'-':>7}"
+                print(row)
+                continue
             row = f"  {label[:25]:<25} {comp['avg']:>10.2f}"
             for d in dim_names:
                 dst = vd["dimensions"].get(d, {"avg": 0.0})
@@ -469,9 +486,17 @@ def print_variant_comparison(dataset_name, variant_data_list, by_dimension=False
         # Delta row(s): per-variant when 3+ variants, single averaged when 2
         if len(variant_data_list) >= 2:
             baseline = variant_data_list[0][1]
+            baseline_missing = baseline["total_runs"] == 0
             if len(variant_data_list) >= 3:
                 # Per-variant delta rows — averaging masks individual regressions
                 for label, vd in variant_data_list[1:]:
+                    if baseline_missing or vd["total_runs"] == 0:
+                        delta_row = f"  {'Δ ' + label[:22]:<25} {'N/A':>10}"
+                        for _ in dim_names:
+                            delta_row += f" {'N/A':>15}"
+                        delta_row += f" {'':>7}"
+                        print(delta_row)
+                        continue
                     delta_comp = vd["composite"]["avg"] - baseline["composite"]["avg"]
                     delta_row = f"  {'Δ ' + label[:22]:<25} {delta_comp:>+10.2f}"
                     for d in dim_names:
@@ -482,20 +507,30 @@ def print_variant_comparison(dataset_name, variant_data_list, by_dimension=False
                     print(delta_row)
             else:
                 # Single delta row (2 variants — averaging is equivalent)
-                delta_comp = variant_data_list[1][1]["composite"]["avg"] - baseline["composite"]["avg"]
-                delta_row = f"  {'Delta':<25} {delta_comp:>+10.2f}"
-                for d in dim_names:
-                    base_val = baseline["dimensions"].get(d, {"avg": 0.0})["avg"]
-                    diff = variant_data_list[1][1]["dimensions"].get(d, {"avg": 0.0})["avg"] - base_val
-                    delta_row += f" {diff:>+15.2f}"
-                delta_row += f" {'':>7}"
-                print(delta_row)
+                if baseline_missing or variant_data_list[1][1]["total_runs"] == 0:
+                    delta_row = f"  {'Delta':<25} {'N/A':>10}"
+                    for _ in dim_names:
+                        delta_row += f" {'N/A':>15}"
+                    delta_row += f" {'':>7}"
+                    print(delta_row)
+                else:
+                    delta_comp = variant_data_list[1][1]["composite"]["avg"] - baseline["composite"]["avg"]
+                    delta_row = f"  {'Delta':<25} {delta_comp:>+10.2f}"
+                    for d in dim_names:
+                        base_val = baseline["dimensions"].get(d, {"avg": 0.0})["avg"]
+                        diff = variant_data_list[1][1]["dimensions"].get(d, {"avg": 0.0})["avg"] - base_val
+                        delta_row += f" {diff:>+15.2f}"
+                    delta_row += f" {'':>7}"
+                    print(delta_row)
     else:
         print(f"\n  {'Variant':<25} {'Composite':>10} {'Min':>8} {'Max':>8} {'Pass%':>7}")
         print(f"  {'-' * 25} {'-' * 10} {'-' * 8} {'-' * 8} {'-' * 7}")
         for label, vd in variant_data_list:
             comp = vd["composite"]
-            print(f"  {label[:25]:<25} {comp['avg']:>10.2f} {comp['min']:>8.2f} {comp['max']:>8.2f} {comp['pass_rate']:>6.0f}%")
+            if vd["total_runs"] == 0:
+                print(f"  {label[:25]:<25} {'No data':>10} {'-':>8} {'-':>8} {'-':>7}")
+            else:
+                print(f"  {label[:25]:<25} {comp['avg']:>10.2f} {comp['min']:>8.2f} {comp['max']:>8.2f} {comp['pass_rate']:>6.0f}%")
 
     # Per-item deltas table
     if len(variant_data_list) >= 2:
@@ -727,11 +762,13 @@ def main():
             )
             if not experiments:
                 log(f"No experiments found for variant '{prefix}'.", "WARN", force_stderr=args.output_json)
-                continue
+            # Always append — even when empty — so the baseline position is preserved.
+            # Skipping a variant shifts variant_data_list[0] to the next available,
+            # making all deltas compute against the wrong baseline.
             vd = build_variant_data(experiments)
             variant_data_list.append((prefix, vd))
 
-        if not variant_data_list:
+        if all(vd["total_runs"] == 0 for _, vd in variant_data_list):
             log("No experiments found for any variant.", "ERROR", force_stderr=args.output_json)
             sys.exit(1)
 

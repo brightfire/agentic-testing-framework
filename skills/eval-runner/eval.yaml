@@ -257,7 +257,13 @@ items:
         - "Execute: runs variants sequentially (not concurrently) by default"
         - "Execute: captures completion status and per-item failures from harness output"
         - "Execute: silent on success — does not post results to any channel (passed to report phase)"
-        # Phase: Report (add criteria when implemented)
+        # Phase: Report
+        - "Report: polls for evaluator scores using wait_for_scores.py with both variant prefixes and --since"
+        - "Report: runs eval_report.py with --variants, --by-dimension, --json, --threshold, and --since"
+        - "Report: parses JSON output and generates a verdict (improvement, regression, or neutral) based on deltas"
+        - "Report: generates improvement suggestions for items with significant regressions (delta < -threshold)"
+        - "Report: posts results as a comment on PR #123 via gh api"
+        - "Report: cleans up suffixed skill directories after posting results"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
 
@@ -300,7 +306,12 @@ items:
         - "Execute: invokes eval_harness.py with --repeat if repeat count > 1"
         - "Execute: captures experiment run names and completion status"
         - "Execute: silent on success — results passed to report phase"
-        # Phase: Report (add criteria when implemented)
+        # Phase: Report
+        - "Report: polls for evaluator scores using wait_for_scores.py with both variant prefixes and --since"
+        - "Report: runs eval_report.py with --variants, --by-dimension, --json, --threshold, and --since"
+        - "Report: parses JSON output and generates a verdict based on deltas"
+        - "Report: posts results to the originating channel"
+        - "Report: cleans up suffixed skill directories after posting results"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
 
@@ -557,7 +568,7 @@ items:
         # Phase: Sync (add criteria after user confirms)
         # Phase: Env Setup (add criteria after user confirms)
         # Phase: Execute (add criteria after user confirms)
-        # Phase: Report (add criteria when implemented)
+        # Phase: Report (add criteria after user confirms)
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
 
