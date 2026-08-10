@@ -572,8 +572,18 @@ def print_variant_comparison(dataset_name, variant_data_list, by_dimension=False
                         delta_row += f" {'':>7}"
                         print(delta_row)
                         continue
-                    delta_comp = vd["composite"]["avg"] - baseline["composite"]["avg"]
-                    delta_row = f"  {'Δ ' + label[:22]:<25} {delta_comp:>+10.2f}"
+                    # Compute composite delta from shared dimensions only,
+                    # matching the JSON path logic in output_json().
+                    shared_dims = set(d for d in dim_names if d in baseline.get("dimensions", {}) and d in vd.get("dimensions", {}))
+                    if shared_dims:
+                        dim_deltas = [
+                            vd["dimensions"][d]["avg"] - baseline["dimensions"][d]["avg"]
+                            for d in shared_dims
+                        ]
+                        delta_comp = sum(dim_deltas) / len(dim_deltas)
+                        delta_row = f"  {'Δ ' + label[:22]:<25} {delta_comp:>+10.2f}"
+                    else:
+                        delta_row = f"  {'Δ ' + label[:22]:<25} {'N/A':>10}"
                     for d in dim_names:
                         if d not in baseline["dimensions"] or d not in vd["dimensions"]:
                             delta_row += f" {'N/A':>15}"
@@ -592,14 +602,25 @@ def print_variant_comparison(dataset_name, variant_data_list, by_dimension=False
                     delta_row += f" {'':>7}"
                     print(delta_row)
                 else:
-                    delta_comp = variant_data_list[1][1]["composite"]["avg"] - baseline["composite"]["avg"]
-                    delta_row = f"  {'Delta':<25} {delta_comp:>+10.2f}"
+                    vd_b = variant_data_list[1][1]
+                    # Compute composite delta from shared dimensions only,
+                    # matching the JSON path logic in output_json().
+                    shared_dims = set(d for d in dim_names if d in baseline.get("dimensions", {}) and d in vd_b.get("dimensions", {}))
+                    if shared_dims:
+                        dim_deltas = [
+                            vd_b["dimensions"][d]["avg"] - baseline["dimensions"][d]["avg"]
+                            for d in shared_dims
+                        ]
+                        delta_comp = sum(dim_deltas) / len(dim_deltas)
+                        delta_row = f"  {'Delta':<25} {delta_comp:>+10.2f}"
+                    else:
+                        delta_row = f"  {'Delta':<25} {'N/A':>10}"
                     for d in dim_names:
-                        if d not in baseline["dimensions"] or d not in variant_data_list[1][1]["dimensions"]:
+                        if d not in baseline["dimensions"] or d not in vd_b["dimensions"]:
                             delta_row += f" {'N/A':>15}"
                         else:
                             base_val = baseline["dimensions"][d]["avg"]
-                            diff = variant_data_list[1][1]["dimensions"][d]["avg"] - base_val
+                            diff = vd_b["dimensions"][d]["avg"] - base_val
                             delta_row += f" {diff:>+15.2f}"
                     delta_row += f" {'':>7}"
                     print(delta_row)
@@ -869,6 +890,10 @@ def main():
 
         if all(vd["total_runs"] == 0 for _, vd in variant_data_list):
             log("No experiments found for any variant.", "ERROR", force_stderr=args.output_json)
+            if args.output_json:
+                import json
+                print(json.dumps({"dataset": args.dataset, "variants": [], "deltas": {"per_item": {}, "overall": {}}}, indent=2))
+                sys.exit(0)
             sys.exit(1)
 
         if args.output_json:
