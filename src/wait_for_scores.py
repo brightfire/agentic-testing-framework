@@ -118,13 +118,18 @@ def fetch_trace_metadata(langfuse_host, auth_header, trace_id):
 
 
 def build_prefix_item_map(langfuse_host, auth_header, scores, prefixes):
-    """Build a mapping of prefix -> set of dataset_item_ids that have scores.
+    """Build a mapping of prefix -> {dataset_item_id: score_count}.
 
     For each score, fetches trace metadata to determine which experiment
     and dataset item it belongs to, then groups by prefix.
+
+    score_count counts individual scores per item. With --repeat N and D
+    dimensions, a fully-scored item has N*D scores. The caller should
+    divide by D (or just compare total against expected_items * repeat * dims)
+    to determine readiness.
     """
     trace_cache = {}
-    prefix_items = {p: set() for p in prefixes}
+    prefix_items = {p: defaultdict(int) for p in prefixes}
 
     for score in scores:
         subject = score.get("subject", {})
@@ -148,7 +153,7 @@ def build_prefix_item_map(langfuse_host, auth_header, scores, prefixes):
 
         for prefix in prefixes:
             if exp_name.startswith(prefix):
-                prefix_items[prefix].add(dataset_item_id)
+                prefix_items[prefix][dataset_item_id] += 1
                 break
 
     return prefix_items
@@ -171,6 +176,16 @@ def main():
         help="Expected number of dataset items. If provided, waits until each prefix "
              "has scores for that many unique items. If not provided, waits until each "
              "prefix has at least 1 score and the total score count stabilizes."
+    )
+    parser.add_argument(
+        "--repeat", type=int, default=1,
+        help="Number of repeats per dataset item (default: 1). When set, --expected-items "
+             "is multiplied by --repeat to determine the required score count per item."
+    )
+    parser.add_argument(
+        "--dimensions", type=int, default=1,
+        help="Number of scoring dimensions per trace (default: 1). The expected score "
+             "count per item is --repeat * --dimensions."
     )
     parser.add_argument(
         "--timeout", type=int, default=180,
@@ -200,10 +215,12 @@ def main():
             sys.exit(1)
 
     prefixes = args.prefix
+    # Expected scores per item = repeat * dimensions
+    scores_per_item = args.repeat * args.dimensions
     log(f"Waiting for scores on dataset '{args.dataset}' for {len(prefixes)} prefix(es)")
     log(f"  Timeout: {args.timeout}s | Interval: {args.interval}s")
     if args.expected_items:
-        log(f"  Expected items per prefix: {args.expected_items}")
+        log(f"  Expected items per prefix: {args.expected_items} (repeat={args.repeat}, dims={args.dimensions}, scores/item={scores_per_item})")
     else:
         log("  No expected-items count; will wait for score count stabilization")
 
@@ -229,19 +246,26 @@ def main():
 
         # Log progress
         for p in prefixes:
-            n = len(prefix_items[p])
+            n_items = len(prefix_items[p])
             if args.expected_items:
-                log(f"  {p}: {n}/{args.expected_items} items scored")
+                # Count items that have enough scores (expected_items count * scores_per_item)
+                ready_items = sum(
+                    1 for cnt in prefix_items[p].values()
+                    if cnt >= scores_per_item
+                )
+                log(f"  {p}: {ready_items}/{args.expected_items} items fully scored ({n_items} items with some scores)")
             else:
-                log(f"  {p}: {n} items scored (total scores: {total_scores})")
+                log(f"  {p}: {n_items} items scored (total scores: {total_scores})")
 
         if args.expected_items:
-            # Mode 1: wait until each prefix has scores for expected_items unique items
+            # Mode 1: wait until each prefix has enough scores for expected_items unique items.
+            # Each item needs scores_per_item scores (repeat * dimensions).
             all_ready = all(
-                len(prefix_items[p]) >= args.expected_items for p in prefixes
+                sum(1 for cnt in prefix_items[p].values() if cnt >= scores_per_item) >= args.expected_items
+                for p in prefixes
             )
             if all_ready:
-                log("All prefixes have scores for all expected items. ✓")
+                log("All prefixes have sufficient scores for all expected items. ✓")
                 sys.exit(0)
         else:
             # Mode 2: wait until each prefix has >= 1 score AND total count stabilized
