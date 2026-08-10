@@ -459,7 +459,6 @@ def output_json(dataset_name, variant_data_list):
                 for sname in vd["dimensions"]:
                     deltas["overall"]["dimensions"].setdefault(sname, {})[label] = None
                 continue
-            n_valid += 1
             # Aggregate composite delta from matched per-item deltas
             matched_comp_deltas = []
             for item_id, item_delta in deltas["per_item"].items():
@@ -469,7 +468,9 @@ def output_json(dataset_name, variant_data_list):
                         matched_comp_deltas.append(val)
             comp_delta = round(sum(matched_comp_deltas) / len(matched_comp_deltas), 4) if matched_comp_deltas else None
             deltas["overall"]["composite"][label] = comp_delta
+            # Only count variants with a comparable overall delta toward the average
             if comp_delta is not None:
+                n_valid += 1
                 overall_composite_avg += comp_delta
             # Aggregate dimension deltas from matched per-item deltas
             all_dim_names = set()
