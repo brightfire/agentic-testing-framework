@@ -10,7 +10,7 @@ metadata:
 
 ## Variant Inference
 
-The skill determines what to test based on the request, not the trigger source. Three independent dimensions:
+Determine what to test from the request. Three dimensions:
 
 **Skill versions** (what skill code to test):
 - **PR referenced, no explicit skill specs** → default to skill A/B: base branch (e.g., `main@<base-hash>`) + PR head (e.g., `<pr-branch>@<head-hash>`). The variant label is `main`
@@ -19,10 +19,7 @@ The skill determines what to test based on the request, not the trigger source. 
 - **Request names specific commits** → use those commits as skill variants. The variant label is the commit hash.
 - **Request says "just the PR version" or similar** → single skill variant: `<pr-branch>@<hash>`. The variant label is `pr-<number>` (e.g., `pr-123`).
 - **Explicit skill variant specs provided** → use them. The variant label is the branch name or commit hash provided.
-- **Request asks for "past N commits" on a branch** → resolve the branch, list the last N commit hashes via `git rev-list --max-count=N <branch>`, and create N skill variants — one per commit. The variant label for each is the short commit hash (7 chars). For example, "past 5 commits on main" produces 5 variants with labels like `a1b2c3d`, `e5f6g7h`, etc.
-
-The variant label identifies the source of the variant — the PR number (for PR head variants), the base branch name (for the base variant), or commit hash (for explicit specs).
-This label appears in experiment names to distinguish variants, alongside the git hash for precise commit identification.
+- **Request asks for "past N commits" on a branch** → resolve the branch, list the last N commit hashes via `git rev-list --max-count=N <branch>`, and create N skill variants — one per commit. The variant label for each is the short commit hash (7 chars).
 
 **Models** (what models to run each skill variant against):
 - **Request mentions model comparison, or names a specific model** → model A/B dimension added. Naming a single specific model (e.g., "test against claude-sonnet-4-6") implies an A/B comparison with the agent default as model A and the named model as model B.
@@ -32,8 +29,7 @@ This label appears in experiment names to distinguish variants, alongside the gi
 - **No items specified** → all items in the eval.yaml
 - **Specific item(s) named** → only those items (by id)
 
-Variant inference produces raw refs (branch names, PR numbers, commit hashes) and labels for each variant. Ref resolution happens after inference, pinning those raw refs to commit hashes. The env setup phase receives the resolved list of (git ref, label) pairs for skill versions and handles the
-mechanics of creating suffixed copies. The label is used both for directory naming in env setup and as the variant-label component in experiment names.
+Variant inference outputs (git ref, label) pairs for each variant. Ref resolution pins refs to commit hashes; env setup uses labels for directory naming and experiment names.
 
 **Experiment naming convention:**
 
@@ -41,48 +37,32 @@ mechanics of creating suffixed copies. The label is used both for directory nami
 <dataset-name>__<model-id>__<variant-label>__<git-hash>__<item-scope>
 ```
 
-- `<model-id>`: provider-qualified model ID with `/` → `-`, `@` preserved (e.g., `openrouter-@preset-conversation-default`, `openrouter-z-ai-glm-5.2`)
-- `<variant-label>`: base branch name, `pr-<number>`, or commit ref — with `/` → `-`
-- `<item-scope>`: `all` for full dataset, or 8-char SHA-256 prefix of sorted item IDs joined by `|` (e.g., items `['c','a','b']` → `a|b|c` → `sha256('a|b|c')[:8]`)
+- `<model-id>`: provider-qualified model ID, `/` → `-`, `@` preserved
+- `<variant-label>`: base branch name, `pr-<number>`, or commit ref, `/` → `-`
+- `<item-scope>`: `all` or 8-char SHA-256 prefix of sorted item IDs joined by `|`
 - Example: `linear-create-eval__openrouter-@preset-conversation-default__pr-123__e5f6g7h__all`
 
 The harness appends ` - <timestamp>` and optionally ` - <run_idx>/<total>` for repeats at runtime.
 
 ## Ref Resolution
 
-**Always perform ref resolution for branch refs** — branch HEADs move, and stale hashes produce incorrect evals. The only refs exempt from re-resolution are explicit commit hashes provided directly by the user (already pinned by definition). This applies to both initial runs and reruns: reruns skip variant inference but still re-resolve all branch refs before the recency check.
+**Always resolve branch refs to commit hashes** — including on reruns. Explicit commit hashes from the user need no re-resolution.
 
 After variant inference (and before the recency check), pin all git refs to commit hashes so subsequent phases use a fixed snapshot:
 
 1. Fetch and pin each ref to a commit hash: `git fetch origin "<ref>"` then `git rev-parse "origin/<ref>"` for branch refs. For explicit commit hashes, `git fetch origin "<hash>"` ensures the commit is present locally (no re-resolution needed — the hash is the pin).
 2. Replace the branch ref with the resolved commit hash in the variant spec.
-3. All subsequent phases (recency check, pre-flight, sync, env setup) use the pinned commit hash — never the branch name.
-4. Verify eval.yaml exists at each pinned commit: `git show "<hash>:<eval-yaml-path>"` — if it fails, exclude that skill version from the matrix (nothing to test).
+3. Verify eval.yaml exists at each pinned commit: `git show "<hash>:<eval-yaml-path>"` — if it fails, exclude that skill version from the matrix (nothing to test).
 
 ## Recency Check
 
-After ref resolution, run `recency_check.py` for each (skill variant × model) combination:
-
-```bash
-source ~/.openclaw/secrets/langfuse.env 2>/dev/null
-
-python3 ~/repos/agentic-testing-framework/src/recency_check.py \
-  --dataset "<dataset-name>" \
-  --filter "<base-experiment-name>" \
-  --min-pass-percent 75
-```
-
-`--filter` is the full base experiment name from the naming convention above. Do not include the harness-added ` - <timestamp>` suffix.
-
-Count the run names on stdout. If the count meets the requested repeat count, prune the combination from the matrix. If fewer runs exist than requested, only the difference needs to run. Empty stdout means no existing runs — include the combination.
-
-Exit 1 = script error. Report and stop.
+After ref resolution, run `recency_check.py` for each (skill variant × model) combination. Source `~/.openclaw/secrets/langfuse.env`, then invoke `recency_check.py` with `--dataset` and `--filter` (base experiment name, without timestamp suffix). `--min-pass-percent 75` sets the pass threshold. Count run names on stdout — if count meets requested repeats, prune the combination. If fewer runs exist, only the difference needs to run. Empty stdout means no existing runs — include the combination. Exit 1 = script error (report and stop).
 
 ## Confirmation — HARD GATE
 
 ⚠️ This is a mandatory stop point. Do NOT proceed to pre-flight, sync, env setup, or execute until the user explicitly confirms. No exceptions.
 
-After inference and the recency check, present a confirmation dialog using this exact format and **STOP**. Do not run any further commands. Do not call dataset_sync.py, setup_eval_skill.sh, eval_harness.py, or evaluator_check.py. Wait for the user's reply.
+After inference and the recency check, present a confirmation dialog using this exact format and **STOP**. Wait for the user's reply.
 
 ### Confirmation Format
 
@@ -121,13 +101,7 @@ Use this template verbatim (adapt the content, keep the structure):
 Reply with `@<github bot id> confirm` or `@<github bot id> proceed` to start the run.
 ```
 
-The `@<github bot id>` mention is required on GitHub. Resolve your GitHub bot id by running:
-
-```bash
-gh auth status --hostname github.com --active --json hosts | jq -r '.hosts["github.com"][0].login' | sed 's/\[bot\]//'
-```
-
-If the command returns `null`, fails, or produces an unexpected account, do not proceed with a placeholder. Ask the user for the bot's GitHub login explicitly (e.g., "What is the bot's GitHub username? Reply with @<username> confirm to start the run.").
+The `@<github bot id>` mention is required on GitHub. Resolve your bot ID via `gh auth status --hostname github.com --active --json hosts` (pipe through `jq -r '.hosts["github.com"][0].login'` and strip `[bot]`). If the result is `null`, fails, or is unexpected, ask the user for the bot's GitHub login explicitly rather than using a placeholder.
 
 Do not include a mention prefix on Slack or webchat, where the bot receives all messages directly.
 
@@ -135,42 +109,31 @@ If there are multiple models, include one row per model × variant combination i
 
 For reruns where nothing changed and all variants have sufficient runs, replace the Run Matrix section with a note that all variants already have sufficient runs and ask the user to confirm a forced re-run.
 
-**Only proceed when the user replies with `confirm` or `proceed`** (or clearly indicates approval). On GitHub, the reply must include the bot's GitHub id as a mention (e.g. `@<github bot id> confirm`). On Slack or webchat, a bare `confirm`/`proceed` is sufficient. Do not post Slack handles or IDs on GitHub. If the user's reply is ambiguous, ask for explicit confirmation with the correct format for the platform. Do not interpret silence or a topic change as confirmation.
+Proceed only on explicit `confirm` or `proceed`. On GitHub, the confirm reply must include the bot's GitHub mention (e.g. `@<bot-id> confirm`) for webhook routing. On Slack or webchat, bare `confirm`/`proceed` suffices. If ambiguous, ask for explicit confirmation. Do not interpret silence or a topic change as confirmation.
 
-**Post-confirmation messages:** If the user's message indicates confirmation has already been given (e.g., "User has confirmed the summary" or the input context states confirmation occurred), proceed without re-validating the confirmation format — the gate is already passed.
+If confirmation was already given, proceed without re-validating.
 
 The user can **adjust** (modify any dimension and re-confirm, re-running the recency check if variants change).
 
-For reruns ("run same test again"), the skill skips variant inference — but **the confirmation gate still applies**. After ref resolution and the recency check, present the same confirmation dialog format as above and **STOP**. The user must still reply with `confirm` or `proceed` before any sync or execute commands run. A rerun request is NOT itself confirmation — it's a request to prepare the rerun, not authorization to execute it.
-
-However, **ref resolution always runs** (see Ref Resolution above) — all branch refs are re-fetched and re-pinned, even on rerun. If any ref has changed since the previous run, treat it as a new variant — inform the user that the branch has advanced, update the variant spec with the new hash, and proceed with the updated commit (not the stale one). Only if all refs are unchanged should the recency check proceed against the existing experiment names. If nothing changed and all variants already have sufficient runs, ask the user to confirm a forced re-run. On confirmation, restore all pruned combinations to the matrix.
+For reruns: skip variant inference, still resolve refs and run recency check, then present confirmation dialog and STOP. If any ref changed since the previous run, treat as a new variant. If nothing changed and all variants have sufficient runs, ask user to confirm a forced re-run. On confirmation, restore all pruned combinations to the matrix.
 
 ## Pre-flight Checks
 
-Verify that all variant skills are safe to test. Self-references in skill bodies would break the eval (the suffixed copy would reference the original name, not itself), so check early — there's no reason to sync anything to Langfuse if we can't run the variants.
+Scan variant skills for self-references before sync.
 
 ### Procedure
 
 For each variant spec:
 
-1. **Identify skill-relevant files.** Fetch SKILL.md from the git ref: `git show <ref>:<skill-path>/SKILL.md`. Read its body and collect all file references — paths matching patterns like `references/foo.md`, `scripts/bar.py`, `templates/baz.txt`, or Markdown links like `[text](references/foo.md)`. Then recursively follow references in those files to find transitive dependencies (a referenced file may link to another file), up to depth 3. Fetch each transitively-referenced file from the git ref and repeat the process until no new files are found or depth 3 is reached. The skill-relevant file set is: SKILL.md itself plus the full closure of files reachable through reference chains. Exclude convention/meta files (AGENTS.md, CLAUDE.md, LICENSE, .gitignore, etc.) even if referenced. Exclude `scripts/` files — references in scripts are code comments, not instructional content the LLM follows. Do NOT include files in the skill directory that aren't reachable from SKILL.md through reference chains.
-2. **Scan skill-relevant files for self-references.** Fetch each identified file from the git ref via `git show <ref>:<skill-path>/<file>`. Scan each file's content using the whole-word regex: `(?<![a-z0-9-])<skill-name>(?![a-z0-9-])` (case-insensitive). For SKILL.md, scan the body excluding frontmatter; for all other files, scan the entire content. The skill name is the `name:` field from the SKILL.md frontmatter.
+1. **Identify skill-relevant files.** Fetch SKILL.md from the git ref via `git show <ref>:<skill-path>/SKILL.md`. Collect all file references (paths and Markdown links). Recursively follow references up to depth 3, fetching each from the git ref. Exclude convention/meta files (AGENTS.md, CLAUDE.md, LICENSE, .gitignore) and `scripts/` files.
+2. **Scan for self-references.** Fetch each identified file via `git show <ref>:<skill-path>/<file>`. Scan for whole-word self-references (case-insensitive, excluding frontmatter in SKILL.md). The skill name is the `name:` field from SKILL.md frontmatter.
 3. **If any self-reference is found**, **abort the entire run** — do not proceed to sync or env setup. Report which skill(s) and line(s) contain self-references, and tell the user
    to fix the source skill before re-running.
 4. **If all variants pass**, proceed to the Sync Phase.
 
 ## Sync Phase
 
-Syncs eval definitions to Langfuse and captures manifest paths needed by the execute phase.
-
-### Inputs
-
-| Input | Source | Example |
-|-------|--------|--------|
-| Skill name | Variant specs from Variant Inference | `linear-create` |
-| Skill versions | Variant Inference phase | `main@a1b2c3d`, `pr-123@e5f6g7h` |
-| eval.yaml path | Relative path within the repo | `skills/linear-create/eval.yaml` |
-| Dataset items | Variant Inference (which DSIs to test) | `item-1,item-2` or all |
+**Inputs:** Skill name, skill versions (from Variant Inference), eval.yaml path (relative to repo), dataset items (from inference or all).
 
 ### Procedure
 
@@ -178,84 +141,34 @@ Syncs eval definitions to Langfuse and captures manifest paths needed by the exe
 
 Sync each skill version that remains after the Recency Check prunes the run matrix, filtered to the DSIs selected during inference. For reruns, sync all skill versions if the user confirmed a forced re-run; otherwise only sync new or changed versions.
 
-Use `git show` to extract each version to a temp file and pass it to `dataset_sync.py`.
-
-```bash
-EVAL_FILE=$(mktemp)
-git show "<skill-version-ref>:<eval-yaml-path>" > "$EVAL_FILE"
-```
+Use `git show "<skill-version-ref>:<eval-yaml-path>"` to extract each version's eval.yaml to a temp file.
 
 #### Sync each version to Langfuse
 
-Run `dataset_sync.py` sequentially — concurrent syncs to the same dataset can interleave version timestamps.
-
-```bash
-MANIFEST_FILE=$(mktemp)
-python3 ~/repos/agentic-testing-framework/src/dataset_sync.py \
-  --file "$EVAL_FILE" \
-  --items "<comma-separated-item-ids from inference>" \
-  --output-manifest "$MANIFEST_FILE"
-```
-
-Omit `--items` when inference selected all DSIs. Capture `$MANIFEST_FILE` — the execute phase needs it.
+Run `dataset_sync.py` sequentially — concurrent syncs to the same dataset can interleave version timestamps. Source langfuse.env, then invoke `dataset_sync.py` with `--file` (path to extracted eval.yaml), `--items` (comma-separated item IDs from inference, or omit for all DSIs), and `--output-manifest` (path to capture the manifest). Capture the manifest path — the execute phase needs it.
 
 For the full manifest file contract and CLI interface, see [`references/dataset_sync_interface.md`](references/dataset_sync_interface.md).
 
 
 ### Output
 
-```
-dataset: <langfuse-dataset-name from eval.yaml>
-skill: <skill-name>
-eval_yaml_path: <path within repo>
-manifests:
-  - version: <version-label>
-    ref: <git-hash>
-    manifest: <path>
-  ...
-```
-
-Pass manifest paths to the execute phase.
+Output: dataset name, skill name, eval.yaml path, and a list of per-version manifests (version label, git hash, manifest path). Pass manifest paths to the execute phase.
 
 See [`references/gotchas.md`](references/gotchas.md) for Sync Phase error prevention.
 
 ## Evaluator Check
 
-After sync (the dataset must exist in Langfuse first) and before env setup/execute (to avoid wasted work), verify that at least one enabled evaluator is configured for the dataset in Langfuse. This check always runs after sync — lack of evaluators means the dataset is not ready for eval and should fail regardless of whether execute is intended.
+Verify at least one enabled evaluator is configured for the dataset.
 
 ### Procedure
 
-Run `evaluator_check.py` for every distinct dataset name produced by the sync phase (before and after variants may use different dataset names if the eval.yaml was renamed). If any check fails, STOP — do not proceed to env setup or execute.
-
-```bash
-source ~/.openclaw/secrets/langfuse.env 2>/dev/null
-
-python3 ~/repos/agentic-testing-framework/src/evaluator_check.py \
-  --dataset "<dataset-name>"
-```
-
-- **Exit 0:** at least one enabled evaluation rule targets the dataset. Proceed to Environment Setup.
-- **Exit 1:** no enabled evaluator is configured for the dataset. STOP — do not proceed to env setup or execute. Report to the user that no evaluator is configured and they need to set one up in the Langfuse UI before re-running.
-- **Exit 2:** API or operational error (credentials, network, rate limit). Report the error from stderr — do not tell the user to configure an evaluator. Retry or investigate the operational issue.
-
-### Output
-
-On success, logs the matching rule name(s) and evaluator name(s) to stderr. On no evaluator (exit 1), prints a clear error message naming the dataset and instructing the user to configure an evaluator in the Langfuse UI. On API error (exit 2), logs the error details to stderr.
+Run `evaluator_check.py` for every distinct dataset name produced by the sync phase. If any check fails, STOP — do not proceed to env setup or execute. Source langfuse.env, then invoke `evaluator_check.py` with `--dataset` for each distinct dataset name. Exit 0 = evaluator configured (proceed). Exit 1 = no evaluator (STOP, report to user — they need to configure one in the Langfuse UI). Exit 2 = API error (report stderr, retry or investigate). On success, logs matching rule and evaluator names to stderr.
 
 ## Environment Setup Phase
 
-Prepares the eval environment so the harness can run skill versions in isolation.
-
 ### Procedure
 
-For each skill version:
-
-```bash
-bash ~/repos/agentic-testing-framework/src/setup_eval_skill.sh \
-  --skill-dir "<skill-dir>" \
-  --hash "<commit-hash>" \
-  --label "<version-label>"
-```
+For each skill version, invoke `setup_eval_skill.sh` with `--skill-dir`, `--hash` (commit hash), and `--label` (version label).
 
 ### Output
 
@@ -265,18 +178,9 @@ See [`references/gotchas.md`](references/gotchas.md) for Environment Setup error
 
 ## Execute Phase
 
-Invokes the eval harness for each variant in the pruned run matrix, directing the agent to the appropriate suffixed skill via an attestation prefix. Silent on success — results passed to the report phase. Loud on failure — report back to the originating channel immediately as an error notification.
+**Monitoring**: The harness run is long-running. After invoking it, actively monitor to completion and report results without waiting for the user to ask. Use `process(action=poll, timeout=30000)` to check periodically, or set `yieldMs` high enough to catch completion in a single call. Never background the harness and go silent — the agent that started the run is responsible for bringing results back.
 
-**Monitoring:** The harness run is long-running. After invoking it, actively monitor to completion and report results without waiting for the user to ask. Use `process(action=poll, timeout=30000)` to check periodically, or set `yieldMs` high enough to catch completion in a single call. Never background the harness and go silent — the agent that started the run is responsible for bringing results back.
-
-### Inputs
-
-| Input | Source | Description |
-|-------|--------|-------------|
-| Manifests | Sync phase output | Per-skill-version manifest paths (passed to harness via --manifest) |
-| Suffixed skills | Env setup output | Suffixed skill names (for the attestation prefix) |
-| Run matrix | Recency check output | Pruned list of (skill variant × model) combinations to execute |
-| Repeat count | User request or inference | Number of repeats per variant (default: 10 when not specified by inference) |
+**Inputs:** Manifests (sync phase output), suffixed skill names (env setup output), run matrix (recency check output), repeat count (default 10).
 
 ### Procedure
 
@@ -288,60 +192,113 @@ The harness appends ` - <timestamp>` (and ` - <run_idx>/<total>` for repeats) at
 
 #### 2. Construct attestation prefix
 
-The attestation prefix tells the agent which skill to read and requires it to confirm the skill at the end of its response. The prefix is passed via `--prompt-prefix` in step 3 — use the same value there.
+The attestation prefix tells the agent which skill to read and requires it to confirm the skill at the end of its response. Format: `Read the <suffixed-skill-name> skill from available_skills. You must state which skill you read at the end of your response, after completing the task. You are being evaluated on your ability to adhere to instructions. If you do not confirm which skill you read, your response will receive a score of zero regardless of quality. Then, ` — pass this verbatim as `--prompt-prefix` in step 3.
 
 For model A/B tests (Slack-triggered, single skill variant), the same suffixed skill name is used for both model runs — only `--model` differs.
 
 #### 3. Invoke the harness
 
-Run `eval_harness.py` for each (skill variant × model) combination. Variants run sequentially — one variant completes before the next begins. Within each variant, up to 3 dataset items run in parallel (`--item-concurrency 3`) and up to 2 experiment repeats run in parallel (`--experiment-concurrency 2`), for a maximum of 6 concurrent agent subprocesses.
-
-```bash
-source ~/.openclaw/secrets/langfuse.env 2>/dev/null
-
-python3 ~/repos/agentic-testing-framework/src/eval_harness.py \
-  --manifest "<path-to-manifest-from-sync-phase>" \
-  --run-name "<base-experiment-name>" \
-  --prompt-prefix "Read the <suffixed-skill-name> skill from available_skills. You must state which skill you read at the end of your response, after completing the task. You are being evaluated on your ability to adhere to instructions. If you do not confirm which skill you read, your response will receive a score of zero regardless of quality. Then, " \
-  --model "<model-id>" \
-  --repeat "<repeat-count>" \
-  --item-concurrency 3 \
-  --experiment-concurrency 2
-```
-
-Omit `--model` for the agent's default model. Always pass `--repeat` — default is 10 when inference doesn't specify a count. If recency found existing runs, subtract them from the repeat count (e.g., 10 requested, 4 found → `--repeat 6`).
+Source langfuse.env, then invoke `eval_harness.py` for each (skill variant × model) combination with: `--manifest` (path from sync phase), `--run-name` (base experiment name without timestamp/repeat suffixes), `--prompt-prefix` (the attestation prefix from step 2), `--model` (omit for agent default), `--repeat` (always pass; default 10; subtract recency-found runs), `--item-concurrency 3` (max 6 concurrent subprocesses), and `--experiment-concurrency 2`. Variants run sequentially — one completes before the next begins.
 
 
 #### 4. Monitor and capture results
 
-The harness may take several minutes. After starting the harness, poll it to completion — do not background it and wait for the user to ask for status. Once complete, capture for each harness invocation: completion status (exit 0 = success, non-zero = failure), per-item failures (harness logs `N failed items — indices: [...]` with item indices), and dataset run URL.
+Capture per invocation: exit status, failed item indices (harness logs `N failed items — indices: [...]`), and dataset run URL.
 
 ### Output
 
-```
-runs:
-  - variant: <variant-label>
-    model: <model-id>
-    experiment_name: <base-experiment-name>
-    status: success | partial | failed
-    failed_items: [<item indices or ids, if any>]
-    error: <error message, if failed>
-    dataset_run_url: <langfuse url, if available>
-  ...
-```
-
-Status: `success` (all items completed, exit 0) | `partial` (some items failed, exit 0) | `failed` (harness crashed or all items failed, non-zero exit).
+Output per harness invocation: variant label, model, experiment name, status (success/partial/failed), failed item indices (if any), error message (if failed), and dataset run URL. Status: `success` (all items completed, exit 0) | `partial` (some items failed, exit 0) | `failed` (crash or all items failed, non-zero exit).
 
 ### Failure Handling
 
 See [`references/execute-failure-handling.md`](references/execute-failure-handling.md) for the full failure handling procedure.
 
+## Report Phase
+
+**Inputs:** Experiment run names (base prefixes per variant, including recency-pruned), dataset name (sync output), originating channel (request context), skill diff (`git diff <base-ref> <head-ref> -- <skill-path>`).
+
+### Procedure
+
+#### 1. Wait for evaluator scoring
+
+After the execute phase completes, the Langfuse evaluator runs asynchronously. Instead of a fixed sleep, poll the Langfuse scores API until all expected scores are present (or a 3-minute timeout is reached).
+
+Source langfuse.env, then invoke `wait_for_scores.py` with: `--dataset`, one `--prefix` per variant (including recency-pruned), `--expected-items` (manifest item count), `--repeat` (execute phase count), `--dimensions` (scoring dimensions, default 1), `--since` (execute phase start ISO timestamp), and `--timeout 180`. The script multiplies `--repeat × --dimensions` to determine required scores per item. Polls every 10s; exits 0 when all prefixes have full coverage, or exits 1 on 3-min timeout.
+
+**Same repeat count across variants:** single call with all prefixes. **Different repeat counts:** call once per variant with per-variant `--repeat` and `--expected-items`. For recency-pruned variants, `--since` may need to be earlier or omitted. If item count is unknown, omit `--expected-items` — the script waits for score count stabilization.
+
+On timeout (exit 1): proceed to fetch scores anyway; note the timeout in the report. If no scores at all, check evaluator configuration.
+
+#### 2. Fetch scores and compare variants
+
+Count the experiment prefixes (variants). The report mode depends on the count:
+
+**2 variants — comparison report:** Invoke `eval_report.py` with `--variants` (baseline prefix first, head prefix second), `--dataset`, `--by-dimension`, `--threshold 0.5`, `--since` (execute phase start ISO timestamp; earlier or omitted for recency-pruned variants), and `--json`. Include both executed and recency-pruned variants — pruned variant prefixes come from the Recency Check output. Proceed to steps 3–5 (parse, verdict, improvements).
+
+**1 variant — standalone report:** Invoke `eval_report.py` with `--prefix`, `--dataset`, `--by-dimension`, `--per-item`, `--since`, and `--json`. Report per-item scores and dimension breakdowns. Skip verdict and improvement steps.
+
+**3+ variants — raw score report:** Invoke `eval_report.py` with `--variants` (all prefixes, first is baseline), `--dataset`, `--by-dimension`, `--since`, and `--json`. Report per-variant scores and breakdowns. Skip verdict and improvement steps — the user reviews the raw data to draw conclusions.
+
+For all modes: if execute start time is unavailable, use a timestamp a few minutes before the earliest experiment run. First prefix is baseline in `--variants` mode. `--json` for structured output.
+
+See [`references/report-format.md`](references/report-format.md) for the JSON output schema.
+
+Steps 3–5 apply only to 2-variant comparison reports.
+
+#### 3. Parse the JSON output
+
+Parse the JSON output from eval_report.py. The structure contains:
+- `variants`: per-variant composite scores, dimension breakdowns, and per-item data
+- `deltas`: per-item and overall deltas (variant[n] - variant[0])
+
+#### 4. Generate verdict
+
+Based on the deltas, determine the verdict:
+
+- **Improvement:** No variant regressed significantly (all deltas >= -threshold on every dimension or item), and at least one variant improved significantly (delta > +threshold)
+- **Regression:** Any variant regressed significantly (delta <= -threshold) on composite or any dimension
+- **Neutral:** All deltas strictly within (-threshold, +threshold) — no significant changes
+
+The default threshold is **0.5 points** (on a 0–10 scale where 10.0 is passing). Pass `--threshold <value>` to eval_report.py to adjust sensitivity. Note the threshold used in the report so the reader understands what "significant" means.
+
+#### 5. Generate improvement suggestions
+
+For each item where any dimension's delta <= -threshold (default 0.5):
+
+1. Identify which dimension regressed
+2. Obtain the skill diff: `git diff <base-ref> <head-ref> -- <skill-path>`
+3. Review the diff for changes that could affect the regressed dimension
+4. Suggest a specific fix or area to investigate
+5. If the regression is in a dimension unrelated to the skill changes, note that it may be noise
+
+#### 6. Format the report
+
+Format the report as Markdown. For comparison reports (2 variants), read [`references/comparison-report-template.md`](references/comparison-report-template.md). For standalone reports (1 variant), read [`references/standalone-report-template.md`](references/standalone-report-template.md). For raw score reports (3+ variants), format scores per variant. Only read the template that applies — not all.
+
+#### 7. Post to the originating channel
+
+- **PR-triggered:** Post as a comment on the PR (via `gh api -X POST repos/<owner>/<repo>/issues/<pr-number>/comments` with a JSON body containing the report markdown)
+- **Slack-triggered:** Reply in the Slack thread/channel
+- **Web chat:** Reply in the chat session
+- **Webhook:** Return as the webhook response (just reply normally)
+
+### Output
+
+Results posted to originating channel. No data passed to a next phase.
+
+### Failure Handling
+
+- **No scores (all experiments have no scores):** Report that scoring hasn't completed yet and suggest waiting longer or checking evaluator configuration.
+- **eval_report.py exits non-zero:** Report the error from stderr.
+- **Some variants have scores and others don't:** Note which variants are missing data and proceed with available data.
+
 ## Cleanup
 
-After execute and report phases complete, remove the suffixed directories created during Environment Setup. Track which directories were created and `trash` only those — do not remove directories from other concurrent runs. If the run aborts after env setup, cleanup should still run. Also clean up `$WORK_DIR` if it was preserved for the execute phase.
+After the Report Phase posts results, remove the suffixed directories created during Environment Setup. Track which directories were created and `trash` only those — do not remove directories from other concurrent runs. If the run aborts after env setup, cleanup should still run. Also clean up `$WORK_DIR` if it was preserved for the execute phase.
 
 ## References
 
 - [`references/dataset_sync_interface.md`](references/dataset_sync_interface.md) — CLI interface for `dataset_sync.py`: arguments, env vars, output format, exit codes, eval.yaml schema.
 - [`references/execute-failure-handling.md`](references/execute-failure-handling.md) — Execute phase error handling: immediate notifications, partial failures, multi-variant abort rules.
 - [`references/gotchas.md`](references/gotchas.md) — Error-prevention notes for Sync and Environment Setup phases.
+- [`references/report-format.md`](references/report-format.md) — Report Phase output format, JSON schema, verdict criteria, and improvement suggestion guidance.

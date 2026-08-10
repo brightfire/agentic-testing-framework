@@ -32,9 +32,13 @@ from datetime import datetime, timezone
 import requests
 
 
-def log(msg, level="INFO"):
+def log(msg, level="INFO", force_stderr=False):
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    print(f"[{ts}] [{level}] {msg}", flush=True)
+    line = f"[{ts}] [{level}] {msg}"
+    if force_stderr:
+        print(line, file=sys.stderr, flush=True)
+    else:
+        print(line, flush=True)
 
 
 def fetch_all_scores(langfuse_host, auth_header, from_ts=None, to_ts=None, limit=100):
@@ -122,10 +126,14 @@ def fetch_trace_metadata(langfuse_host, auth_header, trace_id):
         return {}
 
 
-def build_experiment_data(langfuse_host, auth_header, scores, name_prefix=None):
-    """Build a structured dict of experiment -> dataset_item -> scores."""
-    # Cache trace metadata to avoid duplicate fetches
-    trace_cache = {}
+def build_experiment_data(langfuse_host, auth_header, scores, name_prefix=None, trace_cache=None):
+    """Build a structured dict of experiment -> dataset_item -> scores.
+
+    If trace_cache is provided, it is used and mutated in place, allowing
+    metadata to be shared across multiple calls (e.g., per-variant filtering).
+    """
+    if trace_cache is None:
+        trace_cache = {}
 
     experiments = defaultdict(lambda: defaultdict(list))
 
@@ -236,23 +244,522 @@ def print_per_item(experiments, title=""):
         print(f"  {item_id[:38]:<40} {len(scores):>5} {avg:>6.2f} {mn:>5.2f} {mx:>5.2f} {pass_rate:>5.0f}%")
 
 
+def _aggregate_items(experiments):
+    """Aggregate scores per dataset item across all experiments in a batch."""
+    items = defaultdict(list)
+    for exp_name, exp_items in experiments.items():
+        for item_id, item_scores in exp_items.items():
+            for s in item_scores:
+                items[item_id].append(s)
+    return items
+
+
+def _stats(values):
+    """Compute avg, min, max, pass_rate for a list of numeric values."""
+    if not values:
+        return {"avg": 0.0, "min": 0.0, "max": 0.0, "pass_rate": 0.0}
+    return {
+        "avg": sum(values) / len(values),
+        "min": min(values),
+        "max": max(values),
+        "pass_rate": sum(1 for v in values if v >= 10.0) / len(values) * 100,
+    }
+
+
+def build_variant_data(experiments):
+    """Build per-variant data grouped by dimension (score_name) and item.
+
+    Returns a dict structured as:
+        {
+            "composite": {avg, min, max, pass_rate},
+            "dimensions": {<score_name>: {avg, min, max, pass_rate, count}},
+            "items": {<item_id>: {avg, dimensions: {<score_name>: {avg, count}}, run_count}},
+            "total_runs": int,
+        }
+    """
+    all_scores = []
+    dim_scores = defaultdict(list)
+    item_scores = defaultdict(list)  # item_id -> list of (score, score_name)
+    item_dim_scores = defaultdict(lambda: defaultdict(list))  # item_id -> score_name -> list of scores
+    item_trace_ids = defaultdict(set)  # item_id -> set of distinct trace IDs
+
+    for exp_name, exp_items in experiments.items():
+        for item_id, scores_list in exp_items.items():
+            for s in scores_list:
+                val = s["score"]
+                sname = s.get("score_name", "default")
+                all_scores.append(val)
+                dim_scores[sname].append(val)
+                item_scores[item_id].append(val)
+                item_dim_scores[item_id][sname].append(val)
+                if s.get("trace_id"):
+                    item_trace_ids[item_id].add(s["trace_id"])
+
+    composite = _stats(all_scores)
+
+    dimensions = {}
+    for sname, vals in sorted(dim_scores.items()):
+        st = _stats(vals)
+        st["count"] = len(vals)
+        dimensions[sname] = st
+
+    items = {}
+    for item_id in sorted(item_scores.keys()):
+        vals = item_scores[item_id]
+        item_dims = {}
+        for sname, dvals in sorted(item_dim_scores[item_id].items()):
+            item_dims[sname] = {
+                "avg": sum(dvals) / len(dvals) if dvals else 0.0,
+                "count": len(dvals),
+            }
+        items[item_id] = {
+            "avg": sum(vals) / len(vals) if vals else 0.0,
+            "dimensions": item_dims,
+            "run_count": len(item_trace_ids[item_id]),
+        }
+
+    return {
+        "composite": composite,
+        "dimensions": dimensions,
+        "items": items,
+        "total_runs": len(all_scores),
+    }
+
+
+def _logical_item_id(item_id):
+    """Strip the dataset namespace prefix from an item ID.
+
+    Item IDs are formatted as ``<dataset-name>:<item-id>``.  When a
+    dataset is renamed across variants the same logical item receives
+    different API IDs, so matching by the full ID marks every item as
+    missing.  Stripping everything before the first colon yields the
+    logical item ID that is stable across renames.
+    """
+    return item_id.split(":", 1)[1] if ":" in item_id else item_id
+
+
+def output_json(dataset_name, variant_data_list):
+    """Output structured JSON comparing variants.
+
+    variant_data_list: list of (label, variant_data_dict) tuples.
+    """
+    import json
+
+    variants_json = []
+    for label, vd in variant_data_list:
+        vj = {
+            "label": label,
+            "composite": vd["composite"],
+            "dimensions": vd["dimensions"],
+            "items": vd["items"],
+            "total_runs": vd["total_runs"],
+        }
+        if vd["total_runs"] == 0:
+            vj["missing"] = True
+        variants_json.append(vj)
+
+    # Compute deltas: variant[n] - variant[0] for each item and dimension
+    # Missing items are represented as None (null) and excluded from delta calculations.
+    # For 3+ variants, deltas are emitted per non-baseline variant.
+    deltas = {"per_item": {}, "overall": {}}
+    if len(variant_data_list) >= 2:
+        baseline_label, baseline = variant_data_list[0]
+        baseline_missing = baseline["total_runs"] == 0
+        non_baseline = variant_data_list[1:]
+
+        # Per-item deltas (computed first; overall deltas aggregate from these)
+        # Match items by logical ID (strip <dataset-name>: prefix) so the same
+        # logical item is matched across variants even when datasets are renamed.
+        variant_item_maps = []  # list of dict: logical_id -> actual_item_id
+        for _, vd in variant_data_list:
+            mapping = {}
+            for actual_id in vd["items"]:
+                logical = _logical_item_id(actual_id)
+                mapping[logical] = actual_id
+            variant_item_maps.append(mapping)
+
+        all_logical_ids = set()
+        for mapping in variant_item_maps:
+            all_logical_ids.update(mapping.keys())
+
+        for logical_id in sorted(all_logical_ids):
+            baseline_actual = variant_item_maps[0].get(logical_id)
+            baseline_item = baseline["items"].get(baseline_actual) if baseline_actual else None
+            if baseline_item is None:
+                # Baseline missing this item — skip delta computation
+                deltas["per_item"][logical_id] = {
+                    "composite": None,
+                    "dimensions": {},
+                    "note": "baseline missing this item",
+                }
+                continue
+
+            item_delta = {"composite": {}, "dimensions": {}}
+            composite_sum = 0.0
+            dim_sums = defaultdict(float)
+            dim_counts = defaultdict(int)
+            for idx, (label, vd) in enumerate(non_baseline):
+                actual_id = variant_item_maps[idx + 1].get(logical_id)
+                item = vd["items"].get(actual_id) if actual_id else None
+                if item is None:
+                    # This non-baseline variant is missing the item — null delta
+                    item_delta["composite"][label] = None
+                    continue
+                # Compute composite delta from shared dimensions only, not
+                # overall averages which may include different dimension sets.
+                shared_dims = set(item["dimensions"].keys()) & set(baseline_item.get("dimensions", {}).keys())
+                if shared_dims:
+                    dim_deltas = [
+                        item["dimensions"][d]["avg"] - baseline_item["dimensions"][d]["avg"]
+                        for d in shared_dims
+                    ]
+                    comp_delta = round(sum(dim_deltas) / len(dim_deltas), 4)
+                else:
+                    # No shared dimensions — composite delta is not meaningful
+                    comp_delta = None
+                item_delta["composite"][label] = comp_delta
+                if comp_delta is not None:
+                    composite_sum += comp_delta
+                for sname, st in item["dimensions"].items():
+                    if sname not in baseline_item.get("dimensions", {}):
+                        # Dimension absent from baseline item — not comparable
+                        if sname not in item_delta["dimensions"]:
+                            item_delta["dimensions"][sname] = {}
+                        item_delta["dimensions"][sname][label] = None
+                        continue
+                    base_dim = baseline_item["dimensions"][sname]["avg"]
+                    dim_delta = round(st["avg"] - base_dim, 4)
+                    if sname not in item_delta["dimensions"]:
+                        item_delta["dimensions"][sname] = {}
+                    item_delta["dimensions"][sname][label] = dim_delta
+                    dim_sums[sname] += dim_delta
+                    dim_counts[sname] += 1
+
+            # Average across non-baseline variants that have the item
+            valid_composites = [v for v in item_delta["composite"].values() if v is not None]
+            if valid_composites:
+                item_delta["composite"]["_avg"] = round(sum(valid_composites) / len(valid_composites), 4)
+            for sname in dim_sums:
+                if dim_counts[sname] > 0:
+                    item_delta["dimensions"].setdefault(sname, {})["_avg"] = round(dim_sums[sname] / dim_counts[sname], 4)
+
+            deltas["per_item"][logical_id] = item_delta
+
+        # Overall deltas: aggregated from per-item deltas of matched items only.
+        # Only items present in BOTH baseline and a non-baseline variant contribute,
+        # so the delta is not skewed by items that exist in just one variant.
+        deltas["overall"]["composite"] = {}
+        deltas["overall"]["dimensions"] = {}
+        overall_composite_avg = 0.0
+        overall_dims_avg = defaultdict(float)
+        n_valid = 0
+        for label, vd in non_baseline:
+            if baseline_missing or vd["total_runs"] == 0:
+                deltas["overall"]["composite"][label] = None
+                for sname in vd["dimensions"]:
+                    deltas["overall"]["dimensions"].setdefault(sname, {})[label] = None
+                continue
+            # Aggregate composite delta from matched per-item deltas
+            matched_comp_deltas = []
+            for item_id, item_delta in deltas["per_item"].items():
+                if isinstance(item_delta["composite"], dict):
+                    val = item_delta["composite"].get(label)
+                    if val is not None:
+                        matched_comp_deltas.append(val)
+            comp_delta = round(sum(matched_comp_deltas) / len(matched_comp_deltas), 4) if matched_comp_deltas else None
+            deltas["overall"]["composite"][label] = comp_delta
+            # Only count variants with a comparable overall delta toward the average
+            if comp_delta is not None:
+                n_valid += 1
+                overall_composite_avg += comp_delta
+            # Aggregate dimension deltas from matched per-item deltas
+            all_dim_names = set()
+            for item_id, item_delta in deltas["per_item"].items():
+                if isinstance(item_delta.get("dimensions"), dict):
+                    all_dim_names.update(item_delta["dimensions"].keys())
+            for sname in sorted(all_dim_names):
+                matched_dim_deltas = []
+                for item_id, item_delta in deltas["per_item"].items():
+                    dims = item_delta.get("dimensions", {})
+                    if isinstance(dims, dict) and sname in dims:
+                        val = dims[sname].get(label)
+                        if val is not None:
+                            matched_dim_deltas.append(val)
+                dim_delta = round(sum(matched_dim_deltas) / len(matched_dim_deltas), 4) if matched_dim_deltas else None
+                deltas["overall"]["dimensions"].setdefault(sname, {})[label] = dim_delta
+                if dim_delta is not None:
+                    overall_dims_avg[sname] += dim_delta
+        if n_valid > 0:
+            overall_composite_avg /= n_valid
+            for sname in overall_dims_avg:
+                overall_dims_avg[sname] /= n_valid
+            deltas["overall"]["composite"]["_avg"] = round(overall_composite_avg, 4)
+        else:
+            deltas["overall"]["composite"]["_avg"] = None
+        for sname in deltas["overall"]["dimensions"]:
+            # Average dimensions that have at least one non-None delta
+            dim_vals = [v for k, v in deltas["overall"]["dimensions"][sname].items() if k != "_avg" and v is not None]
+            if dim_vals:
+                deltas["overall"]["dimensions"][sname]["_avg"] = round(sum(dim_vals) / len(dim_vals), 4)
+            else:
+                deltas["overall"]["dimensions"][sname]["_avg"] = None
+
+    result = {
+        "dataset": dataset_name,
+        "variants": variants_json,
+        "deltas": deltas,
+    }
+    print(json.dumps(result, indent=2))
+
+
+def print_variant_comparison(dataset_name, variant_data_list, by_dimension=False, threshold=0.5):
+    """Print a multi-variant comparison table.
+
+    variant_data_list: list of (label, variant_data_dict) tuples.
+    by_dimension: if True, include per-dimension breakdown columns.
+    """
+    print(f"\n{'=' * 80}")
+    print(f"  Eval Results: {dataset_name}")
+    print(f"{'=' * 80}")
+
+    # Collect all dimension names
+    dim_names = []
+    seen = set()
+    for _, vd in variant_data_list:
+        for sname in vd["dimensions"]:
+            if sname not in seen:
+                dim_names.append(sname)
+                seen.add(sname)
+
+    # Variant summary table
+    if by_dimension and dim_names:
+        header = f"  {'Variant':<25} {'Composite':>10}"
+        for d in dim_names:
+            header += f" {d[:15]:>15}"
+        header += f" {'Pass%':>7}"
+        print(f"\n{header}")
+        print(f"  {'-' * 25} {'-' * 10}" + (f" {'-' * 15}" * len(dim_names)) + f" {'-' * 7}")
+
+        for label, vd in variant_data_list:
+            comp = vd["composite"]
+            if vd["total_runs"] == 0:
+                row = f"  {label[:25]:<25} {'No data':>10}"
+                for _ in dim_names:
+                    row += f" {'-':>15}"
+                row += f" {'-':>7}"
+                print(row)
+                continue
+            row = f"  {label[:25]:<25} {comp['avg']:>10.2f}"
+            for d in dim_names:
+                if d in vd["dimensions"]:
+                    row += f" {vd['dimensions'][d]['avg']:>15.2f}"
+                else:
+                    row += f" {'N/A':>15}"
+            row += f" {comp['pass_rate']:>6.0f}%"
+            print(row)
+
+        # Delta row(s): per-variant when 3+ variants, single averaged when 2
+        if len(variant_data_list) >= 2:
+            baseline = variant_data_list[0][1]
+            baseline_missing = baseline["total_runs"] == 0
+            if len(variant_data_list) >= 3:
+                # Per-variant delta rows — averaging masks individual regressions
+                for label, vd in variant_data_list[1:]:
+                    if baseline_missing or vd["total_runs"] == 0:
+                        delta_row = f"  {'Δ ' + label[:22]:<25} {'N/A':>10}"
+                        for _ in dim_names:
+                            delta_row += f" {'N/A':>15}"
+                        delta_row += f" {'':>7}"
+                        print(delta_row)
+                        continue
+                    # Compute composite delta from shared dimensions only,
+                    # matching the JSON path logic in output_json().
+                    shared_dims = set(d for d in dim_names if d in baseline.get("dimensions", {}) and d in vd.get("dimensions", {}))
+                    if shared_dims:
+                        dim_deltas = [
+                            vd["dimensions"][d]["avg"] - baseline["dimensions"][d]["avg"]
+                            for d in shared_dims
+                        ]
+                        delta_comp = sum(dim_deltas) / len(dim_deltas)
+                        delta_row = f"  {'Δ ' + label[:22]:<25} {delta_comp:>+10.2f}"
+                    else:
+                        delta_row = f"  {'Δ ' + label[:22]:<25} {'N/A':>10}"
+                    for d in dim_names:
+                        if d not in baseline["dimensions"] or d not in vd["dimensions"]:
+                            delta_row += f" {'N/A':>15}"
+                        else:
+                            base_val = baseline["dimensions"][d]["avg"]
+                            diff = vd["dimensions"][d]["avg"] - base_val
+                            delta_row += f" {diff:>+15.2f}"
+                    delta_row += f" {'':>7}"
+                    print(delta_row)
+            else:
+                # Single delta row (2 variants — averaging is equivalent)
+                if baseline_missing or variant_data_list[1][1]["total_runs"] == 0:
+                    delta_row = f"  {'Delta':<25} {'N/A':>10}"
+                    for _ in dim_names:
+                        delta_row += f" {'N/A':>15}"
+                    delta_row += f" {'':>7}"
+                    print(delta_row)
+                else:
+                    vd_b = variant_data_list[1][1]
+                    # Compute composite delta from shared dimensions only,
+                    # matching the JSON path logic in output_json().
+                    shared_dims = set(d for d in dim_names if d in baseline.get("dimensions", {}) and d in vd_b.get("dimensions", {}))
+                    if shared_dims:
+                        dim_deltas = [
+                            vd_b["dimensions"][d]["avg"] - baseline["dimensions"][d]["avg"]
+                            for d in shared_dims
+                        ]
+                        delta_comp = sum(dim_deltas) / len(dim_deltas)
+                        delta_row = f"  {'Delta':<25} {delta_comp:>+10.2f}"
+                    else:
+                        delta_row = f"  {'Delta':<25} {'N/A':>10}"
+                    for d in dim_names:
+                        if d not in baseline["dimensions"] or d not in vd_b["dimensions"]:
+                            delta_row += f" {'N/A':>15}"
+                        else:
+                            base_val = baseline["dimensions"][d]["avg"]
+                            diff = vd_b["dimensions"][d]["avg"] - base_val
+                            delta_row += f" {diff:>+15.2f}"
+                    delta_row += f" {'':>7}"
+                    print(delta_row)
+    else:
+        print(f"\n  {'Variant':<25} {'Composite':>10} {'Min':>8} {'Max':>8} {'Pass%':>7}")
+        print(f"  {'-' * 25} {'-' * 10} {'-' * 8} {'-' * 8} {'-' * 7}")
+        for label, vd in variant_data_list:
+            comp = vd["composite"]
+            if vd["total_runs"] == 0:
+                print(f"  {label[:25]:<25} {'No data':>10} {'-':>8} {'-':>8} {'-':>7}")
+            else:
+                print(f"  {label[:25]:<25} {comp['avg']:>10.2f} {comp['min']:>8.2f} {comp['max']:>8.2f} {comp['pass_rate']:>6.0f}%")
+
+    # Per-item deltas table
+    if len(variant_data_list) >= 2:
+        # Build logical-to-actual ID mapping per variant for cross-variant matching.
+        variant_item_maps = []
+        for _, vd in variant_data_list:
+            mapping = {}
+            for actual_id in vd["items"]:
+                logical = _logical_item_id(actual_id)
+                mapping[logical] = actual_id
+            variant_item_maps.append(mapping)
+
+        all_logical_ids = set()
+        for mapping in variant_item_maps:
+            all_logical_ids.update(mapping.keys())
+
+        if all_logical_ids:
+            baseline = variant_data_list[0][1]
+            multi_variant = len(variant_data_list) >= 3
+            print(f"\n  Per-Item Deltas:")
+            header = f"  {'Item':<30}"
+            for label, _ in variant_data_list:
+                header += f" {label[:15]:>15}"
+            if multi_variant:
+                for label, _ in variant_data_list[1:]:
+                    header += f" {'Δ'+label[:6]:>8}"
+            else:
+                header += f" {'Delta':>8}"
+            header += f" {'Notes':>30}"
+            print(header)
+            n_delta_cols = len(variant_data_list) - 1 if multi_variant else 1
+            print(f"  {'-' * 30}" + (f" {'-' * 15}" * len(variant_data_list)) + (f" {'-' * 8}" * n_delta_cols) + f" {'-' * 30}")
+
+            for logical_id in sorted(all_logical_ids):
+                row = f"  {logical_id[:30]:<30}"
+                item_avgs = []  # None for missing items, float for present
+                for idx, (label, vd) in enumerate(variant_data_list):
+                    actual_id = variant_item_maps[idx].get(logical_id)
+                    item = vd["items"].get(actual_id) if actual_id else None
+                    if item is None:
+                        item_avgs.append(None)
+                        row += f" {'N/A':>15}"
+                    else:
+                        item_avgs.append(item["avg"])
+                        row += f" {item['avg']:>15.2f}"
+
+                # Per-variant deltas
+                if item_avgs[0] is None:
+                    # Baseline missing — all deltas N/A
+                    for _ in variant_data_list[1:]:
+                        row += f" {'N/A':>8}"
+                    any_reg_delta = None
+                else:
+                    per_variant_deltas = []
+                    for v in item_avgs[1:]:
+                        if v is not None:
+                            per_variant_deltas.append(v - item_avgs[0])
+                        else:
+                            per_variant_deltas.append(None)
+
+                    if multi_variant:
+                        for d in per_variant_deltas:
+                            if d is not None:
+                                row += f" {d:>+8.2f}"
+                            else:
+                                row += f" {'N/A':>8}"
+                    else:
+                        valid_deltas = [d for d in per_variant_deltas if d is not None]
+                        if valid_deltas:
+                            avg_delta = sum(valid_deltas) / len(valid_deltas)
+                            row += f" {avg_delta:>+8.2f}"
+                        else:
+                            row += f" {'N/A':>8}"
+                    any_reg_delta = next((d for d in per_variant_deltas if d is not None), None)
+
+                # Note regressions — check each dimension independently of composite delta
+                notes = []
+                if any_reg_delta is not None and by_dimension:
+                    baseline_actual = variant_item_maps[0].get(logical_id)
+                    base_item = baseline["items"].get(baseline_actual, {"dimensions": {}}) if baseline_actual else {"dimensions": {}}
+                    any_reg = False
+                    for sname in dim_names:
+                        if sname not in base_item.get("dimensions", {}):
+                            # Dimension absent from baseline item — skip regression check
+                            continue
+                        base_dim = base_item["dimensions"][sname]["avg"]
+                        if multi_variant:
+                            # Check each variant's dimension delta independently
+                            for i, (label, vd) in enumerate(variant_data_list[1:]):
+                                actual_id = variant_item_maps[i + 1].get(logical_id)
+                                item = vd["items"].get(actual_id) if actual_id else None
+                                if item is not None and sname in item.get("dimensions", {}):
+                                    dim_val = item["dimensions"][sname]["avg"]
+                                    if dim_val - base_dim < -threshold:
+                                        notes.append(f"\u26a0\ufe0f {label[:10]} regressed in {sname}")
+                                        any_reg = True
+                        else:
+                            dim_vals = []
+                            for i, (_, vd) in enumerate(variant_data_list[1:]):
+                                actual_id = variant_item_maps[i + 1].get(logical_id)
+                                item = vd["items"].get(actual_id) if actual_id else None
+                                if item is not None and sname in item.get("dimensions", {}):
+                                    dim_vals.append(item["dimensions"][sname]["avg"])
+                            if dim_vals:
+                                dim_avg = sum(dim_vals) / len(dim_vals)
+                                if dim_avg - base_dim < -threshold:
+                                    notes.append(f"\u26a0\ufe0f Regression in {sname}")
+                                    any_reg = True
+                    if not any_reg and any_reg_delta < -threshold:
+                        notes.append("\u26a0\ufe0f Composite regression")
+                elif any_reg_delta is not None and any_reg_delta < -threshold:
+                    notes.append("\u26a0\ufe0f Regression")
+
+                row += f" {'; '.join(notes)[:30]:>30}"
+                print(row)
+
+    print()
+
+
 def print_compare(experiments_a, experiments_b, label_a, label_b):
     """Print a side-by-side comparison of two experiment batches."""
     print(f"\n{'=' * 80}")
     print(f"  Comparison: {label_a} vs {label_b}")
     print(f"{'=' * 80}")
 
-    # Aggregate per dataset item for each batch
-    def aggregate_items(experiments):
-        items = defaultdict(list)
-        for exp_name, exp_items in experiments.items():
-            for item_id, item_scores in exp_items.items():
-                for s in item_scores:
-                    items[item_id].append(s["score"])
-        return items
-
-    items_a = aggregate_items(experiments_a)
-    items_b = aggregate_items(experiments_b)
+    items_a = _aggregate_items(experiments_a)
+    items_b = _aggregate_items(experiments_b)
 
     all_items = sorted(set(items_a.keys()) | set(items_b.keys()))
 
@@ -260,8 +767,8 @@ def print_compare(experiments_a, experiments_b, label_a, label_b):
     print(f"  {'-' * 40} {'-' * 6} {'-' * 6} {'-' * 7} {'-' * 6} {'-' * 6} {'-' * 7} {'-' * 7}")
 
     for item_id in all_items:
-        scores_a = items_a.get(item_id, [])
-        scores_b = items_b.get(item_id, [])
+        scores_a = [s["score"] for s in items_a.get(item_id, [])]
+        scores_b = [s["score"] for s in items_b.get(item_id, [])]
 
         avg_a = sum(scores_a) / len(scores_a) if scores_a else 0
         avg_b = sum(scores_b) / len(scores_b) if scores_b else 0
@@ -272,8 +779,8 @@ def print_compare(experiments_a, experiments_b, label_a, label_b):
         print(f"  {item_id[:38]:<40} {len(scores_a):>6} {avg_a:>6.2f} {pass_a:>6.0f}% {len(scores_b):>6} {avg_b:>6.2f} {pass_b:>6.0f}% {delta:>+7.2f}")
 
     # Overall averages
-    all_a = [s for scores in items_a.values() for s in scores]
-    all_b = [s for scores in items_b.values() for s in scores]
+    all_a = [s["score"] for scores in items_a.values() for s in scores]
+    all_b = [s["score"] for scores in items_b.values() for s in scores]
     overall_a = sum(all_a) / len(all_a) if all_a else 0
     overall_b = sum(all_b) / len(all_b) if all_b else 0
     overall_pass_a = sum(1 for s in all_a if s >= 10.0) / len(all_a) * 100 if all_a else 0
@@ -309,13 +816,34 @@ def main():
     )
     parser.add_argument(
         "--compare", nargs=2, metavar=("PREFIX_A", "PREFIX_B"),
-        help="Compare two batches of experiments by name prefix"
+        help="Compare two batches of experiments by name prefix (legacy: supports exactly 2 prefixes)"
+    )
+    parser.add_argument(
+        "--variants", nargs="+", metavar="PREFIX",
+        help="Compare N experiment name prefixes (multi-variant mode). Replaces --compare for N>2 comparisons."
+    )
+    parser.add_argument(
+        "--by-dimension", action="store_true",
+        help="Group scores by score_name (dimension) in addition to composite scores"
+    )
+    parser.add_argument(
+        "--json", action="store_true", dest="output_json",
+        help="Output structured JSON instead of text tables"
     )
     parser.add_argument(
         "--per-item", action="store_true",
         help="Show per-dataset-item aggregation across all experiments"
     )
+    parser.add_argument(
+        "--threshold", type=float, default=0.5,
+        help="Delta threshold (in points on a 0-10 scale) for flagging improvements/regressions. Default: 0.5"
+    )
     args = parser.parse_args()
+
+    # Validate flag combinations
+    if args.variants and args.compare:
+        log("--variants and --compare are mutually exclusive. Use one or the other.", "ERROR", force_stderr=args.output_json)
+        sys.exit(1)
 
     auth_header = os.environ.get("LANGFUSE_BASIC_AUTH")
     if not auth_header:
@@ -325,33 +853,97 @@ def main():
             import base64
             auth_header = base64.b64encode(f"{public_key}:{secret_key}".encode()).decode()
         else:
-            log("LANGFUSE_BASIC_AUTH or (LANGFUSE_PUBLIC_KEY + LANGFUSE_SECRET_KEY) required.", "ERROR")
+            log("LANGFUSE_BASIC_AUTH or (LANGFUSE_PUBLIC_KEY + LANGFUSE_SECRET_KEY) required.", "ERROR", force_stderr=args.output_json)
             sys.exit(1)
 
-    log(f"Fetching scores from {args.langfuse_host}...")
+    log(f"Fetching scores from {args.langfuse_host}...", force_stderr=args.output_json)
     scores = fetch_all_scores(args.langfuse_host, auth_header, from_ts=args.since, to_ts=args.until)
-    log(f"Found {len(scores)} scores.")
+    log(f"Found {len(scores)} scores.", force_stderr=args.output_json)
     if scores:
-        log(f"Score range: {scores[0].get('createdAt', '?')[:19]} to {scores[-1].get('createdAt', '?')[:19]}")
+        log(f"Score range: {scores[0].get('createdAt', '?')[:19]} to {scores[-1].get('createdAt', '?')[:19]}", force_stderr=args.output_json)
 
     if not scores:
-        log("No scores found.", "WARN")
+        log("No scores found.", "WARN", force_stderr=args.output_json)
+        if args.output_json:
+            import json
+            print(json.dumps({"dataset": args.dataset, "variants": [], "deltas": {"per_item": {}, "overall": {}}}, indent=2))
         sys.exit(0)
 
-    log("Fetching trace metadata for experiment grouping...")
-    experiments = build_experiment_data(args.langfuse_host, auth_header, scores, name_prefix=args.prefix)
-    log(f"Found {len(experiments)} experiments.")
+    log("Fetching trace metadata for experiment grouping...", force_stderr=args.output_json)
 
+    # Multi-variant mode (--variants)
+    if args.variants:
+        variant_data_list = []
+        shared_trace_cache = {}
+        for prefix in args.variants:
+            experiments = build_experiment_data(
+                args.langfuse_host, auth_header, scores, name_prefix=prefix,
+                trace_cache=shared_trace_cache
+            )
+            if not experiments:
+                log(f"No experiments found for variant '{prefix}'.", "WARN", force_stderr=args.output_json)
+            # Always append — even when empty — so the baseline position is preserved.
+            # Skipping a variant shifts variant_data_list[0] to the next available,
+            # making all deltas compute against the wrong baseline.
+            vd = build_variant_data(experiments)
+            variant_data_list.append((prefix, vd))
+
+        if all(vd["total_runs"] == 0 for _, vd in variant_data_list):
+            log("No experiments found for any variant.", "ERROR", force_stderr=args.output_json)
+            if args.output_json:
+                import json
+                print(json.dumps({"dataset": args.dataset, "variants": [], "deltas": {"per_item": {}, "overall": {}}}, indent=2))
+                sys.exit(0)
+            sys.exit(1)
+
+        if args.output_json:
+            output_json(args.dataset, variant_data_list)
+        else:
+            print_variant_comparison(args.dataset, variant_data_list, by_dimension=args.by_dimension, threshold=args.threshold)
+        print()
+        return
+
+    # Legacy compare mode (--compare: exactly 2 prefixes)
     if args.compare:
+        shared_trace_cache = {}
         experiments_a = build_experiment_data(
-            args.langfuse_host, auth_header, scores, name_prefix=args.compare[0]
+            args.langfuse_host, auth_header, scores, name_prefix=args.compare[0],
+            trace_cache=shared_trace_cache
         )
         experiments_b = build_experiment_data(
-            args.langfuse_host, auth_header, scores, name_prefix=args.compare[1]
+            args.langfuse_host, auth_header, scores, name_prefix=args.compare[1],
+            trace_cache=shared_trace_cache
         )
-        print_compare(experiments_a, experiments_b, args.compare[0], args.compare[1])
-    else:
-        print_summary(experiments, title=f"Experiment Summary — {args.dataset}")
+
+        vd_a = build_variant_data(experiments_a)
+        vd_b = build_variant_data(experiments_b)
+        variant_data_list = [(args.compare[0], vd_a), (args.compare[1], vd_b)]
+
+        if args.output_json:
+            output_json(args.dataset, variant_data_list)
+        elif args.by_dimension:
+            # Honor --by-dimension by routing through the dimension-aware printer
+            print_variant_comparison(args.dataset, variant_data_list, by_dimension=True, threshold=args.threshold)
+        else:
+            print_compare(experiments_a, experiments_b, args.compare[0], args.compare[1])
+        print()
+        return
+
+    # Single-prefix or unfiltered mode (--prefix)
+    experiments = build_experiment_data(args.langfuse_host, auth_header, scores, name_prefix=args.prefix)
+    log(f"Found {len(experiments)} experiments.", force_stderr=args.output_json)
+
+    if args.output_json:
+        if experiments:
+            vd = build_variant_data(experiments)
+            label = args.prefix or "all"
+            output_json(args.dataset, [(label, vd)])
+        else:
+            import json
+            print(json.dumps({"dataset": args.dataset, "variants": [], "deltas": {"per_item": {}, "overall": {}}}, indent=2))
+        return
+
+    print_summary(experiments, title=f"Experiment Summary — {args.dataset}")
 
     if args.per_item:
         print_per_item(experiments, title=f"Per-Item Aggregation — {args.dataset}")
