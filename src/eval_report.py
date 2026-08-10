@@ -126,10 +126,14 @@ def fetch_trace_metadata(langfuse_host, auth_header, trace_id):
         return {}
 
 
-def build_experiment_data(langfuse_host, auth_header, scores, name_prefix=None):
-    """Build a structured dict of experiment -> dataset_item -> scores."""
-    # Cache trace metadata to avoid duplicate fetches
-    trace_cache = {}
+def build_experiment_data(langfuse_host, auth_header, scores, name_prefix=None, trace_cache=None):
+    """Build a structured dict of experiment -> dataset_item -> scores.
+
+    If trace_cache is provided, it is used and mutated in place, allowing
+    metadata to be shared across multiple calls (e.g., per-variant filtering).
+    """
+    if trace_cache is None:
+        trace_cache = {}
 
     experiments = defaultdict(lambda: defaultdict(list))
 
@@ -798,9 +802,11 @@ def main():
     # Multi-variant mode (--variants)
     if args.variants:
         variant_data_list = []
+        shared_trace_cache = {}
         for prefix in args.variants:
             experiments = build_experiment_data(
-                args.langfuse_host, auth_header, scores, name_prefix=prefix
+                args.langfuse_host, auth_header, scores, name_prefix=prefix,
+                trace_cache=shared_trace_cache
             )
             if not experiments:
                 log(f"No experiments found for variant '{prefix}'.", "WARN", force_stderr=args.output_json)
@@ -823,11 +829,14 @@ def main():
 
     # Legacy compare mode (--compare: exactly 2 prefixes)
     if args.compare:
+        shared_trace_cache = {}
         experiments_a = build_experiment_data(
-            args.langfuse_host, auth_header, scores, name_prefix=args.compare[0]
+            args.langfuse_host, auth_header, scores, name_prefix=args.compare[0],
+            trace_cache=shared_trace_cache
         )
         experiments_b = build_experiment_data(
-            args.langfuse_host, auth_header, scores, name_prefix=args.compare[1]
+            args.langfuse_host, auth_header, scores, name_prefix=args.compare[1],
+            trace_cache=shared_trace_cache
         )
 
         vd_a = build_variant_data(experiments_a)
