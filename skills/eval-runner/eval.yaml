@@ -568,7 +568,16 @@ items:
         # Phase: Sync (add criteria after user confirms)
         # Phase: Env Setup (add criteria after user confirms)
         # Phase: Execute (add criteria after user confirms)
-        # Phase: Report (add criteria after user confirms)
+        # Phase: Report
+        - "Report: polls for evaluator scores using wait_for_scores.py with all 5 variant prefixes and --since"
+        - "Report: invokes eval_report.py with --variants (all 5 prefixes, first is baseline), --by-dimension, --since, and --json"
+        - "Report: does NOT pass --threshold (no verdict computation for 3+ variants)"
+        - "Report: reports per-variant scores and dimension breakdowns for all 5 variants"
+        - "Report: does NOT generate a verdict (improvement, regression, or neutral) — 3+ variant raw score mode"
+        - "Report: does NOT compute deltas or comparison tables"
+        - "Report: does NOT generate improvement suggestions"
+        - "Report: posts results to the originating channel"
+        - "Report: cleans up suffixed skill directories after posting results"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
 
@@ -599,5 +608,176 @@ items:
         - "Evaluator check: does NOT proceed to env setup or execute after the check fails"
         - "Evaluator check: reports to the user that no evaluator is configured for the dataset"
         - "Evaluator check: instructs the user to configure an evaluator in the Langfuse UI before re-running"
+      scoring_rules: |
+        Score 10 * (passed criteria / total criteria).
+
+  # ─── Report Phase edge cases ───────────────────────────────────────
+
+  - id: report-timeout-partial-scores
+    input: |
+      PR context:
+      - Repo: brightfire/agentic-testing-framework
+      - PR branch: claw/vash/skill-improvement
+      - PR number: 123
+      - Base branch: main
+      - Files changed: skills/eval-runner/SKILL.md
+
+      Inference, confirmation, pre-flight, sync, env setup, and execute all completed successfully. Both variants (main and pr-123) ran and completed. During the Report Phase,
+      wait_for_scores.py timed out after 3 minutes (exit 1) — not all scores have arrived yet. Some scores are available for both variants, but coverage is incomplete.
+    expected_output:
+      behavior: |
+        The agent detects the wait_for_scores.py timeout (exit 1) and proceeds to fetch whatever scores are available. It notes the timeout in the report output. It runs
+        eval_report.py in comparison mode (--variants) with the available partial scores, generates a verdict based on available deltas, and posts the report to the PR.
+        The report explicitly mentions that scoring was incomplete due to a timeout.
+      scoring_type: pass_fail
+      scoring_criteria:
+        - "Report: detects wait_for_scores.py timeout (exit 1) and proceeds with available scores rather than aborting"
+        - "Report: notes the timeout in the report output"
+        - "Report: runs eval_report.py with --variants, --by-dimension, --json, --threshold, and --since using available partial scores"
+        - "Report: generates a comparison report with whatever scores exist (partial coverage)"
+        - "Report: generates a verdict based on available score deltas"
+        - "Report: posts results as a comment on PR #123"
+        - "Report: cleans up suffixed skill directories after posting results"
+      scoring_rules: |
+        Score 10 * (passed criteria / total criteria).
+
+  - id: report-no-scores
+    input: |
+      PR context:
+      - Repo: brightfire/agentic-testing-framework
+      - PR branch: claw/vash/skill-improvement
+      - PR number: 123
+      - Base branch: main
+      - Files changed: skills/eval-runner/SKILL.md
+
+      Inference, confirmation, pre-flight, sync, env setup, and execute all completed successfully. Both variants (main and pr-123) ran and completed. During the Report Phase,
+      wait_for_scores.py timed out (exit 1) and no scores are available for any experiment — the evaluator has not yet produced any scores.
+    expected_output:
+      behavior: |
+        The agent detects that no scores are available for any experiment after the timeout. It reports that scoring hasn't completed yet, suggests checking the evaluator
+        configuration, and does NOT produce a verdict or comparison. It posts the no-scores report to the PR.
+      scoring_type: pass_fail
+      scoring_criteria:
+        - "Report: detects that no scores are available for any experiment after timeout"
+        - "Report: reports that scoring hasn't completed yet"
+        - "Report: suggests checking evaluator configuration (e.g., evaluator not enabled, wrong dataset targeting)"
+        - "Report: does NOT produce a verdict (improvement, regression, or neutral)"
+        - "Report: does NOT produce a comparison table or delta analysis"
+        - "Report: posts the no-scores report to the originating channel (PR #123 comment)"
+        - "Report: cleans up suffixed skill directories after posting the report"
+      scoring_rules: |
+        Score 10 * (passed criteria / total criteria).
+
+  - id: report-single-variant-standalone
+    input: |
+      PR context:
+      - Repo: brightfire/agentic-testing-framework
+      - PR branch: claw/vash/skill-improvement
+      - PR number: 123
+      - Base branch: main
+      - Files changed: skills/eval-runner/SKILL.md
+
+      User request: "Just test the PR version of eval-runner — no need to compare against main."
+
+      Inference: single skill variant (pr-123 only, no baseline). Single model (agent default). All dataset items. User has confirmed (@vashbrightfire confirm). Pre-flight, sync,
+      env setup, and execute all completed successfully. Scores are available.
+    expected_output:
+      behavior: |
+        The agent recognizes this is a single-variant run and uses standalone report mode. It invokes eval_report.py with --prefix (not --variants), --by-dimension, --per-item,
+        --since, and --json. It reports per-item scores and dimension breakdowns. It does NOT generate a verdict, deltas, or improvement suggestions (those are 2-variant
+        comparison features only).
+      scoring_type: pass_fail
+      scoring_criteria:
+        - "Report: recognizes single-variant run and selects standalone report mode"
+        - "Report: invokes eval_report.py with --prefix (NOT --variants), --by-dimension, --per-item, --since, and --json"
+        - "Report: reports per-item scores and dimension breakdowns"
+        - "Report: does NOT generate a verdict (improvement, regression, or neutral)"
+        - "Report: does NOT compute deltas or comparison tables"
+        - "Report: does NOT generate improvement suggestions"
+        - "Report: posts results to the originating channel (PR #123 comment)"
+        - "Report: cleans up suffixed skill directories after posting results"
+      scoring_rules: |
+        Score 10 * (passed criteria / total criteria).
+
+  - id: report-multi-variant-raw-scores
+    input: |
+      Repo: brightfire/agentic-testing-framework
+      Branch: main
+      Skill: eval-runner
+
+      User request: "Test the past 3 commits on main for eval-runner."
+
+      Inference: 3 skill variants (one per commit, labels are short hashes a1b2c3d, e5f6g7h, i9j0k1l). Single model. All dataset items. User has confirmed. Pre-flight, sync,
+      env setup, and execute all completed successfully for all 3 variants. Scores are available for all variants.
+    expected_output:
+      behavior: |
+        The agent recognizes this is a 3-variant run and selects raw score report mode. It invokes eval_report.py with --variants (all 3 prefixes, first is baseline),
+        --by-dimension, --since, and --json. It reports per-variant scores and dimension breakdowns. It does NOT generate a verdict, deltas, or improvement suggestions —
+        the user reviews the raw data to draw conclusions.
+      scoring_type: pass_fail
+      scoring_criteria:
+        - "Report: recognizes 3-variant run and selects raw score report mode (not comparison or standalone)"
+        - "Report: invokes eval_report.py with --variants (all 3 prefixes, first is baseline), --by-dimension, --since, and --json"
+        - "Report: does NOT pass --threshold (no verdict computation for 3+ variants)"
+        - "Report: reports per-variant scores and dimension breakdowns for all 3 variants"
+        - "Report: does NOT generate a verdict (improvement, regression, or neutral)"
+        - "Report: does NOT compute deltas or comparison tables"
+        - "Report: does NOT generate improvement suggestions"
+        - "Report: posts results to the originating channel"
+        - "Report: cleans up suffixed skill directories after posting results"
+      scoring_rules: |
+        Score 10 * (passed criteria / total criteria).
+
+  - id: report-partial-variant-coverage
+    input: |
+      PR context:
+      - Repo: brightfire/agentic-testing-framework
+      - PR branch: claw/vash/skill-improvement
+      - PR number: 123
+      - Base branch: main
+      - Files changed: skills/eval-runner/SKILL.md
+
+      Inference, confirmation, pre-flight, sync, env setup, and execute all completed successfully. Both variants (main and pr-123) ran and completed. During the Report Phase,
+      scores are available for the main variant but not for the pr-123 variant — the evaluator has not yet produced scores for the PR-head experiments.
+    expected_output:
+      behavior: |
+        The agent detects that one variant (pr-123) is missing scores while the other (main) has scores. It notes which variant is missing data in the report, proceeds with
+        the available data, and the report reflects the incomplete coverage. It does not abort the report phase — it produces a partial report.
+      scoring_type: pass_fail
+      scoring_criteria:
+        - "Report: detects that pr-123 variant is missing scores while main variant has scores"
+        - "Report: notes which variant is missing data in the report output"
+        - "Report: proceeds with available data rather than aborting the report phase"
+        - "Report: report reflects the incomplete coverage (clearly shows which variant has no scores)"
+        - "Report: does NOT treat missing variant scores as a reason to skip the report entirely"
+        - "Report: posts results to the originating channel (PR #123 comment)"
+        - "Report: cleans up suffixed skill directories after posting results"
+      scoring_rules: |
+        Score 10 * (passed criteria / total criteria).
+
+  - id: report-eval-report-error
+    input: |
+      PR context:
+      - Repo: brightfire/agentic-testing-framework
+      - PR branch: claw/vash/skill-improvement
+      - PR number: 123
+      - Base branch: main
+      - Files changed: skills/eval-runner/SKILL.md
+
+      Inference, confirmation, pre-flight, sync, env setup, and execute all completed successfully. Both variants (main and pr-123) ran and completed. During the Report Phase,
+      wait_for_scores.py completed successfully (exit 0) — scores are available. However, eval_report.py exited with code 1 and printed an error to stderr:
+      "ValueError: No matching experiments found for prefix 'eval-runner__openrouter-@preset-conversation-default__pr-123__e5f6g7h__all'".
+    expected_output:
+      behavior: |
+        The agent detects that eval_report.py exited non-zero. It reports the error from stderr to the originating channel. It does NOT attempt to produce a verdict or
+        comparison — the report phase is aborted with an error message.
+      scoring_type: pass_fail
+      scoring_criteria:
+        - "Report: detects eval_report.py non-zero exit code"
+        - "Report: reports the error message from stderr"
+        - "Report: does NOT attempt to produce a verdict or comparison"
+        - "Report: does NOT fabricate results or proceed with partial output"
+        - "Report: posts the error report to the originating channel (PR #123 comment)"
+        - "Report: cleans up suffixed skill directories after reporting the error"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
