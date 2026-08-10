@@ -41,9 +41,9 @@ mechanics of creating suffixed copies. The label is used both for directory nami
 <dataset-name>__<model-id>__<variant-label>__<git-hash>__<item-scope>
 ```
 
-- `<model-id>`: provider-qualified model ID with `/` → `-`, `@` preserved (e.g., `openrouter-@preset-conversation-default`, `openrouter-z-ai-glm-5.2`)
-- `<variant-label>`: base branch name, `pr-<number>`, or commit ref — with `/` → `-`
-- `<item-scope>`: `all` for full dataset, or 8-char SHA-256 prefix of sorted item IDs joined by `|` (e.g., items `['c','a','b']` → `a|b|c` → `sha256('a|b|c')[:8]`)
+- `<model-id>`: provider-qualified model ID, `/` → `-`, `@` preserved
+- `<variant-label>`: base branch name, `pr-<number>`, or commit ref, `/` → `-`
+- `<item-scope>`: `all` or 8-char SHA-256 prefix of sorted item IDs joined by `|`
 - Example: `linear-create-eval__openrouter-@preset-conversation-default__pr-123__e5f6g7h__all`
 
 The harness appends ` - <timestamp>` and optionally ` - <run_idx>/<total>` for repeats at runtime.
@@ -61,22 +61,7 @@ After variant inference (and before the recency check), pin all git refs to comm
 
 ## Recency Check
 
-After ref resolution, run `recency_check.py` for each (skill variant × model) combination:
-
-```bash
-source ~/.openclaw/secrets/langfuse.env 2>/dev/null
-
-python3 ~/repos/agentic-testing-framework/src/recency_check.py \
-  --dataset "<dataset-name>" \
-  --filter "<base-experiment-name>" \
-  --min-pass-percent 75
-```
-
-`--filter` is the full base experiment name from the naming convention above. Do not include the harness-added ` - <timestamp>` suffix.
-
-Count the run names on stdout. If the count meets the requested repeat count, prune the combination from the matrix. If fewer runs exist than requested, only the difference needs to run. Empty stdout means no existing runs — include the combination.
-
-Exit 1 = script error. Report and stop.
+After ref resolution, run `recency_check.py` for each (skill variant × model) combination. Source `~/.openclaw/secrets/langfuse.env`, then invoke `recency_check.py` with `--dataset` and `--filter` (full base experiment name from the naming convention, without the ` - <timestamp>` suffix). `--min-pass-percent 75` sets the pass threshold. Count run names on stdout — if count meets requested repeats, prune the combination. If fewer runs exist, only the difference needs to run. Empty stdout means no existing runs — include the combination. Exit 1 = script error (report and stop).
 
 ## Confirmation — HARD GATE
 
@@ -121,13 +106,7 @@ Use this template verbatim (adapt the content, keep the structure):
 Reply with `@<github bot id> confirm` or `@<github bot id> proceed` to start the run.
 ```
 
-The `@<github bot id>` mention is required on GitHub. Resolve your GitHub bot id by running:
-
-```bash
-gh auth status --hostname github.com --active --json hosts | jq -r '.hosts["github.com"][0].login' | sed 's/\[bot\]//'
-```
-
-If the command returns `null`, fails, or produces an unexpected account, do not proceed with a placeholder. Ask the user for the bot's GitHub login explicitly (e.g., "What is the bot's GitHub username? Reply with @<username> confirm to start the run.").
+The `@<github bot id>` mention is required on GitHub. Resolve your bot ID via `gh auth status --hostname github.com --active --json hosts` (pipe through `jq -r '.hosts["github.com"][0].login'` and strip `[bot]`). If the result is `null`, fails, or is unexpected, ask the user for the bot's GitHub login explicitly rather than using a placeholder.
 
 Do not include a mention prefix on Slack or webchat, where the bot receives all messages directly.
 
@@ -178,44 +157,18 @@ Syncs eval definitions to Langfuse and captures manifest paths needed by the exe
 
 Sync each skill version that remains after the Recency Check prunes the run matrix, filtered to the DSIs selected during inference. For reruns, sync all skill versions if the user confirmed a forced re-run; otherwise only sync new or changed versions.
 
-Use `git show` to extract each version to a temp file and pass it to `dataset_sync.py`.
-
-```bash
-EVAL_FILE=$(mktemp)
-git show "<skill-version-ref>:<eval-yaml-path>" > "$EVAL_FILE"
-```
+Use `git show "<skill-version-ref>:<eval-yaml-path>"` to extract each version's eval.yaml to a temp file.
 
 #### Sync each version to Langfuse
 
-Run `dataset_sync.py` sequentially — concurrent syncs to the same dataset can interleave version timestamps.
-
-```bash
-MANIFEST_FILE=$(mktemp)
-python3 ~/repos/agentic-testing-framework/src/dataset_sync.py \
-  --file "$EVAL_FILE" \
-  --items "<comma-separated-item-ids from inference>" \
-  --output-manifest "$MANIFEST_FILE"
-```
-
-Omit `--items` when inference selected all DSIs. Capture `$MANIFEST_FILE` — the execute phase needs it.
+Run `dataset_sync.py` sequentially — concurrent syncs to the same dataset can interleave version timestamps. Source langfuse.env, then invoke `dataset_sync.py` with `--file` (path to extracted eval.yaml), `--items` (comma-separated item IDs from inference, or omit for all DSIs), and `--output-manifest` (path to capture the manifest). Capture the manifest path — the execute phase needs it.
 
 For the full manifest file contract and CLI interface, see [`references/dataset_sync_interface.md`](references/dataset_sync_interface.md).
 
 
 ### Output
 
-```
-dataset: <langfuse-dataset-name from eval.yaml>
-skill: <skill-name>
-eval_yaml_path: <path within repo>
-manifests:
-  - version: <version-label>
-    ref: <git-hash>
-    manifest: <path>
-  ...
-```
-
-Pass manifest paths to the execute phase.
+Output: dataset name, skill name, eval.yaml path, and a list of per-version manifests (version label, git hash, manifest path). Pass manifest paths to the execute phase.
 
 See [`references/gotchas.md`](references/gotchas.md) for Sync Phase error prevention.
 
@@ -225,22 +178,7 @@ After sync (the dataset must exist in Langfuse first) and before env setup/execu
 
 ### Procedure
 
-Run `evaluator_check.py` for every distinct dataset name produced by the sync phase (before and after variants may use different dataset names if the eval.yaml was renamed). If any check fails, STOP — do not proceed to env setup or execute.
-
-```bash
-source ~/.openclaw/secrets/langfuse.env 2>/dev/null
-
-python3 ~/repos/agentic-testing-framework/src/evaluator_check.py \
-  --dataset "<dataset-name>"
-```
-
-- **Exit 0:** at least one enabled evaluation rule targets the dataset. Proceed to Environment Setup.
-- **Exit 1:** no enabled evaluator is configured for the dataset. STOP — do not proceed to env setup or execute. Report to the user that no evaluator is configured and they need to set one up in the Langfuse UI before re-running.
-- **Exit 2:** API or operational error (credentials, network, rate limit). Report the error from stderr — do not tell the user to configure an evaluator. Retry or investigate the operational issue.
-
-### Output
-
-On success, logs the matching rule name(s) and evaluator name(s) to stderr. On no evaluator (exit 1), prints a clear error message naming the dataset and instructing the user to configure an evaluator in the Langfuse UI. On API error (exit 2), logs the error details to stderr.
+Run `evaluator_check.py` for every distinct dataset name produced by the sync phase. If any check fails, STOP — do not proceed to env setup or execute. Source langfuse.env, then invoke `evaluator_check.py` with `--dataset` for each distinct dataset name. Exit 0 = evaluator configured (proceed). Exit 1 = no evaluator (STOP, report to user — they need to configure one in the Langfuse UI). Exit 2 = API error (report stderr, retry or investigate). On success, logs matching rule and evaluator names to stderr.
 
 ## Environment Setup Phase
 
@@ -248,14 +186,7 @@ Prepares the eval environment so the harness can run skill versions in isolation
 
 ### Procedure
 
-For each skill version:
-
-```bash
-bash ~/repos/agentic-testing-framework/src/setup_eval_skill.sh \
-  --skill-dir "<skill-dir>" \
-  --hash "<commit-hash>" \
-  --label "<version-label>"
-```
+For each skill version, invoke `setup_eval_skill.sh` with `--skill-dir`, `--hash` (commit hash), and `--label` (version label).
 
 ### Output
 
@@ -294,22 +225,7 @@ For model A/B tests (Slack-triggered, single skill variant), the same suffixed s
 
 #### 3. Invoke the harness
 
-Run `eval_harness.py` for each (skill variant × model) combination. Variants run sequentially — one variant completes before the next begins. Within each variant, up to 3 dataset items run in parallel (`--item-concurrency 3`) and up to 2 experiment repeats run in parallel (`--experiment-concurrency 2`), for a maximum of 6 concurrent agent subprocesses.
-
-```bash
-source ~/.openclaw/secrets/langfuse.env 2>/dev/null
-
-python3 ~/repos/agentic-testing-framework/src/eval_harness.py \
-  --manifest "<path-to-manifest-from-sync-phase>" \
-  --run-name "<base-experiment-name>" \
-  --prompt-prefix "Read the <suffixed-skill-name> skill from available_skills. You must state which skill you read at the end of your response, after completing the task. You are being evaluated on your ability to adhere to instructions. If you do not confirm which skill you read, your response will receive a score of zero regardless of quality. Then, " \
-  --model "<model-id>" \
-  --repeat "<repeat-count>" \
-  --item-concurrency 3 \
-  --experiment-concurrency 2
-```
-
-Omit `--model` for the agent's default model. Always pass `--repeat` — default is 10 when inference doesn't specify a count. If recency found existing runs, subtract them from the repeat count (e.g., 10 requested, 4 found → `--repeat 6`).
+Source langfuse.env, then invoke `eval_harness.py` for each (skill variant × model) combination with: `--manifest` (path from sync phase), `--run-name` (base experiment name without timestamp/repeat suffixes), `--prompt-prefix` (the attestation prefix from step 2), `--model` (omit for agent default), `--repeat` (always pass; default 10; subtract recency-found runs), `--item-concurrency 3` (max 6 concurrent subprocesses), and `--experiment-concurrency 2`. Variants run sequentially — one completes before the next begins.
 
 
 #### 4. Monitor and capture results
@@ -318,19 +234,7 @@ The harness may take several minutes. After starting the harness, poll it to com
 
 ### Output
 
-```
-runs:
-  - variant: <variant-label>
-    model: <model-id>
-    experiment_name: <base-experiment-name>
-    status: success | partial | failed
-    failed_items: [<item indices or ids, if any>]
-    error: <error message, if failed>
-    dataset_run_url: <langfuse url, if available>
-  ...
-```
-
-Status: `success` (all items completed, exit 0) | `partial` (some items failed, exit 0) | `failed` (harness crashed or all items failed, non-zero exit).
+Output per harness invocation: variant label, model, experiment name, status (success/partial/failed), failed item indices (if any), error message (if failed), and dataset run URL. Status: `success` (all items completed, exit 0) | `partial` (some items failed, exit 0) | `failed` (crash or all items failed, non-zero exit).
 
 ### Failure Handling
 
@@ -355,43 +259,11 @@ Fetches scores from Langfuse, compares variants, produces a verdict, generates i
 
 After the execute phase completes, the Langfuse evaluator runs asynchronously. Instead of a fixed sleep, poll the Langfuse scores API until all expected scores are present (or a 3-minute timeout is reached).
 
-**If all variants share the same repeat count,** a single `wait_for_scores.py` invocation covering all prefixes is sufficient:
+Source langfuse.env, then invoke `wait_for_scores.py` with: `--dataset`, one `--prefix` per variant (including recency-pruned), `--expected-items` (manifest item count), `--repeat` (execute phase count), `--dimensions` (scoring dimensions, default 1), `--since` (execute phase start ISO timestamp), and `--timeout 180`. The script multiplies `--repeat × --dimensions` to determine required scores per item. Polls every 10s; exits 0 when all prefixes have full coverage, or exits 1 on 3-min timeout.
 
-```bash
-source ~/.openclaw/secrets/langfuse.env 2>/dev/null
+**Same repeat count across variants:** single call with all prefixes. **Different repeat counts:** call once per variant with per-variant `--repeat` and `--expected-items`. For recency-pruned variants, `--since` may need to be earlier or omitted. If item count is unknown, omit `--expected-items` — the script waits for score count stabilization.
 
-python3 ~/repos/agentic-testing-framework/src/wait_for_scores.py \
-  --dataset "<dataset-name>" \
-  --prefix "<variant-prefix-1>" \
-  --prefix "<variant-prefix-2>" \
-  --expected-items <item-count-from-manifest> \
-  --repeat <repeat-count-from-execute-phase> \
-  --dimensions <scoring-dimension-count> \
-  --since "<execute-phase-start-iso-timestamp>" \
-  --timeout 180
-```
-
-**If variants have different repeat counts** (e.g., after recency subtractions variant A needs 6 repeats while variant B needs 10), call `wait_for_scores.py` once **per variant** with per-variant `--repeat` and `--expected-items` values. Each call should pass only the prefix(es) for that variant:
-
-```bash
-python3 ~/repos/agentic-testing-framework/src/wait_for_scores.py \
-  --dataset "<dataset-name>" \
-  --prefix "<variant-A-prefix>" \
-  --expected-items <item-count> --repeat 6 \
-  --dimensions <dim-count> --since "<ts>" --timeout 180
-
-python3 ~/repos/agentic-testing-framework/src/wait_for_scores.py \
-  --dataset "<dataset-name>" \
-  --prefix "<variant-B-prefix>" \
-  --expected-items <item-count> --repeat 10 \
-  --dimensions <dim-count> --since "<ts>" --timeout 180
-```
-
-Pass one `--prefix` per experiment variant — include both executed variants and recency-pruned variants. For pruned variants, their scores already exist in Langfuse from prior runs, so the waiter will find them immediately (the `--since` timestamp may need to be earlier or omitted for pruned variants whose scores predate the current execute phase). `--expected-items` is the number of dataset items from the manifest. `--repeat` should match the repeat count used in the execute phase for that variant (default: 1). `--dimensions` is the number of scoring dimensions the evaluator uses per trace (default: 1); the waiter multiplies `--repeat × --dimensions` to determine how many scores each item needs before it is considered ready. `--since` restricts the score query to the current execution, preventing stale historical scores from satisfying the expected count. If the item count is unknown, omit `--expected-items` and the script will wait for the total score count to stabilize between two consecutive polls instead.
-
-The script polls every 10 seconds and logs per-prefix progress (e.g. `pr-15: 3/5 items scored`). It exits 0 when all prefixes have scores for all expected items, or exits 1 on timeout.
-
-**If the script times out (exit 1):** Proceed to fetch scores anyway — the report will reflect whatever scores are available. Note the timeout in the report so the reader knows scoring may be incomplete. If no scores are present at all, check that the evaluator is configured and running in Langfuse.
+On timeout (exit 1): proceed to fetch scores anyway; note the timeout in the report. If no scores at all, check evaluator configuration.
 
 #### 2. Fetch scores and compare variants
 
@@ -399,47 +271,11 @@ The script polls every 10 seconds and logs per-prefix progress (e.g. `pr-15: 3/5
 
 Instead, run a **separate `eval_report.py --variants` call per model.** Each call compares baseline-vs-head for that model only. For a 2-variant × 2-model matrix, that's two `--variants` calls (one per model). This isolates skill-variant deltas from model-quality differences.
 
-For each model, run `eval_report.py` with `--variants` passing the base and head experiment name prefixes **for that model only** — including both variants that ran in the Execute phase AND variants that were pruned by the Recency Check (which already have existing scores in Langfuse). Use `--by-dimension` and `--json` flags. Pass `--since` with the ISO timestamp of when the execute phase started to avoid fetching stale historical scores from previous runs. For pruned variants, their scores predate the current execute phase, so use a `--since` value early enough to encompass their original runs (or omit `--since` for pruned-only variants if the recency window is known):
-
-```bash
-source ~/.openclaw/secrets/langfuse.env 2>/dev/null
-
-# Per-model comparison: model A
-python ~/repos/agentic-testing-framework/src/eval_report.py \
-  --dataset "<dataset-name>" \
-  --variants "<model-A-base-variant-prefix>" "<model-A-head-variant-prefix>" \
-  --by-dimension \
-  --threshold 0.5 \
-  --since "<execute-phase-start-iso-timestamp>" \
-  --json
-
-# Per-model comparison: model B
-python ~/repos/agentic-testing-framework/src/eval_report.py \
-  --dataset "<dataset-name>" \
-  --variants "<model-B-base-variant-prefix>" "<model-B-head-variant-prefix>" \
-  --by-dimension \
-  --threshold 0.5 \
-  --since "<execute-phase-start-iso-timestamp>" \
-  --json
-```
+For each model, invoke `eval_report.py` with `--variants` (base and head prefixes for that model only), `--dataset`, `--by-dimension`, `--threshold 0.5`, `--since` (execute phase start ISO timestamp; use an earlier or omitted `--since` for recency-pruned variants whose scores predate the current run), and `--json`. Include both executed and recency-pruned variants. Run one call per model.
 
 For a single-model eval (the common case), there is only one `--variants` call comparing baseline-vs-head for that model.
 
-**Single-variant runs (no base/head pair):** When inference selects only one skill version (e.g., "just the PR version"), there is no comparison to make. Use `--prefix` mode instead of `--variants` mode to produce a standalone report:
-
-```bash
-source ~/.openclaw/secrets/langfuse.env 2>/dev/null
-
-python ~/repos/agentic-testing-framework/src/eval_report.py \
-  --dataset "<dataset-name>" \
-  --prefix "<single-variant-prefix>" \
-  --by-dimension \
-  --per-item \
-  --since "<execute-phase-start-iso-timestamp>" \
-  --json
-```
-
-The standalone report shows per-item scores and dimension breakdowns without deltas or verdicts (there is no baseline to compare against). Skip the verdict and improvement suggestion steps below — report the scores and any observations about item-level performance instead.
+**Single-variant runs (no base/head pair):** When inference selects only one skill version, use `--prefix` mode instead of `--variants` mode. Invoke `eval_report.py` with `--prefix` (single variant prefix), `--dataset`, `--by-dimension`, `--per-item`, `--since`, and `--json`. The standalone report shows per-item scores and dimension breakdowns without deltas or verdicts. Skip the verdict and improvement suggestion steps — report scores and observations instead.
 
 If the execute phase start time is unavailable, pass `--since` with a timestamp a few minutes before the earliest experiment run to ensure all relevant scores are included while excluding historical runs.
 
