@@ -856,8 +856,9 @@ def main():
         else:
             import json
             print(json.dumps({"dataset": args.dataset, "variants": [], "deltas": {"per_item": {}, "overall": {}}}, indent=2))
-    else:
-        print_summary(experiments, title=f"Experiment Summary — {args.dataset}")
+        return
+
+    print_summary(experiments, title=f"Experiment Summary — {args.dataset}")
 
     if args.per_item:
         print_per_item(experiments, title=f"Per-Item Aggregation — {args.dataset}")
