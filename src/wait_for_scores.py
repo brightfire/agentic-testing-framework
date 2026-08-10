@@ -66,7 +66,7 @@ def fetch_all_scores(langfuse_host, auth_header, limit=100, from_ts=None):
     while True:
         params = {"limit": limit, "fields": "core,details,subject"}
         if from_ts:
-            params["from"] = from_ts
+            params["fromTimestamp"] = from_ts
         if cursor:
             params["cursor"] = cursor
         resp = requests.get(
