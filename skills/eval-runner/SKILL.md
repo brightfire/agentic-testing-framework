@@ -427,7 +427,7 @@ The agent reasons over the scores and the skill/eval diff to provide targeted, s
 
 #### 6. Format the report
 
-Format the report as Markdown using the template in [`references/report-format.md`](references/report-format.md).
+Format the report as Markdown. For comparison reports (2+ variants), read [`references/comparison-report-template.md`](references/comparison-report-template.md). For standalone reports (single variant), read [`references/standalone-report-template.md`](references/standalone-report-template.md). Only read the one that applies — not both.
 
 #### 7. Post to the originating channel
 
