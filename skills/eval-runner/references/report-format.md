@@ -1,6 +1,6 @@
 # Report Format Reference
 
-Detailed reference for the eval-runner Report Phase output format, verdict criteria, and improvement suggestion generation.
+Detailed reference for the Report Phase output format, verdict criteria, and improvement suggestion generation.
 
 ## JSON Output Schema
 
@@ -29,13 +29,13 @@ Detailed reference for the eval-runner Report Phase output format, verdict crite
   "deltas": {
     "per_item": {
       "<item_id>": {
-        "composite": <float>,
-        "dimensions": {"<score_name>": <float>}
+        "composite": {"<variant-label>": <float>, "_avg": <float>},
+        "dimensions": {"<score_name>": {"<variant-label>": <float>, "_avg": <float>}}
       }
     },
     "overall": {
-      "composite": <float>,
-      "dimensions": {"<score_name>": <float>}
+      "composite": {"<variant-label>": <float>, "_avg": <float>},
+      "dimensions": {"<score_name>": {"<variant-label>": <float>, "_avg": <float>}}
     }
   }
 }
@@ -57,14 +57,14 @@ Detailed reference for the eval-runner Report Phase output format, verdict crite
 | `variants[].items` | object | Per-item scores keyed by item_id |
 | `variants[].items[].run_count` | int | Number of runs for this item |
 | `variants[].total_runs` | int | Total number of scores across all items and dimensions |
-| `deltas.per_item` | object | Per-item deltas: variant[n] avg - variant[0] avg |
-| `deltas.overall` | object | Overall deltas across all items |
-| `deltas.overall.composite` | float | Overall composite delta |
+| `deltas.per_item` | object | Per-item deltas: variant[n] avg - variant[0] avg, keyed by variant label. `_avg` is the mean of non-baseline variants. Missing items have `null` deltas. |
+| `deltas.overall` | object | Overall deltas across all items, keyed by variant label |
+| `deltas.overall.composite` | object | Per-variant composite deltas plus `_avg` average |
 | `deltas.overall.dimensions` | object | Per-dimension overall deltas |
 
 ### Delta Computation
 
-Deltas are computed as `variant[n] - variant[0]` for each item and dimension, where `variant[0]` is the baseline (typically the base branch). When there are multiple non-baseline variants, the delta is the average of all non-baseline variants minus the baseline.
+Deltas are computed as `variant[n] - variant[0]` for each item and dimension, where `variant[0]` is the baseline (typically the base branch). Each non-baseline variant gets its own delta value, plus an `_avg` key provides the average across all non-baseline variants for backward compatibility. Items missing from the baseline are excluded from delta computation (their delta is `null`). Items missing from a non-baseline variant get a `null` delta for that variant.
 
 ## Verdict Criteria
 

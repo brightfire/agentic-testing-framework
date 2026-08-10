@@ -374,7 +374,7 @@ The script polls every 10 seconds and logs per-prefix progress (e.g. `pr-15: 3/5
 
 #### 2. Fetch scores and compare variants
 
-Run `eval_report.py` with `--variants` passing the experiment name prefixes from the execute phase, `--by-dimension`, and `--json` flags:
+Run `eval_report.py` with `--variants` passing the experiment name prefixes from the execute phase, `--by-dimension`, and `--json` flags. Pass `--since` with the ISO timestamp of when the execute phase started to avoid fetching stale historical scores from previous runs:
 
 ```bash
 source ~/.openclaw/secrets/langfuse.env 2>/dev/null
@@ -384,8 +384,11 @@ python ~/repos/agentic-testing-framework/src/eval_report.py \
   --variants "<base-variant-prefix>" "<head-variant-prefix>" \
   --by-dimension \
   --threshold 0.5 \
+  --since "<execute-phase-start-iso-timestamp>" \
   --json
 ```
+
+If the execute phase start time is unavailable, pass `--since` with a timestamp a few minutes before the earliest experiment run to ensure all relevant scores are included while excluding historical runs.
 
 The `--variants` flag accepts any number of prefixes (2 or more). The first prefix is the baseline (typically the base branch). The `--json` flag produces structured output suitable for programmatic parsing.
 

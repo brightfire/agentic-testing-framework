@@ -32,9 +32,13 @@ from datetime import datetime, timezone
 import requests
 
 
-def log(msg, level="INFO"):
+def log(msg, level="INFO", force_stderr=False):
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    print(f"[{ts}] [{level}] {msg}", flush=True)
+    line = f"[{ts}] [{level}] {msg}"
+    if force_stderr:
+        print(line, file=sys.stderr, flush=True)
+    else:
+        print(line, flush=True)
 
 
 def fetch_all_scores(langfuse_host, auth_header, from_ts=None, to_ts=None, limit=100):
@@ -273,6 +277,7 @@ def build_variant_data(experiments):
     dim_scores = defaultdict(list)
     item_scores = defaultdict(list)  # item_id -> list of (score, score_name)
     item_dim_scores = defaultdict(lambda: defaultdict(list))  # item_id -> score_name -> list of scores
+    item_trace_ids = defaultdict(set)  # item_id -> set of distinct trace IDs
 
     for exp_name, exp_items in experiments.items():
         for item_id, scores_list in exp_items.items():
@@ -283,6 +288,8 @@ def build_variant_data(experiments):
                 dim_scores[sname].append(val)
                 item_scores[item_id].append(val)
                 item_dim_scores[item_id][sname].append(val)
+                if s.get("trace_id"):
+                    item_trace_ids[item_id].add(s["trace_id"])
 
     composite = _stats(all_scores)
 
@@ -304,7 +311,7 @@ def build_variant_data(experiments):
         items[item_id] = {
             "avg": sum(vals) / len(vals) if vals else 0.0,
             "dimensions": item_dims,
-            "run_count": len(vals),
+            "run_count": len(item_trace_ids[item_id]),
         }
 
     return {
@@ -333,27 +340,38 @@ def output_json(dataset_name, variant_data_list):
         })
 
     # Compute deltas: variant[n] - variant[0] for each item and dimension
+    # Missing items are represented as None (null) and excluded from delta calculations.
+    # For 3+ variants, deltas are emitted per non-baseline variant.
     deltas = {"per_item": {}, "overall": {}}
     if len(variant_data_list) >= 2:
         baseline_label, baseline = variant_data_list[0]
+        non_baseline = variant_data_list[1:]
 
-        # Overall composite delta for each non-baseline variant
-        overall_composite = 0.0
-        overall_dims = defaultdict(float)
-        for label, vd in variant_data_list[1:]:
-            overall_composite += vd["composite"]["avg"]
-            for sname, st in vd["dimensions"].items():
-                overall_dims[sname] += st["avg"]
-        n_non_baseline = len(variant_data_list) - 1
-        if n_non_baseline > 0:
-            overall_composite /= n_non_baseline
-            for sname in overall_dims:
-                overall_dims[sname] /= n_non_baseline
-
-        deltas["overall"]["composite"] = round(overall_composite - baseline["composite"]["avg"], 4)
+        # Overall deltas: per-variant for the composite, plus average across non-baseline
+        deltas["overall"]["composite"] = {}
         deltas["overall"]["dimensions"] = {}
-        for sname, st in baseline["dimensions"].items():
-            deltas["overall"]["dimensions"][sname] = round(overall_dims.get(sname, 0.0) - st["avg"], 4)
+        overall_composite_avg = 0.0
+        overall_dims_avg = defaultdict(float)
+        for label, vd in non_baseline:
+            comp_delta = round(vd["composite"]["avg"] - baseline["composite"]["avg"], 4)
+            deltas["overall"]["composite"][label] = comp_delta
+            overall_composite_avg += comp_delta
+            for sname, st in vd["dimensions"].items():
+                base_dim = baseline["dimensions"].get(sname, {"avg": 0.0})["avg"]
+                dim_delta = round(st["avg"] - base_dim, 4)
+                if sname not in deltas["overall"]["dimensions"]:
+                    deltas["overall"]["dimensions"][sname] = {}
+                deltas["overall"]["dimensions"][sname][label] = dim_delta
+                overall_dims_avg[sname] += dim_delta
+        n = len(non_baseline)
+        if n > 0:
+            overall_composite_avg /= n
+            for sname in overall_dims_avg:
+                overall_dims_avg[sname] /= n
+        # Average across non-baseline variants (for backward compatibility)
+        deltas["overall"]["composite"]["_avg"] = round(overall_composite_avg, 4)
+        for sname in overall_dims_avg:
+            deltas["overall"]["dimensions"].setdefault(sname, {})["_avg"] = round(overall_dims_avg[sname], 4)
 
         # Per-item deltas
         all_item_ids = set()
@@ -361,25 +379,45 @@ def output_json(dataset_name, variant_data_list):
             all_item_ids.update(vd["items"].keys())
 
         for item_id in sorted(all_item_ids):
-            baseline_item = baseline["items"].get(item_id, {"avg": 0.0, "dimensions": {}})
+            baseline_item = baseline["items"].get(item_id)
+            if baseline_item is None:
+                # Baseline missing this item — skip delta computation
+                deltas["per_item"][item_id] = {
+                    "composite": None,
+                    "dimensions": {},
+                    "note": "baseline missing this item",
+                }
+                continue
+
+            item_delta = {"composite": {}, "dimensions": {}}
             composite_sum = 0.0
             dim_sums = defaultdict(float)
-            for label, vd in variant_data_list[1:]:
-                item = vd["items"].get(item_id, {"avg": 0.0, "dimensions": {}})
-                composite_sum += item["avg"]
+            dim_counts = defaultdict(int)
+            for label, vd in non_baseline:
+                item = vd["items"].get(item_id)
+                if item is None:
+                    # This non-baseline variant is missing the item — null delta
+                    item_delta["composite"][label] = None
+                    continue
+                comp_delta = round(item["avg"] - baseline_item["avg"], 4)
+                item_delta["composite"][label] = comp_delta
+                composite_sum += comp_delta
                 for sname, st in item["dimensions"].items():
-                    dim_sums[sname] += st["avg"]
-            n = n_non_baseline
-            avg_composite = composite_sum / n if n > 0 else 0.0
-            avg_dims = {sname: dim_sums[sname] / n for sname in dim_sums}
+                    base_dim = baseline_item.get("dimensions", {}).get(sname, {}).get("avg", 0.0)
+                    dim_delta = round(st["avg"] - base_dim, 4)
+                    if sname not in item_delta["dimensions"]:
+                        item_delta["dimensions"][sname] = {}
+                    item_delta["dimensions"][sname][label] = dim_delta
+                    dim_sums[sname] += dim_delta
+                    dim_counts[sname] += 1
 
-            item_delta = {
-                "composite": round(avg_composite - baseline_item["avg"], 4),
-                "dimensions": {},
-            }
-            for sname in set(list(baseline_item.get("dimensions", {}).keys()) + list(avg_dims.keys())):
-                base_val = baseline_item.get("dimensions", {}).get(sname, {}).get("avg", 0.0)
-                item_delta["dimensions"][sname] = round(avg_dims.get(sname, 0.0) - base_val, 4)
+            # Average across non-baseline variants that have the item
+            valid_composites = [v for v in item_delta["composite"].values() if v is not None]
+            if valid_composites:
+                item_delta["composite"]["_avg"] = round(sum(valid_composites) / len(valid_composites), 4)
+            for sname in dim_sums:
+                if dim_counts[sname] > 0:
+                    item_delta["dimensions"].setdefault(sname, {})["_avg"] = round(dim_sums[sname] / dim_counts[sname], 4)
 
             deltas["per_item"][item_id] = item_delta
 
@@ -481,10 +519,11 @@ def print_variant_comparison(dataset_name, variant_data_list, by_dimension=False
                 delta = sum(item_avgs[1:]) / n - item_avgs[0] if n > 0 else 0.0
                 row += f" {delta:>+8.2f}"
 
-                # Note regressions
+                # Note regressions — check each dimension independently of composite delta
                 notes = []
-                if by_dimension and delta < -threshold:
+                if by_dimension:
                     base_item = baseline["items"].get(item_id, {"dimensions": {}})
+                    any_reg = False
                     for sname in dim_names:
                         base_dim = base_item.get("dimensions", {}).get(sname, {}).get("avg", 0.0)
                         dim_sum = 0.0
@@ -494,6 +533,9 @@ def print_variant_comparison(dataset_name, variant_data_list, by_dimension=False
                         dim_avg = dim_sum / n if n > 0 else 0.0
                         if dim_avg - base_dim < -threshold:
                             notes.append(f"\u26a0\ufe0f Regression in {sname}")
+                            any_reg = True
+                    if not any_reg and delta < -threshold:
+                        notes.append("\u26a0\ufe0f Composite regression")
                 elif delta < -threshold:
                     notes.append("\u26a0\ufe0f Regression")
 
@@ -593,7 +635,7 @@ def main():
 
     # Validate flag combinations
     if args.variants and args.compare:
-        log("--variants and --compare are mutually exclusive. Use one or the other.", "ERROR")
+        log("--variants and --compare are mutually exclusive. Use one or the other.", "ERROR", force_stderr=args.output_json)
         sys.exit(1)
 
     auth_header = os.environ.get("LANGFUSE_BASIC_AUTH")
@@ -604,20 +646,20 @@ def main():
             import base64
             auth_header = base64.b64encode(f"{public_key}:{secret_key}".encode()).decode()
         else:
-            log("LANGFUSE_BASIC_AUTH or (LANGFUSE_PUBLIC_KEY + LANGFUSE_SECRET_KEY) required.", "ERROR")
+            log("LANGFUSE_BASIC_AUTH or (LANGFUSE_PUBLIC_KEY + LANGFUSE_SECRET_KEY) required.", "ERROR", force_stderr=args.output_json)
             sys.exit(1)
 
-    log(f"Fetching scores from {args.langfuse_host}...")
+    log(f"Fetching scores from {args.langfuse_host}...", force_stderr=args.output_json)
     scores = fetch_all_scores(args.langfuse_host, auth_header, from_ts=args.since, to_ts=args.until)
-    log(f"Found {len(scores)} scores.")
+    log(f"Found {len(scores)} scores.", force_stderr=args.output_json)
     if scores:
-        log(f"Score range: {scores[0].get('createdAt', '?')[:19]} to {scores[-1].get('createdAt', '?')[:19]}")
+        log(f"Score range: {scores[0].get('createdAt', '?')[:19]} to {scores[-1].get('createdAt', '?')[:19]}", force_stderr=args.output_json)
 
     if not scores:
-        log("No scores found.", "WARN")
+        log("No scores found.", "WARN", force_stderr=args.output_json)
         sys.exit(0)
 
-    log("Fetching trace metadata for experiment grouping...")
+    log("Fetching trace metadata for experiment grouping...", force_stderr=args.output_json)
 
     # Multi-variant mode (--variants)
     if args.variants:
@@ -627,13 +669,13 @@ def main():
                 args.langfuse_host, auth_header, scores, name_prefix=prefix
             )
             if not experiments:
-                log(f"No experiments found for variant '{prefix}'.", "WARN")
+                log(f"No experiments found for variant '{prefix}'.", "WARN", force_stderr=args.output_json)
                 continue
             vd = build_variant_data(experiments)
             variant_data_list.append((prefix, vd))
 
         if not variant_data_list:
-            log("No experiments found for any variant.", "ERROR")
+            log("No experiments found for any variant.", "ERROR", force_stderr=args.output_json)
             sys.exit(1)
 
         if args.output_json:
@@ -663,7 +705,7 @@ def main():
 
     # Single-prefix or unfiltered mode (--prefix)
     experiments = build_experiment_data(args.langfuse_host, auth_header, scores, name_prefix=args.prefix)
-    log(f"Found {len(experiments)} experiments.")
+    log(f"Found {len(experiments)} experiments.", force_stderr=args.output_json)
 
     if args.output_json:
         if experiments:
