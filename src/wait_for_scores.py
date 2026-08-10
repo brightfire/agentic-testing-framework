@@ -165,6 +165,44 @@ def build_prefix_item_map(langfuse_host, auth_header, scores, prefixes):
     return prefix_items
 
 
+def build_prefix_item_map_cached(langfuse_host, auth_header, scores, prefixes, metadata_cache):
+    """Build a mapping of prefix -> {dataset_item_id: score_count} with a persistent metadata cache.
+
+    Like build_prefix_item_map, but reuses trace metadata from previous polling
+    iterations via metadata_cache (a dict mutated in place). Only traces not
+    already in the cache trigger a metadata fetch, avoiding redundant API calls
+    across polls.
+    """
+    prefix_items = {p: defaultdict(int) for p in prefixes}
+
+    for score in scores:
+        subject = score.get("subject", {})
+        trace_id = subject.get("traceId")
+        if not trace_id:
+            trace_id = score.get("traceId")
+        if not trace_id:
+            continue
+
+        if trace_id not in metadata_cache:
+            metadata_cache[trace_id] = fetch_trace_metadata(
+                langfuse_host, auth_header, trace_id
+            )
+
+        md = metadata_cache[trace_id]
+        exp_name = md.get("experiment_name")
+        dataset_item_id = md.get("dataset_item_id")
+
+        if not exp_name or not dataset_item_id:
+            continue
+
+        for prefix in prefixes:
+            if exp_name.startswith(prefix):
+                prefix_items[prefix][dataset_item_id] += 1
+                break
+
+    return prefix_items
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Wait for Langfuse evaluator to finish scoring experiment traces"
@@ -240,6 +278,10 @@ def main():
 
     deadline = time.monotonic() + args.timeout
     prev_total = None
+    # Persist trace metadata cache across polling iterations to avoid re-fetching
+    # metadata for traces already seen in previous polls. Only new traces
+    # (those that appeared since the last poll) require metadata requests.
+    trace_metadata_cache = {}
 
     while True:
         try:
@@ -252,8 +294,8 @@ def main():
             time.sleep(args.interval)
             continue
 
-        prefix_items = build_prefix_item_map(
-            args.langfuse_host, auth_header, scores, prefixes
+        prefix_items = build_prefix_item_map_cached(
+            args.langfuse_host, auth_header, scores, prefixes, trace_metadata_cache
         )
 
         total_scores = len(scores)
