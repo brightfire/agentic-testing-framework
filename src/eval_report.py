@@ -326,6 +326,18 @@ def build_variant_data(experiments):
     }
 
 
+def _logical_item_id(item_id):
+    """Strip the dataset namespace prefix from an item ID.
+
+    Item IDs are formatted as ``<dataset-name>:<item-id>``.  When a
+    dataset is renamed across variants the same logical item receives
+    different API IDs, so matching by the full ID marks every item as
+    missing.  Stripping everything before the first colon yields the
+    logical item ID that is stable across renames.
+    """
+    return item_id.split(":", 1)[1] if ":" in item_id else item_id
+
+
 def output_json(dataset_name, variant_data_list):
     """Output structured JSON comparing variants.
 
@@ -356,15 +368,26 @@ def output_json(dataset_name, variant_data_list):
         non_baseline = variant_data_list[1:]
 
         # Per-item deltas (computed first; overall deltas aggregate from these)
-        all_item_ids = set()
+        # Match items by logical ID (strip <dataset-name>: prefix) so the same
+        # logical item is matched across variants even when datasets are renamed.
+        variant_item_maps = []  # list of dict: logical_id -> actual_item_id
         for _, vd in variant_data_list:
-            all_item_ids.update(vd["items"].keys())
+            mapping = {}
+            for actual_id in vd["items"]:
+                logical = _logical_item_id(actual_id)
+                mapping[logical] = actual_id
+            variant_item_maps.append(mapping)
 
-        for item_id in sorted(all_item_ids):
-            baseline_item = baseline["items"].get(item_id)
+        all_logical_ids = set()
+        for mapping in variant_item_maps:
+            all_logical_ids.update(mapping.keys())
+
+        for logical_id in sorted(all_logical_ids):
+            baseline_actual = variant_item_maps[0].get(logical_id)
+            baseline_item = baseline["items"].get(baseline_actual) if baseline_actual else None
             if baseline_item is None:
                 # Baseline missing this item — skip delta computation
-                deltas["per_item"][item_id] = {
+                deltas["per_item"][logical_id] = {
                     "composite": None,
                     "dimensions": {},
                     "note": "baseline missing this item",
@@ -375,15 +398,28 @@ def output_json(dataset_name, variant_data_list):
             composite_sum = 0.0
             dim_sums = defaultdict(float)
             dim_counts = defaultdict(int)
-            for label, vd in non_baseline:
-                item = vd["items"].get(item_id)
+            for idx, (label, vd) in enumerate(non_baseline):
+                actual_id = variant_item_maps[idx + 1].get(logical_id)
+                item = vd["items"].get(actual_id) if actual_id else None
                 if item is None:
                     # This non-baseline variant is missing the item — null delta
                     item_delta["composite"][label] = None
                     continue
-                comp_delta = round(item["avg"] - baseline_item["avg"], 4)
+                # Compute composite delta from shared dimensions only, not
+                # overall averages which may include different dimension sets.
+                shared_dims = set(item["dimensions"].keys()) & set(baseline_item.get("dimensions", {}).keys())
+                if shared_dims:
+                    dim_deltas = [
+                        item["dimensions"][d]["avg"] - baseline_item["dimensions"][d]["avg"]
+                        for d in shared_dims
+                    ]
+                    comp_delta = round(sum(dim_deltas) / len(dim_deltas), 4)
+                else:
+                    # No shared dimensions — composite delta is not meaningful
+                    comp_delta = None
                 item_delta["composite"][label] = comp_delta
-                composite_sum += comp_delta
+                if comp_delta is not None:
+                    composite_sum += comp_delta
                 for sname, st in item["dimensions"].items():
                     if sname not in baseline_item.get("dimensions", {}):
                         # Dimension absent from baseline item — not comparable
@@ -407,7 +443,7 @@ def output_json(dataset_name, variant_data_list):
                 if dim_counts[sname] > 0:
                     item_delta["dimensions"].setdefault(sname, {})["_avg"] = round(dim_sums[sname] / dim_counts[sname], 4)
 
-            deltas["per_item"][item_id] = item_delta
+            deltas["per_item"][logical_id] = item_delta
 
         # Overall deltas: aggregated from per-item deltas of matched items only.
         # Only items present in BOTH baseline and a non-baseline variant contribute,
@@ -456,11 +492,12 @@ def output_json(dataset_name, variant_data_list):
             overall_composite_avg /= n_valid
             for sname in overall_dims_avg:
                 overall_dims_avg[sname] /= n_valid
-        # Average across non-baseline variants (for backward compatibility)
-        deltas["overall"]["composite"]["_avg"] = round(overall_composite_avg, 4)
-        for sname in overall_dims_avg:
-            # Only average dimensions that have at least one non-None delta
-            dim_vals = [v for k, v in deltas["overall"]["dimensions"].setdefault(sname, {}).items() if k != "_avg" and v is not None]
+            deltas["overall"]["composite"]["_avg"] = round(overall_composite_avg, 4)
+        else:
+            deltas["overall"]["composite"]["_avg"] = None
+        for sname in deltas["overall"]["dimensions"]:
+            # Average dimensions that have at least one non-None delta
+            dim_vals = [v for k, v in deltas["overall"]["dimensions"][sname].items() if k != "_avg" and v is not None]
             if dim_vals:
                 deltas["overall"]["dimensions"][sname]["_avg"] = round(sum(dim_vals) / len(dim_vals), 4)
             else:
@@ -577,11 +614,20 @@ def print_variant_comparison(dataset_name, variant_data_list, by_dimension=False
 
     # Per-item deltas table
     if len(variant_data_list) >= 2:
-        all_item_ids = set()
+        # Build logical-to-actual ID mapping per variant for cross-variant matching.
+        variant_item_maps = []
         for _, vd in variant_data_list:
-            all_item_ids.update(vd["items"].keys())
+            mapping = {}
+            for actual_id in vd["items"]:
+                logical = _logical_item_id(actual_id)
+                mapping[logical] = actual_id
+            variant_item_maps.append(mapping)
 
-        if all_item_ids:
+        all_logical_ids = set()
+        for mapping in variant_item_maps:
+            all_logical_ids.update(mapping.keys())
+
+        if all_logical_ids:
             baseline = variant_data_list[0][1]
             multi_variant = len(variant_data_list) >= 3
             print(f"\n  Per-Item Deltas:")
@@ -598,11 +644,12 @@ def print_variant_comparison(dataset_name, variant_data_list, by_dimension=False
             n_delta_cols = len(variant_data_list) - 1 if multi_variant else 1
             print(f"  {'-' * 30}" + (f" {'-' * 15}" * len(variant_data_list)) + (f" {'-' * 8}" * n_delta_cols) + f" {'-' * 30}")
 
-            for item_id in sorted(all_item_ids):
-                row = f"  {item_id[:30]:<30}"
+            for logical_id in sorted(all_logical_ids):
+                row = f"  {logical_id[:30]:<30}"
                 item_avgs = []  # None for missing items, float for present
-                for label, vd in variant_data_list:
-                    item = vd["items"].get(item_id)
+                for idx, (label, vd) in enumerate(variant_data_list):
+                    actual_id = variant_item_maps[idx].get(logical_id)
+                    item = vd["items"].get(actual_id) if actual_id else None
                     if item is None:
                         item_avgs.append(None)
                         row += f" {'N/A':>15}"
@@ -642,7 +689,8 @@ def print_variant_comparison(dataset_name, variant_data_list, by_dimension=False
                 # Note regressions — check each dimension independently of composite delta
                 notes = []
                 if any_reg_delta is not None and by_dimension:
-                    base_item = baseline["items"].get(item_id, {"dimensions": {}})
+                    baseline_actual = variant_item_maps[0].get(logical_id)
+                    base_item = baseline["items"].get(baseline_actual, {"dimensions": {}}) if baseline_actual else {"dimensions": {}}
                     any_reg = False
                     for sname in dim_names:
                         if sname not in base_item.get("dimensions", {}):
@@ -652,7 +700,8 @@ def print_variant_comparison(dataset_name, variant_data_list, by_dimension=False
                         if multi_variant:
                             # Check each variant's dimension delta independently
                             for i, (label, vd) in enumerate(variant_data_list[1:]):
-                                item = vd["items"].get(item_id)
+                                actual_id = variant_item_maps[i + 1].get(logical_id)
+                                item = vd["items"].get(actual_id) if actual_id else None
                                 if item is not None and sname in item.get("dimensions", {}):
                                     dim_val = item["dimensions"][sname]["avg"]
                                     if dim_val - base_dim < -threshold:
@@ -660,8 +709,9 @@ def print_variant_comparison(dataset_name, variant_data_list, by_dimension=False
                                         any_reg = True
                         else:
                             dim_vals = []
-                            for _, vd in variant_data_list[1:]:
-                                item = vd["items"].get(item_id)
+                            for i, (_, vd) in enumerate(variant_data_list[1:]):
+                                actual_id = variant_item_maps[i + 1].get(logical_id)
+                                item = vd["items"].get(actual_id) if actual_id else None
                                 if item is not None and sname in item.get("dimensions", {}):
                                     dim_vals.append(item["dimensions"][sname]["avg"])
                             if dim_vals:
