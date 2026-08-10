@@ -124,18 +124,20 @@ def fetch_trace_metadata(langfuse_host, auth_header, trace_id):
 
 
 def build_prefix_item_map(langfuse_host, auth_header, scores, prefixes):
-    """Build a mapping of prefix -> {dataset_item_id: score_count}.
+    """Build a mapping of prefix -> {dataset_item_id: {"trace_ids": set(), "score_names": set()}}.
 
     For each score, fetches trace metadata to determine which experiment
     and dataset item it belongs to, then groups by prefix.
 
-    score_count counts individual scores per item. With --repeat N and D
-    dimensions, a fully-scored item has N*D scores. The caller should
-    divide by D (or just compare total against expected_items * repeat * dims)
-    to determine readiness.
+    Instead of counting raw scores, tracks distinct trace IDs and distinct
+    score names (dimensions) per item. This prevents duplicate scores or
+    extra manual scores from inflating the count past readiness.
     """
     trace_cache = {}
-    prefix_items = {p: defaultdict(int) for p in prefixes}
+    prefix_items = {
+        p: defaultdict(lambda: {"trace_ids": set(), "score_names": set()})
+        for p in prefixes
+    }
 
     for score in scores:
         subject = score.get("subject", {})
@@ -159,23 +161,33 @@ def build_prefix_item_map(langfuse_host, auth_header, scores, prefixes):
         if not exp_name or not dataset_item_id:
             continue
 
+        score_name = score.get("name", "")
+
         for prefix in prefixes:
             if exp_name.startswith(prefix):
-                prefix_items[prefix][dataset_item_id] += 1
+                prefix_items[prefix][dataset_item_id]["trace_ids"].add(trace_id)
+                prefix_items[prefix][dataset_item_id]["score_names"].add(score_name)
                 break
 
     return prefix_items
 
 
 def build_prefix_item_map_cached(langfuse_host, auth_header, scores, prefixes, metadata_cache):
-    """Build a mapping of prefix -> {dataset_item_id: score_count} with a persistent metadata cache.
+    """Build a mapping of prefix -> {dataset_item_id: {"trace_ids": set(), "score_names": set()}} with a persistent metadata cache.
 
     Like build_prefix_item_map, but reuses trace metadata from previous polling
     iterations via metadata_cache (a dict mutated in place). Only traces not
     already in the cache trigger a metadata fetch, avoiding redundant API calls
     across polls.
+
+    Tracks distinct trace IDs and distinct score names per item instead of
+    raw score counts, preventing duplicate or extra scores from inflating
+    readiness.
     """
-    prefix_items = {p: defaultdict(int) for p in prefixes}
+    prefix_items = {
+        p: defaultdict(lambda: {"trace_ids": set(), "score_names": set()})
+        for p in prefixes
+    }
 
     for score in scores:
         subject = score.get("subject", {})
@@ -199,9 +211,12 @@ def build_prefix_item_map_cached(langfuse_host, auth_header, scores, prefixes, m
         if not exp_name or not dataset_item_id:
             continue
 
+        score_name = score.get("name", "")
+
         for prefix in prefixes:
             if exp_name.startswith(prefix):
-                prefix_items[prefix][dataset_item_id] += 1
+                prefix_items[prefix][dataset_item_id]["trace_ids"].add(trace_id)
+                prefix_items[prefix][dataset_item_id]["score_names"].add(score_name)
                 break
 
     return prefix_items
@@ -304,31 +319,41 @@ def main():
         )
 
         total_scores = len(scores)
-        # For stabilization, count only scores matching requested prefixes
-        prefix_score_count = sum(sum(prefix_items[p].values()) for p in prefixes)
+        # For stabilization, count total distinct trace-score pairs matching requested prefixes
+        prefix_score_count = sum(
+            sum(len(d["trace_ids"]) * len(d["score_names"]) for d in prefix_items[p].values())
+            for p in prefixes
+        )
 
         # Log progress
         for p in prefixes:
             n_items = len(prefix_items[p])
             if args.expected_items:
-                # Count items that have enough scores (expected_items count * scores_per_item)
+                # Count items that have enough distinct traces AND distinct dimensions
                 ready_items = sum(
-                    1 for cnt in prefix_items[p].values()
-                    if cnt >= scores_per_item
+                    1 for item_data in prefix_items[p].values()
+                    if len(item_data["trace_ids"]) >= args.repeat
+                    and len(item_data["score_names"]) >= args.dimensions
                 )
                 log(f"  {p}: {ready_items}/{args.expected_items} items fully scored ({n_items} items with some scores)")
             else:
-                log(f"  {p}: {n_items} items scored (prefix scores: {sum(prefix_items[p].values())})")
+                log(f"  {p}: {n_items} items scored (prefix scores: {sum(len(d["trace_ids"]) for d in prefix_items[p].values())})")
 
         if args.expected_items:
-            # Mode 1: wait until each prefix has enough scores for expected_items unique items.
-            # Each item needs scores_per_item scores (repeat * dimensions).
+            # Mode 1: wait until each prefix has enough distinct traces and dimensions
+            # for expected_items unique items. Each item needs at least --repeat
+            # distinct trace IDs with scores and at least --dimensions distinct
+            # score names across those traces.
             all_ready = all(
-                sum(1 for cnt in prefix_items[p].values() if cnt >= scores_per_item) >= args.expected_items
+                sum(
+                    1 for item_data in prefix_items[p].values()
+                    if len(item_data["trace_ids"]) >= args.repeat
+                    and len(item_data["score_names"]) >= args.dimensions
+                ) >= args.expected_items
                 for p in prefixes
             )
             if all_ready:
-                log("All prefixes have sufficient scores for all expected items. ✓")
+                log("All prefixes have sufficient distinct traces and dimensions for all expected items. ✓")
                 sys.exit(0)
         else:
             # Mode 2: wait until each prefix has >= 1 score AND prefix-matched count stabilized
