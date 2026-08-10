@@ -255,15 +255,15 @@ Parse the JSON output from eval_report.py. The structure contains:
 
 Based on the deltas, determine the verdict:
 
-- **Improvement:** No variant regressed significantly (delta > -threshold on any dimension or item), and at least one variant improved significantly (delta > +threshold)
-- **Regression:** Any variant regressed significantly (delta < -threshold) on composite or any dimension
-- **Neutral:** All deltas within ±threshold — no significant changes
+- **Improvement:** No variant regressed significantly (all deltas >= -threshold on every dimension or item), and at least one variant improved significantly (delta > +threshold)
+- **Regression:** Any variant regressed significantly (delta <= -threshold) on composite or any dimension
+- **Neutral:** All deltas strictly within (-threshold, +threshold) — no significant changes
 
 The default threshold is **0.5 points** (on a 0–10 scale where 10.0 is passing). Pass `--threshold <value>` to eval_report.py to adjust sensitivity. Note the threshold used in the report so the reader understands what "significant" means.
 
 #### 5. Generate improvement suggestions
 
-For each item where any dimension's delta < -threshold (default 0.5):
+For each item where any dimension's delta <= -threshold (default 0.5):
 
 1. Identify which dimension regressed
 2. Obtain the skill diff: `git diff <base-ref> <head-ref> -- <skill-path>`
