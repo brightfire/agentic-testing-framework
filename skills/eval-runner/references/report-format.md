@@ -72,17 +72,17 @@ The verdict uses a configurable threshold (default **0.5 points** on a 0–10 sc
 
 | Verdict | Criteria |
 |---------|----------|
-| **Improvement** | No variant regressed significantly (delta > -threshold on any dimension or item), AND at least one variant improved significantly (delta > +threshold) |
-| **Regression** | Any variant regressed significantly (delta < -threshold) on composite or any dimension |
-| **Neutral** | All deltas within ±threshold — no significant changes |
+| **Improvement** | No variant regressed (all deltas >= -threshold on every dimension or item), AND at least one variant improved (delta > +threshold) |
+| **Regression** | Any variant regressed (delta <= -threshold) on composite or any dimension |
+| **Neutral** | All deltas strictly within (-threshold, +threshold) — no significant changes |
 
 The skill should note the threshold used in the report so the reader understands what "significant" means.
 
 ## Improvement Suggestion Generation
 
-For each item where any dimension's delta < -threshold (default 0.5):
+For each item where any dimension's delta <= -threshold (default 0.5):
 
-1. **Identify the regressed dimension** — which `score_name` has a delta < -threshold (default 0.5)
+1. **Identify the regressed dimension** — which `score_name` has a delta <= -threshold (default 0.5)
 2. **Obtain the skill diff** — run `git diff <base-ref> <head-ref> -- <skill-path>` to see what changed between variants
 3. **Review the diff** — look for changes that could affect the regressed dimension:
    - `task_completion` regressions: look for removed steps, weakened instructions, or changes that could cause the agent to skip required actions
