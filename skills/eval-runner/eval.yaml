@@ -564,20 +564,6 @@ items:
         - "Inference: presents variant summary for confirmation"
         # Phase: Confirmation
         - "Confirmation: waits for user confirmation — does NOT proceed to pre-flight/sync/env setup"
-        # Phase: Pre-flight (add criteria after user confirms)
-        # Phase: Sync (add criteria after user confirms)
-        # Phase: Env Setup (add criteria after user confirms)
-        # Phase: Execute (add criteria after user confirms)
-        # Phase: Report
-        - "Report: polls for evaluator scores using wait_for_scores.py with all 5 variant prefixes and --since"
-        - "Report: invokes eval_report.py with --variants (all 5 prefixes, first is baseline), --by-dimension, --since, and --json"
-        - "Report: does NOT pass --threshold (no verdict computation for 3+ variants)"
-        - "Report: reports per-variant scores and dimension breakdowns for all 5 variants"
-        - "Report: does NOT generate a verdict (improvement, regression, or neutral) — 3+ variant raw score mode"
-        - "Report: does NOT compute deltas or comparison tables"
-        - "Report: does NOT generate improvement suggestions"
-        - "Report: posts results to the originating channel"
-        - "Report: cleans up suffixed skill directories after posting results"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
 
@@ -622,8 +608,7 @@ items:
       - Base branch: main
       - Files changed: skills/eval-runner/SKILL.md
 
-      Inference, confirmation, pre-flight, sync, env setup, and execute all completed successfully. Both variants (main and pr-123) ran and completed. During the Report Phase,
-      wait_for_scores.py timed out after 3 minutes (exit 1) — not all scores have arrived yet. Some scores are available for both variants, but coverage is incomplete.
+      User request: "Run the eval for this PR. The execute phase already completed but score polling timed out after 3 minutes — not all scores have arrived yet. Go ahead and generate the report with whatever scores are available so far."
     expected_output:
       behavior: |
         The agent detects the wait_for_scores.py timeout (exit 1) and proceeds to fetch whatever scores are available. It notes the timeout in the report output. It runs
@@ -650,8 +635,7 @@ items:
       - Base branch: main
       - Files changed: skills/eval-runner/SKILL.md
 
-      Inference, confirmation, pre-flight, sync, env setup, and execute all completed successfully. Both variants (main and pr-123) ran and completed. During the Report Phase,
-      wait_for_scores.py timed out (exit 1) and no scores are available for any experiment — the evaluator has not yet produced any scores.
+      User request: "Run the eval for this PR. The execute phase completed but no scores are available in Langfuse yet — the evaluator hasn't produced any scores. Generate whatever report you can with the current state."
     expected_output:
       behavior: |
         The agent detects that no scores are available for any experiment after the timeout. It reports that scoring hasn't completed yet, suggests checking the evaluator
@@ -737,8 +721,7 @@ items:
       - Base branch: main
       - Files changed: skills/eval-runner/SKILL.md
 
-      Inference, confirmation, pre-flight, sync, env setup, and execute all completed successfully. Both variants (main and pr-123) ran and completed. During the Report Phase,
-      scores are available for the main variant but not for the pr-123 variant — the evaluator has not yet produced scores for the PR-head experiments.
+      User request: "Run the eval for this PR. The execute phase completed and scores are available for the main variant, but the pr-123 variant hasn't been scored yet by the evaluator. Generate the report with whatever data is available."
     expected_output:
       behavior: |
         The agent detects that one variant (pr-123) is missing scores while the other (main) has scores. It notes which variant is missing data in the report, proceeds with
@@ -764,9 +747,7 @@ items:
       - Base branch: main
       - Files changed: skills/eval-runner/SKILL.md
 
-      Inference, confirmation, pre-flight, sync, env setup, and execute all completed successfully. Both variants (main and pr-123) ran and completed. During the Report Phase,
-      wait_for_scores.py completed successfully (exit 0) — scores are available. However, eval_report.py exited with code 1 and printed an error to stderr:
-      "ValueError: No matching experiments found for prefix 'eval-runner__openrouter-@preset-conversation-default__pr-123__e5f6g7h__all'".
+      User request: "Run the eval for this PR. The execute phase completed and scores are available, but eval_report.py crashed with an error: 'ValueError: No matching experiments found for prefix eval-runner__openrouter-@preset-conversation-default__pr-123__e5f6g7h__all'. Report the error to the PR."
     expected_output:
       behavior: |
         The agent detects that eval_report.py exited non-zero. It reports the error from stderr to the originating channel. It does NOT attempt to produce a verdict or
