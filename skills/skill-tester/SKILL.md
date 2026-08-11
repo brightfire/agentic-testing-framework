@@ -13,16 +13,16 @@ metadata:
 Determine what to test from the request. Three dimensions:
 
 **Skill versions** (what skill code to test):
-- **PR referenced, no explicit skill specs** → default to skill A/B: base branch (e.g., `main@<base-hash>`) + PR head (e.g., `<pr-branch>@<head-hash>`). The variant label is `main`
-  (base branch name) for the base and `pr-<number>` (e.g., `pr-123`) for the PR head.
-- **Branch named, no PR referenced** → default to skill A/B: base branch (e.g., `main@<base-hash>`) + named branch (e.g., `<branch>@<head-hash>`). The variant label is the base branch name (e.g., `main`) for the base and the normalized branch name for the named branch (slashes replaced with hyphens, e.g., `claw-vash-fix-xyz`).
+- **PR referenced, no explicit skill specs** → default to two variants: variant A = base ref (e.g., `main@<base-hash>`) and variant B = PR head ref (e.g., `<pr-branch>@<head-hash>`). The variant label is `main`
+  (base ref name) for variant A and `pr-<number>` (e.g., `pr-123`) for variant B.
+- **Branch named, no PR referenced** → default to two variants: variant A = base ref (e.g., `main@<base-hash>`) and variant B = named branch ref (e.g., `<branch>@<head-hash>`). The variant label is the base ref name (e.g., `main`) for variant A and the normalized branch name for variant B (slashes replaced with hyphens, e.g., `claw-vash-fix-xyz`).
 - **Request names specific commits** → use those commits as skill variants. The variant label is the commit hash.
 - **Request says "just the PR version" or similar** → single skill variant: `<pr-branch>@<hash>`. The variant label is `pr-<number>` (e.g., `pr-123`).
 - **Explicit skill variant specs provided** → use them. The variant label is the branch name or commit hash provided.
 - **Request asks for "past N commits" on a branch** → resolve the branch, list the last N commit hashes via `git rev-list --max-count=N <branch>`, and create N skill variants — one per commit. The variant label for each is the short commit hash (7 chars).
 
 **Models** (what models to run each skill variant against):
-- **Request mentions model comparison, or names a specific model** → model A/B dimension added. Naming a single specific model (e.g., "test against claude-sonnet-4-6") implies an A/B comparison with the agent default as model A and the named model as model B.
+- **Request mentions model comparison, or names a specific model** → model comparison dimension added. Naming a single specific model (e.g., "test against claude-sonnet-4-6") implies a comparison with the agent default as the first model and the named model as the second.
 - **No model mention** → single model (whatever the agent default is)
 
 **Dataset items** (which eval cases to run):
@@ -62,7 +62,7 @@ After ref resolution, run `recency_check.py` for each (skill variant × model) c
 
 ⚠️ This is a mandatory stop point. Do NOT proceed to pre-flight, sync, env setup, or execute until the user explicitly confirms. No exceptions.
 
-**Skip:** If the user's request asks to skip confirmation (e.g., "skip confirmation"), still present the confirmation summary (variant matrix, models, items, baseline status) but do not wait for a reply — proceed directly to pre-flight after outputting it.
+**Skip:** If the user's request asks to skip confirmation (e.g., "skip confirmation"), still present the confirmation summary (variant matrix, models, items, recency status) but do not wait for a reply — proceed directly to pre-flight after outputting it.
 
 After inference and the recency check, present a confirmation dialog using this exact format and **STOP**. Wait for the user's reply. (Unless skipped — see above.)
 
@@ -196,7 +196,7 @@ The harness appends ` - <timestamp>` (and ` - <run_idx>/<total>` for repeats) at
 
 The attestation prefix tells the agent which skill to read and requires it to confirm the skill at the end of its response. Format: `Read the <suffixed-skill-name> skill from available_skills. You must state which skill you read at the end of your response, after completing the task. You are being evaluated on your ability to adhere to instructions. If you do not confirm which skill you read, your response will receive a score of zero regardless of quality. Do not spawn subagents or yield — complete all work inline in this single response. Then, ` — pass this verbatim as `--prompt-prefix` in step 3.
 
-For model A/B tests (Slack-triggered, single skill variant), the same suffixed skill name is used for both model runs — only `--model` differs.
+For model comparison tests (Slack-triggered, single skill variant), the same suffixed skill name is used for both model runs — only `--model` differs.
 
 #### 3. Invoke the harness
 
@@ -281,13 +281,13 @@ On timeout (exit 1): proceed to fetch scores anyway; note the timeout in the rep
 
 Count the experiment prefixes (variants). The report mode depends on the count:
 
-**2 variants — comparison report:** Invoke `eval_report.py` with `--variants` (baseline prefix first, head prefix second), `--dataset`, `--by-dimension`, `--threshold 0.5`, `--since` (execute phase start ISO timestamp; earlier or omitted for recency-pruned variants), and `--json`. Include both executed and recency-pruned variants — pruned variant prefixes come from the Recency Check output. Proceed to steps 3–5 (parse, verdict, improvements).
+**2 variants — comparison report:** Invoke `eval_report.py` with `--variants` (first variant prefix, then second variant prefix), `--dataset`, `--by-dimension`, `--threshold 0.5`, `--since` (execute phase start ISO timestamp; earlier or omitted for recency-pruned variants), and `--json`. Include both executed and recency-pruned variants — pruned variant prefixes come from the Recency Check output. Proceed to steps 3–5 (parse, verdict, improvements).
 
 **1 variant — standalone report:** Invoke `eval_report.py` with `--prefix`, `--dataset`, `--by-dimension`, `--per-item`, `--since`, and `--json`. Report per-item scores and dimension breakdowns. Skip verdict and improvement steps.
 
-**3+ variants — raw score report:** Invoke `eval_report.py` with `--variants` (all prefixes, first is baseline), `--dataset`, `--by-dimension`, `--since`, and `--json`. Report per-variant scores and breakdowns. Skip verdict and improvement steps — the user reviews the raw data to draw conclusions.
+**3+ variants — raw score report:** Invoke `eval_report.py` with `--variants` (all prefixes, first is variant A), `--dataset`, `--by-dimension`, `--since`, and `--json`. Report per-variant scores and breakdowns. Skip verdict and improvement steps — the user reviews the raw data to draw conclusions.
 
-For all modes: if execute start time is unavailable, use a timestamp a few minutes before the earliest experiment run. First prefix is baseline in `--variants` mode. `--json` for structured output.
+For all modes: if execute start time is unavailable, use a timestamp a few minutes before the earliest experiment run. First prefix is variant A in `--variants` mode. `--json` for structured output.
 
 See [`references/report-format.md`](references/report-format.md) for the JSON output schema.
 
