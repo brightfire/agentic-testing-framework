@@ -134,8 +134,9 @@ class EvalFile(BaseModel):
 
     ``timeout_per_run`` is optional (default 600s). It is not synced to
     Langfuse — it is read directly from eval.yaml by the eval-runner skill
-    during the Execute phase to compute the exec timeout for the harness
-    process: ``exec_timeout = timeout_per_run * repeat * num_variants``.
+    during the Execute phase to compute the per-invocation exec timeout for
+    the harness process: ``exec_timeout = timeout_per_run * repeat + 120``.
+    Variants run sequentially in separate exec calls, each with its own timeout.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -144,10 +145,12 @@ class EvalFile(BaseModel):
     description: str = Field(description="Human-readable description of the dataset")
     timeout_per_run: int = Field(
         default=600,
+        gt=0,
         description="Estimated wall-clock seconds to run all eval items "
             "sequentially. The eval-runner skill multiplies this by the repeat "
-            "count and number of variants to derive the exec timeout for the "
-            "harness process. Default 600 (10 minutes).",
+            "count to derive the per-invocation exec timeout for the "
+            "harness process: exec_timeout = timeout_per_run * repeat + 120. "
+            "Default 600 (10 minutes). Must be a positive integer.",
     )
     items: list[EvalItem] = Field(description="List of eval test cases")
 

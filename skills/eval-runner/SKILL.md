@@ -200,11 +200,13 @@ Source langfuse.env, then invoke `eval_harness.py` for each (skill variant × mo
 
 **Computing the exec timeout:**
 
-Read `timeout_per_run` from eval.yaml (default 600s). Compute:
+Read `timeout_per_run` from eval.yaml (default 600s). Compute per invocation:
 
 ```
-exec_timeout = timeout_per_run * repeat * num_variants + 120
+exec_timeout = timeout_per_run * repeat + 120
 ```
+
+Variants run sequentially in separate exec calls, each with its own timeout. Do not multiply by the number of variants — each exec call runs ONE variant.
 
 **Harness directory:**
 
@@ -213,9 +215,12 @@ exec_timeout = timeout_per_run * repeat * num_variants + 120
 When the skill being evaluated lives in the agentic-testing-framework repo, run the harness from a worktree of the variant ref:
 
 ```
-git worktree add <atf-dir>-worktrees/eval-<short-hash> <variant-ref>
-<harness-dir>=<atf-dir>-worktrees/eval-<short-hash>
+worktree_dir=<atf-dir>-worktrees/eval-<short-hash>-$(openssl rand -hex 3)
+git worktree add "$worktree_dir" <variant-ref>
+<harness-dir>="$worktree_dir"
 ```
+
+Note: track the exact `$worktree_dir` path for cleanup — it includes a random suffix to avoid collisions when two concurrent evals use the same commit.
 
 For all other repos, use the standard checkout:
 
@@ -223,13 +228,13 @@ For all other repos, use the standard checkout:
 <harness-dir>=<atf-dir>
 ```
 
-Clean up the worktree after the eval completes: `git worktree remove --force <atf-dir>-worktrees/eval-<short-hash>`
+Clean up the worktree after the eval completes: `git worktree remove --force "$worktree_dir"`
 
 Start the harness in the background, then poll until it completes:
 
 ```
 exec(
-  command="cd <harness-dir> && source ~/.openclaw/secrets/langfuse.env && source .venv/bin/activate && python src/eval_harness.py --manifest <path> --run-name '<name>' --prompt-prefix '<prefix>' --repeat <N> --item-concurrency 3 --experiment-concurrency 2 [--model <model>]",
+  command="cd <harness-dir> && source ~/.openclaw/secrets/langfuse.env && source <atf-dir>/.venv/bin/activate && python src/eval_harness.py --manifest <path> --run-name '<name>' --prompt-prefix '<prefix>' --repeat <N> --item-concurrency 3 --experiment-concurrency 2 [--model <model>]",
   background=true,
   timeout=<exec_timeout>
 )
