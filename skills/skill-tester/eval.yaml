@@ -40,25 +40,26 @@ items:
     input: |
       Branch context:
       - Repo: brightfire/gpt-skills
-      - Branch: claw/vash/linear-create-model-comparison
+      - Branch: main
       - Base branch: main
 
       User request: "Run tests for this skill against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6."
     expected_output:
       behavior: |
-        Runs variant inference with the model dimension added, resolves refs, runs the recency check, and presents a
-        confirmation summary showing the full 2×2 matrix (2 skill variants × 2 models = 4 runs). It stops at the confirmation gate — no further phases run.
+        Runs variant inference with the model dimension added — single skill variant (main) tested against two models.
+        Resolves refs, runs the recency check, and presents a confirmation summary showing 1 skill variant × 2 models = 2 runs.
+        It stops at the confirmation gate — no further phases run.
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Variant Inference
-        - "Inference: identifies skill A/B — main (before) vs branch (after)"
+        - "Inference: identifies single skill variant — main@c8269935 (no A/B, branch is main)"
         - "Inference: identifies two models — glm-5.2 and claude-sonnet-4-6"
-        - "Inference: recognizes the full matrix is 2 skill variants × 2 models = 4 runs"
+        - "Inference: recognizes the full matrix is 1 skill variant × 2 models = 2 runs"
         - "Inference: selects all dataset items — happy-path, tab-character-url-breakage, missing-info-detection"
-        - "Ref Resolution: resolves main ref to c8269935 and branch head ref to commit hash"
-        - "Recency: runs baseline recency check against Langfuse"
+        - "Ref Resolution: resolves main ref to c8269935"
+        - "Recency: runs recency check against Langfuse for both models"
         # Phase: Confirmation
-        - "Confirmation: presents summary showing skill variants, model dimension, total run count (4), and baseline status"
+        - "Confirmation: presents summary showing model dimension, total run count (2), and baseline status"
         - "Confirmation: waits for user confirmation — does not proceed to any further phase"
         - "Confirmation: does not run pre-flight, sync, or env setup"
       scoring_rules: |
@@ -68,26 +69,27 @@ items:
     input: |
       Branch context:
       - Repo: brightfire/gpt-skills
-      - Branch: claw/vash/linear-create-model-comparison
+      - Branch: main
       - Base branch: main
 
       User request: "Run tests for this skill against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6."
     expected_output:
       behavior: |
-        Runs variant inference with the model dimension, resolves refs, and runs the recency check. If prior baseline
-        experiments exist for both models, it skips the baseline variant for both and presents a summary showing only the after variant: 1 skill variant ×
-        2 models = 2 runs. If no prior baseline experiments exist, it includes the baseline variant for both and presents the full 2×2 matrix = 4 runs.
-        It stops at the confirmation gate.
+        Runs variant inference with the model dimension — single skill variant (main) tested against two models.
+        Resolves refs, runs the recency check for both models. If prior experiments exist for a model, that model is pruned
+        and the run count is reduced. If no prior experiments exist, both models are included. The total run count is
+        2 (or fewer if recency prunes some). It stops at the confirmation gate.
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Variant Inference
+        - "Inference: identifies single skill variant — main@c8269935"
         - "Inference: identifies two models — glm-5.2 and claude-sonnet-4-6"
-        - "Ref Resolution: resolves main ref to c8269935 and branch head ref to commit hash"
-        - "Recency: runs baseline recency check against Langfuse for both models"
-        - "Recency: if prior baseline experiments exist — skips baseline variant, recognizes reduced matrix is 1 skill variant × 2 models = 2 runs"
-        - "Recency: if no prior baseline experiments exist — includes baseline variant, full matrix is 2 skill variants × 2 models = 4 runs"
+        - "Ref Resolution: resolves main ref to c8269935"
+        - "Recency: runs recency check against Langfuse for both models"
+        - "Recency: if prior experiments exist for a model — prunes it, reduces run count accordingly"
+        - "Recency: if no prior experiments exist for a model — includes it"
         # Phase: Confirmation
-        - "Confirmation: presents summary reflecting actual recency results (2 or 4 runs)"
+        - "Confirmation: presents summary reflecting actual recency results"
         - "Confirmation: notes baseline status correctly based on recency check results"
         - "Confirmation: waits for user confirmation — does not proceed to any further phase"
       scoring_rules: |
@@ -97,27 +99,27 @@ items:
     input: |
       Branch context:
       - Repo: brightfire/gpt-skills
-      - Branch: claw/vash/linear-create-model-comparison
+      - Branch: main
       - Base branch: main
 
       User request: "Run tests for this skill against glm-5.2 and claude-sonnet-4-6."
     expected_output:
       behavior: |
-        Runs variant inference with the model dimension, resolves refs, and runs the recency check. If no prior
-        baseline experiments exist for either model, the baseline variant is included for both. The confirmation summary shows the full 2×2 matrix: 2 skill
-        variants × 2 models = 4 runs, with baseline status "no prior baseline". If prior baseline experiments do exist, the agent correctly skips them.
-        It stops at the confirmation gate.
+        Runs variant inference with the model dimension — single skill variant (main) tested against two models.
+        Resolves refs, runs the recency check. If no prior experiments exist for either model, both are included:
+        1 skill variant × 2 models = 2 runs. If prior experiments exist for some models, those are pruned and the
+        run count is reduced accordingly. It stops at the confirmation gate.
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Variant Inference
+        - "Inference: identifies single skill variant — main@c8269935"
         - "Inference: identifies two models — glm-5.2 and claude-sonnet-4-6"
-        - "Ref Resolution: resolves main ref to c8269935 and branch head ref to commit hash"
-        - "Recency: runs baseline recency check — correctly handles whether or not prior experiments exist"
-        - "Recency: if no prior experiments — includes baseline variant for both models, recognizes full matrix is 4 runs"
-        - "Recency: if prior experiments exist — skips baseline variant, recognizes reduced matrix"
+        - "Ref Resolution: resolves main ref to c8269935"
+        - "Recency: runs recency check — correctly handles whether or not prior experiments exist"
+        - "Recency: if no prior experiments — includes both models, total run count is 2"
+        - "Recency: if prior experiments exist — prunes those models, reduces run count"
         # Phase: Confirmation
-        - "Confirmation: presents summary showing correct variant matrix based on recency results"
-        - "Confirmation: shows correct total run count (2 or 4)"
+        - "Confirmation: presents summary showing correct run count based on recency results"
         - "Confirmation: notes baseline status correctly"
         - "Confirmation: waits for user confirmation — does not proceed to any further phase"
       scoring_rules: |
