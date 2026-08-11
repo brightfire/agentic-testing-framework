@@ -270,7 +270,7 @@ items:
         # Phase: Execute
         - "Execute: constructs base experiment name following the <dataset>__<model>__<variant-label>__<git-hash>__<item-scope> convention"
         - "Execute: constructs attestation prefix directing agent to the suffixed skill name from env setup"
-        - "Execute: invokes eval_harness.py for each variant with --run-name, --prompt-prefix, --manifest"
+        - "Execute: invokes eval_harness.py for each variant with --run-name, --prompt-prefix, --manifest, --repeat 3"
         - "Execute: passes the manifest from the sync phase to pin dataset version"
         - "Execute: runs variants sequentially (not concurrently) by default"
         - "Execute: captures completion status and per-item failures from harness output"
@@ -310,6 +310,7 @@ items:
         - "Ref Resolution: always runs for branch refs — re-fetches and re-pins commit hashes even though this is a rerun"
         - "Ref Resolution: uses PR API fallback for the deleted PR branch to resolve the head SHA"
         - "Recency: runs the recency check against resolved hashes and finds nothing has changed (same commit hash)"
+        - "Recency: finds existing experiments from prior runs and prunes them — does NOT re-run existing experiments"
         - "Confirmation: indicates no changes since prior run and asks user to confirm forced re-run"
         - "Confirmation: user confirms — agent proceeds to pre-flight"
         # Phase: Pre-flight
@@ -323,7 +324,7 @@ items:
         - "Env setup: copies all files and rewrites name: field"
         # Phase: Execute
         - "Execute: constructs experiment names for all variants in the forced re-run"
-        - "Execute: invokes eval_harness.py with --repeat if repeat count > 1"
+        - "Execute: invokes eval_harness.py with --repeat 3 (reduced from default 10 — testing orchestration, not skill quality)"
         - "Execute: captures experiment run names and completion status"
         - "Execute: silent on success — results passed to report phase"
         # Phase: Report
@@ -399,6 +400,7 @@ items:
         - "Execute: detects harness crash from non-zero exit code"
         - "Execute: reports failure to originating channel immediately (does not wait for report phase)"
         - "Execute: error notification includes variant label, error message, and experiment name"
+        - "Execute: invokes harness with --repeat 3 (reduced from default 10 — testing orchestration, not skill quality)"
         - "Execute: continues with remaining variant rather than aborting entirely"
         - "Execute: does not treat a single variant failure as a reason to skip remaining variants"
       scoring_rules: |
@@ -426,6 +428,7 @@ items:
       scoring_criteria:
         - "Execute: recognizes all-items-failed as an execution failure (not partial failure)"
         - "Execute: reports immediately to originating channel (does not wait for report phase)"
+        - "Execute: invokes harness with --repeat 3 (reduced from default 10 — testing orchestration, not skill quality)"
         - "Execute: error notification includes total failure count and affected variants"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
@@ -453,6 +456,7 @@ items:
         - "Execute: recognizes partial failures (some items failed, harness exit 0) as NOT an immediate error"
         - "Execute: captures per-item failures in the structured output"
         - "Execute: does NOT send an immediate error notification to the originating channel"
+        - "Execute: invokes harness with --repeat 3 (reduced from default 10 — testing orchestration, not skill quality)"
         - "Execute: passes failure details to the report phase"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
@@ -470,7 +474,7 @@ items:
         timestamp (T1 from sync). The agent constructs two experiment names with different model-id segments but the same variant-label and git-hash.
       scoring_type: pass_fail
       scoring_criteria:
-        - "Execute: invokes harness twice — once per model"
+        - "Execute: invokes harness twice — once per model, both with --repeat 3 (reduced from default 10 — testing orchestration, not skill quality)"
         - "Execute: both invocations use the same suffixed skill name (skill unchanged)"
         - "Execute: --model flag differs between invocations"
         - "Execute: experiment names differ only in the model-id segment"
@@ -838,37 +842,3 @@ items:
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
 
-  # ─── Recency check ─────────────────────────────────────────────────
-
-  - id: recency-check-existing-experiments
-    input: |
-      PR context:
-      - Repo: brightfire/gpt-skills
-      - PR branch: claw/vash/add-eval-yaml-linear-create
-      - PR number: 417
-      - Base branch: main
-      - Files changed: linear-create/eval.yaml
-
-      Prior runs: A previous eval was already completed for PR #417. Both the main and pr-417 variants have 10 completed experiment runs in Langfuse for the linear-create dataset,
-      created 1 day ago. All runs completed successfully.
-
-      User request: "Run the eval for this PR."
-    expected_output:
-      behavior: |
-        The agent runs variant inference (skill A/B: main vs PR head). It resolves refs (using branch-deletion fallback for the deleted PR branch, resolving the head SHA via
-        the PR API). It runs the recency check for both variants and finds that both main and pr-417 already have 10 completed runs (meeting the default repeat count).
-        The agent prunes both variants from the run matrix — no new runs are needed. The confirmation summary shows all variants as "already tested, skipping" and asks the
-        user to confirm a forced re-run. The agent does NOT proceed to sync, env setup, or execute without a forced re-run confirmation.
-      scoring_type: pass_fail
-      scoring_criteria:
-        - "Ref Resolution: uses branch-deletion fallback to resolve the deleted PR branch (PR API → head SHA)"
-        - "Recency: runs recency check for both main and pr-417 variants"
-        - "Recency: finds 10 existing runs for the main variant — meets the default repeat count"
-        - "Recency: finds 10 existing runs for the pr-417 variant — meets the default repeat count"
-        - "Recency: prunes both variants from the run matrix — no new runs needed"
-        - "Recency: does NOT re-run existing experiments"
-        - "Confirmation: presents summary showing all variants as 'already tested, skipping'"
-        - "Confirmation: asks user to confirm a forced re-run (does not proceed without confirmation)"
-        - "Confirmation: does NOT proceed to sync, env setup, or execute without forced re-run confirmation"
-      scoring_rules: |
-        Score 10 * (passed criteria / total criteria).
