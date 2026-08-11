@@ -39,16 +39,5 @@ python src/dataset_sync.py --file <path-to-eval.yaml> [options]
 | 0 | Success (manifest file path printed to stdout) |
 | 1 | Failure (missing env vars, file not found, YAML parse error, or item operation failures) |
 
-## eval.yaml Schema
-
-The eval.yaml is validated by `src/schema.py` (Pydantic v2). Top-level fields:
-
-| Field | Required | Default | Description |
-|-------|----------|---------|-------------|
-| `dataset` | Yes | — | Langfuse dataset name. Must not contain `:`. |
-| `description` | Yes | — | Human-readable description of the dataset. |
-| `timeout_per_run` | No | `600` (10 min) | Estimated wall-clock seconds for a single experiment run (all items, repeat=1, concurrency=1). The eval-runner skill uses this to compute the exec timeout: `timeout_per_run * repeat * num_variants + 120`. Not synced to Langfuse — read directly from eval.yaml by the skill. |
-| `items` | Yes | — | List of eval test cases (see `EvalItem` in schema.py). |
-
 
 

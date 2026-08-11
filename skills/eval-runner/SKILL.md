@@ -318,7 +318,8 @@ After the Report Phase posts results, remove the suffixed directories created du
 
 ## References
 
-- [`references/dataset_sync_interface.md`](references/dataset_sync_interface.md) — CLI interface for `dataset_sync.py`: arguments, env vars, output format, exit codes, eval.yaml schema.
+- [`references/dataset_sync_interface.md`](references/dataset_sync_interface.md) — CLI interface for `dataset_sync.py`: arguments, env vars, output format, exit codes.
 - [`references/execute-failure-handling.md`](references/execute-failure-handling.md) — Execute phase error handling: immediate notifications, partial failures, multi-variant abort rules.
 - [`references/gotchas.md`](references/gotchas.md) — Error-prevention notes for Sync and Environment Setup phases.
 - [`references/report-format.md`](references/report-format.md) — Report Phase output format, JSON schema, verdict criteria, and improvement suggestion guidance.
+- `src/schema.py` — eval.yaml schema (Pydantic v2 models). Top-level fields: `dataset` (required), `description` (required), `timeout_per_run` (optional, default 600s), `items` (required).
