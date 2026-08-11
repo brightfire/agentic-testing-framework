@@ -210,10 +210,10 @@ exec_timeout = timeout_per_run * repeat * num_variants + 120
 
 `<atf-dir>` is the local agentic-testing-framework repo path. Resolve it at runtime — do not assume a fixed location.
 
-When the PR is against the agentic-testing-framework repo itself, the harness code (`eval_harness.py`, `schema.py`, etc.) may have changed in the PR. Run the harness from a worktree of the PR ref so the harness code matches what's being tested:
+When the skill being evaluated lives in the agentic-testing-framework repo, the harness code (`eval_harness.py`, `schema.py`, etc.) may have changed in the variant. Run the harness from a worktree of the variant ref so the harness code matches what's being tested:
 
 ```
-git worktree add <atf-dir>-worktrees/eval-<short-hash> <pr-ref>
+git worktree add <atf-dir>-worktrees/eval-<short-hash> <variant-ref>
 <harness-dir>=<atf-dir>-worktrees/eval-<short-hash>
 ```
 
