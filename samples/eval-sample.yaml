@@ -1,5 +1,7 @@
 dataset: linear-create-sample-sync
 description: "Sample eval dataset for testing linear-create skill — bug classification, project matching, and missing-info detection."
+# Optional: estimated wall-clock seconds for a single experiment run (all items, repeat=1, concurrency=1). Default: 600 (10 minutes). Must be a positive integer.
+timeout_per_run: 900  # 15 min — this dataset has 3 items with multi-criteria scoring
 
 items:
   - id: happy-path

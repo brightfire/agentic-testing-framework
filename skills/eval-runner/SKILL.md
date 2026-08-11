@@ -3,7 +3,7 @@ name: eval-runner
 description: "Use when evaluating a skill or running tests for a skill — syncs eval definitions to Langfuse, prepares the eval environment, and orchestrates variant runs. SKIP for skill creation, editing, or auditing requests — use the skill-creator or skill-reviewer skills instead."
 metadata:
   author: brightfire
-  version: "2.4"
+  version: "2.5"
 ---
 
 # Eval Runner
@@ -178,8 +178,6 @@ See [`references/gotchas.md`](references/gotchas.md) for Environment Setup error
 
 ## Execute Phase
 
-**Monitoring**: The harness run is long-running. After invoking it, actively monitor to completion and report results without waiting for the user to ask. Use `process(action=poll, timeout=30000)` to check periodically, or set `yieldMs` high enough to catch completion in a single call. Never background the harness and go silent — the agent that started the run is responsible for bringing results back.
-
 **Inputs:** Manifests (sync phase output), suffixed skill names (env setup output), run matrix (recency check output), repeat count (default 10).
 
 ### Procedure
@@ -199,6 +197,50 @@ For model A/B tests (Slack-triggered, single skill variant), the same suffixed s
 #### 3. Invoke the harness
 
 Source langfuse.env, then invoke `eval_harness.py` for each (skill variant × model) combination with: `--manifest` (path from sync phase), `--run-name` (base experiment name without timestamp/repeat suffixes), `--prompt-prefix` (the attestation prefix from step 2), `--model` (omit for agent default), `--repeat` (always pass; default 10; subtract recency-found runs), `--item-concurrency 3` (max 6 concurrent subprocesses), and `--experiment-concurrency 2`. Variants run sequentially — one completes before the next begins.
+
+**Computing the exec timeout:**
+
+Read `timeout_per_run` from eval.yaml (default 600s). Compute per invocation:
+
+```
+exec_timeout = timeout_per_run * repeat + 120
+```
+
+Variants run sequentially in separate exec calls, each with its own timeout. Do not multiply by the number of variants — each exec call runs ONE variant.
+
+**Harness directory:**
+
+`<atf-dir>` is the local agentic-testing-framework repo path. Resolve it at runtime — do not assume a fixed location.
+
+When the skill being evaluated lives in the agentic-testing-framework repo, run the harness from a worktree of the variant ref:
+
+```
+worktree_dir=<atf-dir>-worktrees/eval-<short-hash>-$(openssl rand -hex 3)
+git worktree add "$worktree_dir" <variant-ref>
+<harness-dir>="$worktree_dir"
+```
+
+Note: track the exact `$worktree_dir` path for cleanup — it includes a random suffix to avoid collisions when two concurrent evals use the same commit.
+
+For all other repos, use the standard checkout:
+
+```
+<harness-dir>=<atf-dir>
+```
+
+Clean up the worktree after the eval completes: `git worktree remove --force "$worktree_dir"`
+
+Start the harness in the background, then poll until it completes:
+
+```
+exec(
+  command="cd <harness-dir> && source ~/.openclaw/secrets/langfuse.env && source <atf-dir>/.venv/bin/activate && python src/eval_harness.py --manifest <path> --run-name '<name>' --prompt-prefix '<prefix>' --repeat <N> --item-concurrency 3 --experiment-concurrency 2 [--model <model>]",
+  background=true,
+  timeout=<exec_timeout>
+)
+```
+
+Then monitor with `process(action=poll, timeout=30000)` every 30s until the process exits.
 
 
 #### 4. Monitor and capture results
@@ -294,11 +336,14 @@ Results posted to originating channel. No data passed to a next phase.
 
 ## Cleanup
 
-After the Report Phase posts results, remove the suffixed directories created during Environment Setup. Track which directories were created and `trash` only those — do not remove directories from other concurrent runs. If the run aborts after env setup, cleanup should still run. Also clean up `$WORK_DIR` if it was preserved for the execute phase.
+- `trash` the suffixed directories created during Environment Setup (only those — do not remove directories from other concurrent runs)
+- If `$WORK_DIR` was preserved for the execute phase, clean it up
+- If a worktree was created for an ATF self-eval: `git worktree remove --force "$worktree_dir"`
 
 ## References
 
-- [`references/dataset_sync_interface.md`](references/dataset_sync_interface.md) — CLI interface for `dataset_sync.py`: arguments, env vars, output format, exit codes, eval.yaml schema.
+- [`references/dataset_sync_interface.md`](references/dataset_sync_interface.md) — CLI interface for `dataset_sync.py`: arguments, env vars, output format, exit codes.
 - [`references/execute-failure-handling.md`](references/execute-failure-handling.md) — Execute phase error handling: immediate notifications, partial failures, multi-variant abort rules.
 - [`references/gotchas.md`](references/gotchas.md) — Error-prevention notes for Sync and Environment Setup phases.
 - [`references/report-format.md`](references/report-format.md) — Report Phase output format, JSON schema, verdict criteria, and improvement suggestion guidance.
+- [`src/schema.py`](../../src/schema.py) — eval.yaml schema (Pydantic v2 models).
