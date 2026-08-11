@@ -238,29 +238,25 @@ items:
       - Base branch: main
       - Files changed: linear-create/eval.yaml
 
-      User request: "Run tests for this skill. Skip confirmation and run each test once"
+      User request: "Run tests for this skill. Skip confirmation and run each test once. Output the confirmation summary and final report as your response text — do not post them as a comment on the PR."
     expected_output:
       behavior: |
-        The agent runs the full pipeline: inference, confirmation, pre-flight, sync, env setup, execute, and report. During the execute phase, if some items
-        fail but the harness completes (exit 0), the agent recognizes this as a partial failure — not an immediate error condition. It captures the per-item
-        failures as part of the execute phase output and passes them to the report phase. It does not send an immediate error notification — the report phase
-        handles per-item failure analysis.
+        The agent presents a confirmation summary (variant matrix, models, items), then proceeds directly to pre-flight without waiting for a reply.
+        The full pipeline runs: pre-flight, sync, env setup, execute, and report. During the execute phase, if some items fail but the harness completes
+        (exit 0), the agent recognizes this as a partial failure — not an immediate error condition. The report phase handles per-item failure analysis.
       scoring_type: pass_fail
       scoring_criteria:
-        - "Inference: identifies skill A/B — main@bbbbbbb vs pr-101@aaaaaaa"
-        - "Ref Resolution: resolves main to bbbbbbb and PR head to aaaaaaa (via PR API fallback)"
-        - "Confirmation: skips confirmation (skip confirmation requested in input) and proceeds to pre-flight"
-        - "Pre-flight: fetches and scans skill for self-references"
-        - "Sync: runs dataset_sync.py with --output-manifest"
-        - "Env setup: creates suffixed skill directories for both variants"
-        - "Execute: invokes eval_harness.py with --repeat 1 for each variant"
-        - "Execute: if partial failures occur (some items fail, harness exit 0) — recognizes as NOT an immediate error"
-        - "Execute: captures per-item failures in structured output"
-        - "Execute: does NOT send immediate error notification for partial failures"
-        - "Execute: passes failure details to the report phase"
-        - "Report: runs eval_report.py with available scores"
-        - "Report: posts results to the originating channel"
-        - "Cleanup: removes suffixed skill directories"
+        # Confirmation format (from SKILL.md template)
+        - "Confirmation: includes '## Eval Run Summary' heading"
+        - "Confirmation: includes Skill, Eval YAML, and Request fields"
+        - "Confirmation: includes Skill Variants table with variant labels and git refs"
+        - "Confirmation: includes Run Matrix with model, variant, status, and total runs"
+        - "Confirmation: proceeds directly to pre-flight without waiting for a reply (skip confirmation)"
+        # Report format (comparison report template — 2 variants)
+        - "Report: includes '## Eval Results' heading with skill and dataset names"
+        - "Report: includes Variants table with composite scores per variant"
+        - "Report: includes Per-Item Deltas table"
+        - "Report: includes Verdict (Improvement, Regression, or Neutral)"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
 
