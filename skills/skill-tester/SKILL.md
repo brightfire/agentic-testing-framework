@@ -13,16 +13,16 @@ metadata:
 Determine what to test from the request. Three dimensions:
 
 **Skill versions** (what skill code to test):
-- **PR referenced, no explicit skill specs** → default to skill A/B: base branch (e.g., `main@<base-hash>`) + PR head (e.g., `<pr-branch>@<head-hash>`). The variant label is `main`
-  (base branch name) for the base and `pr-<number>` (e.g., `pr-123`) for the PR head.
-- **Branch named, no PR referenced** → default to skill A/B: base branch (e.g., `main@<base-hash>`) + named branch (e.g., `<branch>@<head-hash>`). The variant label is the base branch name (e.g., `main`) for the base and the normalized branch name for the named branch (slashes replaced with hyphens, e.g., `claw-vash-fix-xyz`).
+- **PR referenced, no explicit skill specs** → default to two variants: variant A = base ref (e.g., `main@<base-hash>`) and variant B = PR head ref (e.g., `<pr-branch>@<head-hash>`). The variant label is `main`
+  (base ref name) for variant A and `pr-<number>` (e.g., `pr-123`) for variant B.
+- **Branch named, no PR referenced** → default to two variants: variant A = base ref (e.g., `main@<base-hash>`) and variant B = named branch ref (e.g., `<branch>@<head-hash>`). The variant label is the base ref name (e.g., `main`) for variant A and the normalized branch name for variant B (slashes replaced with hyphens, e.g., `claw-vash-fix-xyz`).
 - **Request names specific commits** → use those commits as skill variants. The variant label is the commit hash.
 - **Request says "just the PR version" or similar** → single skill variant: `<pr-branch>@<hash>`. The variant label is `pr-<number>` (e.g., `pr-123`).
 - **Explicit skill variant specs provided** → use them. The variant label is the branch name or commit hash provided.
 - **Request asks for "past N commits" on a branch** → resolve the branch, list the last N commit hashes via `git rev-list --max-count=N <branch>`, and create N skill variants — one per commit. The variant label for each is the short commit hash (7 chars).
 
 **Models** (what models to run each skill variant against):
-- **Request mentions model comparison, or names a specific model** → model A/B dimension added. Naming a single specific model (e.g., "test against claude-sonnet-4-6") implies an A/B comparison with the agent default as model A and the named model as model B.
+- **Request mentions model comparison, or names a specific model** → model comparison dimension added. Naming a single specific model (e.g., "test against claude-sonnet-4-6") implies a comparison with the agent default as the first model and the named model as the second.
 - **No model mention** → single model (whatever the agent default is)
 
 **Dataset items** (which eval cases to run):
@@ -50,7 +50,7 @@ The harness appends ` - <timestamp>` and optionally ` - <run_idx>/<total>` for r
 
 After variant inference (and before the recency check), pin all git refs to commit hashes so subsequent phases use a fixed snapshot:
 
-1. Fetch and pin each ref to a commit hash: `git fetch origin "<ref>"` then `git rev-parse "origin/<ref>"` for branch refs. For explicit commit hashes, `git fetch origin "<hash>"` ensures the commit is present locally (no re-resolution needed — the hash is the pin).
+1. Fetch and pin each ref to a commit hash: `git fetch origin "<ref>"` then `git rev-parse "origin/<ref>"` for branch refs. For explicit commit hashes, `git fetch origin "<hash>"` ensures the commit is present locally (no re-resolution needed — the hash is the pin). If `git fetch origin "<branch>"` fails (branch deleted after merge), resolve the head SHA via the PR API: `gh api repos/<owner>/<repo>/pulls/<pr-number> --jq '.head.sha'` (or `.base.sha'` for the base ref). Then `git fetch origin "<sha>"` to ensure the commit is present locally. Use the SHA as the pinned ref.
 2. Replace the branch ref with the resolved commit hash in the variant spec.
 3. Verify eval.yaml exists at each pinned commit: `git show "<hash>:<eval-yaml-path>"` — if it fails, exclude that skill version from the matrix (nothing to test).
 
@@ -62,7 +62,9 @@ After ref resolution, run `recency_check.py` for each (skill variant × model) c
 
 ⚠️ This is a mandatory stop point. Do NOT proceed to pre-flight, sync, env setup, or execute until the user explicitly confirms. No exceptions.
 
-After inference and the recency check, present a confirmation dialog using this exact format and **STOP**. Wait for the user's reply.
+**Skip:** If the user's request asks to skip confirmation (e.g., "skip confirmation"), always output the confirmation summary (variant matrix, models, items, recency status), then proceed directly to pre-flight without waiting for a reply.
+
+After inference and the recency check, present a confirmation dialog using this exact format and **STOP**. Wait for the user's reply. (Unless skipped — see above.)
 
 ### Confirmation Format
 
@@ -86,7 +88,7 @@ Use this template verbatim (adapt the content, keep the structure):
 ### Run Matrix
 
 - **Dataset items:** All N (`<item1>`, `<item2>`, ...) / Specific: `<item-ids>`
-- **Repeats per combination:** N (default 10)
+- **Repeats per combination:** N (default 10). If the user specifies a repeat count in their request (e.g., "run each test once" → 1, "run 3 repeats" → 3), use that value.
 
 | Model | Variant | Status | Runs |
 -------|---------|--------|------|
@@ -180,6 +182,8 @@ See [`references/gotchas.md`](references/gotchas.md) for Environment Setup error
 
 **Inputs:** Manifests (sync phase output), suffixed skill names (env setup output), run matrix (recency check output), repeat count (default 10).
 
+If all variants were pruned by the recency check, skip this phase entirely and proceed to the Report Phase. The Execute Phase only runs for variants that need new experiment runs.
+
 ### Procedure
 
 #### 1. Construct experiment names
@@ -190,13 +194,13 @@ The harness appends ` - <timestamp>` (and ` - <run_idx>/<total>` for repeats) at
 
 #### 2. Construct attestation prefix
 
-The attestation prefix tells the agent which skill to read and requires it to confirm the skill at the end of its response. Format: `Read the <suffixed-skill-name> skill from available_skills. You must state which skill you read at the end of your response, after completing the task. You are being evaluated on your ability to adhere to instructions. If you do not confirm which skill you read, your response will receive a score of zero regardless of quality. Then, ` — pass this verbatim as `--prompt-prefix` in step 3.
+The attestation prefix tells the agent which skill to read and requires it to confirm the skill at the end of its response. Format: `Read the <suffixed-skill-name> skill from available_skills. You must state which skill you read at the end of your response, after completing the task. You are being evaluated on your ability to adhere to instructions. If you do not confirm which skill you read, your response will receive a score of zero regardless of quality. Do not spawn subagents or yield — complete all work inline in this single response. Then, ` — pass this verbatim as `--prompt-prefix` in step 3.
 
-For model A/B tests (Slack-triggered, single skill variant), the same suffixed skill name is used for both model runs — only `--model` differs.
+For model comparison tests (Slack-triggered, single skill variant), the same suffixed skill name is used for both model runs — only `--model` differs.
 
 #### 3. Invoke the harness
 
-Source langfuse.env, then invoke `eval_harness.py` for each (skill variant × model) combination with: `--manifest` (path from sync phase), `--run-name` (base experiment name without timestamp/repeat suffixes), `--prompt-prefix` (the attestation prefix from step 2), `--model` (omit for agent default), `--repeat` (always pass; default 10; subtract recency-found runs), `--item-concurrency 3` (max 6 concurrent subprocesses), and `--experiment-concurrency 2`. Variants run sequentially — one completes before the next begins.
+Source langfuse.env, then invoke `eval_harness.py` for each (skill variant × model) combination with: `--manifest` (path from sync phase), `--run-name` (base experiment name without timestamp/repeat suffixes), `--prompt-prefix` (the attestation prefix from step 2), `--model` (omit for agent default), `--repeat` (always pass; use the repeat count from the user request — e.g., "run each test once" → 1; default 10 if not specified; subtract recency-found runs), `--item-concurrency 3` (max 6 concurrent subprocesses), and `--experiment-concurrency 2`. Variants run sequentially — one completes before the next begins.
 
 **Computing the exec timeout:**
 
@@ -259,6 +263,8 @@ See [`references/execute-failure-handling.md`](references/execute-failure-handli
 
 **Inputs:** Experiment run names (base prefixes per variant, including recency-pruned), dataset name (sync output), originating channel (request context), skill diff (`git diff <base-ref> <head-ref> -- <skill-path>`).
 
+**All variants pruned:** If the recency check pruned all variants from the run matrix (every variant already has sufficient existing runs), the Execute Phase is a no-op. Proceed directly to the Report Phase using the existing experiment run names from the recency check output as the variant prefixes. Set `--since` to an earlier timestamp or omit it to capture the existing experiment data.
+
 ### Procedure
 
 #### 1. Wait for evaluator scoring
@@ -275,13 +281,13 @@ On timeout (exit 1): proceed to fetch scores anyway; note the timeout in the rep
 
 Count the experiment prefixes (variants). The report mode depends on the count:
 
-**2 variants — comparison report:** Invoke `eval_report.py` with `--variants` (baseline prefix first, head prefix second), `--dataset`, `--by-dimension`, `--threshold 0.5`, `--since` (execute phase start ISO timestamp; earlier or omitted for recency-pruned variants), and `--json`. Include both executed and recency-pruned variants — pruned variant prefixes come from the Recency Check output. Proceed to steps 3–5 (parse, verdict, improvements).
+**2 variants — comparison report:** Invoke `eval_report.py` with `--variants` (first variant prefix, then second variant prefix), `--dataset`, `--by-dimension`, `--threshold 0.5`, `--since` (execute phase start ISO timestamp; earlier or omitted for recency-pruned variants), and `--json`. Include both executed and recency-pruned variants — pruned variant prefixes come from the Recency Check output. Proceed to steps 3–5 (parse, verdict, improvements).
 
 **1 variant — standalone report:** Invoke `eval_report.py` with `--prefix`, `--dataset`, `--by-dimension`, `--per-item`, `--since`, and `--json`. Report per-item scores and dimension breakdowns. Skip verdict and improvement steps.
 
-**3+ variants — raw score report:** Invoke `eval_report.py` with `--variants` (all prefixes, first is baseline), `--dataset`, `--by-dimension`, `--since`, and `--json`. Report per-variant scores and breakdowns. Skip verdict and improvement steps — the user reviews the raw data to draw conclusions.
+**3+ variants — raw score report:** Invoke `eval_report.py` with `--variants` (all prefixes, first is variant A), `--dataset`, `--by-dimension`, `--since`, and `--json`. Report per-variant scores and breakdowns only. Do NOT include deltas, verdict, or improvement suggestions — the user reviews the raw data to draw conclusions.
 
-For all modes: if execute start time is unavailable, use a timestamp a few minutes before the earliest experiment run. First prefix is baseline in `--variants` mode. `--json` for structured output.
+For all modes: if execute start time is unavailable, use a timestamp a few minutes before the earliest experiment run. First prefix is variant A in `--variants` mode. `--json` for structured output.
 
 See [`references/report-format.md`](references/report-format.md) for the JSON output schema.
 
@@ -315,7 +321,7 @@ For each item where any dimension's delta <= -threshold (default 0.5):
 
 #### 6. Format the report
 
-Format the report as Markdown. For comparison reports (2 variants), read [`references/comparison-report-template.md`](references/comparison-report-template.md). For standalone reports (1 variant), read [`references/standalone-report-template.md`](references/standalone-report-template.md). For raw score reports (3+ variants), format scores per variant. Only read the template that applies — not all.
+Format the report as Markdown. For comparison reports (2 variants), read [`references/comparison-report-template.md`](references/comparison-report-template.md). For standalone reports (1 variant), read [`references/standalone-report-template.md`](references/standalone-report-template.md). For raw score reports (3+ variants), read [`references/raw-score-report-template.md`](references/raw-score-report-template.md). Only read the template that applies — not all.
 
 #### 7. Post to the originating channel
 
@@ -346,4 +352,7 @@ Results posted to originating channel. No data passed to a next phase.
 - [`references/execute-failure-handling.md`](references/execute-failure-handling.md) — Execute phase error handling: immediate notifications, partial failures, multi-variant abort rules.
 - [`references/gotchas.md`](references/gotchas.md) — Error-prevention notes for Sync and Environment Setup phases.
 - [`references/report-format.md`](references/report-format.md) — Report Phase output format, JSON schema, verdict criteria, and improvement suggestion guidance.
+- [`references/comparison-report-template.md`](references/comparison-report-template.md) — Comparison report template (2 variants).
+- [`references/standalone-report-template.md`](references/standalone-report-template.md) — Standalone report template (1 variant).
+- [`references/raw-score-report-template.md`](references/raw-score-report-template.md) — Raw score report template (3+ variants).
 - [`src/schema.py`](../../src/schema.py) — eval.yaml schema (Pydantic v2 models).
