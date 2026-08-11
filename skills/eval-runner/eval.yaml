@@ -2,6 +2,8 @@ dataset: eval-runner
 
 description: "End-to-end evaluation runner for OpenClaw skills — dataset sync, environment setup, variant isolation, and orchestrated eval runs via Langfuse."
 
+timeout_per_run: 1800  # 30 min — single experiment run (all items, repeat=1, concurrency=1)
+
 items:
   # ─── Inference + confirmation (stops at confirmation gate) ──────────
 
