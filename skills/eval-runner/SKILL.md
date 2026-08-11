@@ -202,15 +202,13 @@ Source langfuse.env, then invoke `eval_harness.py` for each (skill variant × mo
 
 **Computing the exec timeout:**
 
-Read `timeout_per_run` from the eval.yaml (default 600s / 10 min if not set). This is the estimated wall-clock time for a single experiment run (all items, repeat=1, concurrency=1). Compute the exec timeout:
+Read `timeout_per_run` from eval.yaml (default 600s). Compute:
 
 ```
 exec_timeout = timeout_per_run * repeat * num_variants + 120
 ```
 
-Where `repeat` is the repeat count for this invocation (after subtracting recency-found runs) and `num_variants` is the number of (skill variant × model) combinations being run. The 120s is a buffer for startup/teardown.
-
-Start the harness in the background with the computed timeout, then poll until it completes:
+Start the harness in the background, then poll until it completes:
 
 ```
 exec(
