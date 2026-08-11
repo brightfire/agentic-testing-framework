@@ -341,4 +341,4 @@ Results posted to originating channel. No data passed to a next phase.
 - [`references/execute-failure-handling.md`](references/execute-failure-handling.md) — Execute phase error handling: immediate notifications, partial failures, multi-variant abort rules.
 - [`references/gotchas.md`](references/gotchas.md) — Error-prevention notes for Sync and Environment Setup phases.
 - [`references/report-format.md`](references/report-format.md) — Report Phase output format, JSON schema, verdict criteria, and improvement suggestion guidance.
-- `src/schema.py` — eval.yaml schema (Pydantic v2 models).
+- [`src/schema.py`](../../src/schema.py) — eval.yaml schema (Pydantic v2 models).
