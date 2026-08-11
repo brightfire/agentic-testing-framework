@@ -1,6 +1,6 @@
-dataset: linear-create
+dataset: skill-tester
 
-description: "Eval-runner skill test cases — inference, confirmation, sync, execute, and report phases. Uses linear-create (brightfire/gpt-skills) as the subject skill."
+description: "Skill-tester skill test cases — inference, confirmation, sync, execute, and report phases. Uses linear-create (brightfire/gpt-skills) as the subject skill."
 
 timeout_per_run: 600  # 10 min — 3 dataset items, short skill
 
@@ -791,7 +791,7 @@ items:
       - Base branch: main
       - Files changed: linear-create/eval.yaml
 
-      User request: "Run the eval for this PR. The execute phase completed and scores are available, but eval_report.py crashed with an error: 'ValueError: No matching experiments found for prefix linear-create__openrouter-@preset-conversation-default__pr-417__65fbaaee__all'. Report the error to the PR."
+      User request: "Run the eval for this PR. The execute phase completed and scores are available, but eval_report.py crashed with an error: 'ValueError: No matching experiments found for prefix skill-tester__openrouter-@preset-conversation-default__pr-417__65fbaaee__all'. Report the error to the PR."
     expected_output:
       behavior: |
         The agent detects that eval_report.py exited non-zero. It reports the error from stderr to the originating channel. It does NOT attempt to produce a verdict or
