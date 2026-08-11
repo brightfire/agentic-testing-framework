@@ -200,13 +200,23 @@ For model A/B tests (Slack-triggered, single skill variant), the same suffixed s
 
 Source langfuse.env, then invoke `eval_harness.py` for each (skill variant × model) combination with: `--manifest` (path from sync phase), `--run-name` (base experiment name without timestamp/repeat suffixes), `--prompt-prefix` (the attestation prefix from step 2), `--model` (omit for agent default), `--repeat` (always pass; default 10; subtract recency-found runs), `--item-concurrency 3` (max 6 concurrent subprocesses), and `--experiment-concurrency 2`. Variants run sequentially — one completes before the next begins.
 
-Start the harness in the background with an explicit timeout, then poll until it completes:
+**Computing the exec timeout:**
+
+Read `timeout_per_run` from the eval.yaml (default 1800s / 30 min if not set). This is the estimated wall-clock time for a single experiment run (all items, repeat=1, concurrency=1). Compute the exec timeout:
+
+```
+exec_timeout = timeout_per_run * repeat * num_variants + 120
+```
+
+Where `repeat` is the repeat count for this invocation (after subtracting recency-found runs) and `num_variants` is the number of (skill variant × model) combinations being run. The 120s is a buffer for startup/teardown.
+
+Start the harness in the background with the computed timeout, then poll until it completes:
 
 ```
 exec(
   command="cd ~/repos/agentic-testing-framework && source ~/.openclaw/secrets/langfuse.env && source .venv/bin/activate && python src/eval_harness.py --manifest <path> --run-name '<name>' --prompt-prefix '<prefix>' --repeat <N> --item-concurrency 3 --experiment-concurrency 2 [--model <model>]",
   background=true,
-  timeout=900
+  timeout=<exec_timeout>
 )
 ```
 
