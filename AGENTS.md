@@ -13,9 +13,9 @@ src/
   eval_harness.py     — Runs eval items against an OpenClaw gateway
   eval_report.py      — Generates reports from Langfuse eval results
 skills/
-  eval-runner/        — OpenClaw skill wrapping the harness scripts
+  skill-tester/       — OpenClaw skill wrapping the harness scripts
     SKILL.md
-    eval.yaml         — Test cases for the eval-runner skill itself
+    eval.yaml         — Test cases for the skill-tester skill itself
     references/       — Supporting docs referenced by SKILL.md
 samples/
   eval-sample.yaml    — Example eval.yaml for reference
