@@ -321,7 +321,7 @@ For each item where any dimension's delta <= -threshold (default 0.5):
 
 #### 6. Format the report
 
-Format the report as Markdown. For comparison reports (2 variants), read [`references/comparison-report-template.md`](references/comparison-report-template.md). For standalone reports (1 variant), read [`references/standalone-report-template.md`](references/standalone-report-template.md). For raw score reports (3+ variants), format scores per variant. Only read the template that applies — not all.
+Format the report as Markdown. For comparison reports (2 variants), read [`references/comparison-report-template.md`](references/comparison-report-template.md). For standalone reports (1 variant), read [`references/standalone-report-template.md`](references/standalone-report-template.md). For raw score reports (3+ variants), read [`references/raw-score-report-template.md`](references/raw-score-report-template.md). Only read the template that applies — not all.
 
 #### 7. Post to the originating channel
 
@@ -352,4 +352,7 @@ Results posted to originating channel. No data passed to a next phase.
 - [`references/execute-failure-handling.md`](references/execute-failure-handling.md) — Execute phase error handling: immediate notifications, partial failures, multi-variant abort rules.
 - [`references/gotchas.md`](references/gotchas.md) — Error-prevention notes for Sync and Environment Setup phases.
 - [`references/report-format.md`](references/report-format.md) — Report Phase output format, JSON schema, verdict criteria, and improvement suggestion guidance.
+- [`references/comparison-report-template.md`](references/comparison-report-template.md) — Comparison report template (2 variants).
+- [`references/standalone-report-template.md`](references/standalone-report-template.md) — Standalone report template (1 variant).
+- [`references/raw-score-report-template.md`](references/raw-score-report-template.md) — Raw score report template (3+ variants).
 - [`src/schema.py`](../../src/schema.py) — eval.yaml schema (Pydantic v2 models).
