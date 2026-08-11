@@ -144,11 +144,10 @@ class EvalFile(BaseModel):
     description: str = Field(description="Human-readable description of the dataset")
     timeout_per_run: int = Field(
         default=600,
-        description="Estimated wall-clock seconds for a single experiment run "
-            "(all items, repeat=1, item-concurrency=1, experiment-concurrency=1). "
-            "The eval-runner skill multiplies this by the repeat count and "
-            "number of variants to derive the exec timeout for the harness process. "
-            "Default 600 (10 minutes).",
+        description="Estimated wall-clock seconds to run all eval items "
+            "sequentially. The eval-runner skill multiplies this by the repeat "
+            "count and number of variants to derive the exec timeout for the "
+            "harness process. Default 600 (10 minutes).",
     )
     items: list[EvalItem] = Field(description="List of eval test cases")
 
