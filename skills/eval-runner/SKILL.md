@@ -3,7 +3,7 @@ name: eval-runner
 description: "Use when evaluating a skill or running tests for a skill — syncs eval definitions to Langfuse, prepares the eval environment, and orchestrates variant runs. SKIP for skill creation, editing, or auditing requests — use the skill-creator or skill-reviewer skills instead."
 metadata:
   author: brightfire
-  version: "2.4"
+  version: "2.5"
 ---
 
 # Eval Runner
@@ -178,7 +178,21 @@ See [`references/gotchas.md`](references/gotchas.md) for Environment Setup error
 
 ## Execute Phase
 
-**Monitoring**: The harness run is long-running. After invoking it, actively monitor to completion and report results without waiting for the user to ask. Use `process(action=poll, timeout=30000)` to check periodically, or set `yieldMs` high enough to catch completion in a single call. Never background the harness and go silent — the agent that started the run is responsible for bringing results back.
+**Monitoring**: The harness run is long-running (typically 5–30 minutes depending on dataset size, repeats, and concurrency). After invoking it, actively monitor to completion and report results without waiting for the user to ask. Never background the harness and go silent — the agent that started the run is responsible for bringing results back.
+
+**⚠️ Critical: How to exec the harness correctly**
+
+The harness MUST be started via `exec` with `background: true` and an explicit `timeout` of **at least 900 seconds (15 minutes)**. The exec tool's default timeout is ~120s — that will SIGKILL the harness mid-run, which looks identical to an OOM kill to the agent. Do NOT mistake a timeout SIGKILL for an OOM. If the process is killed before it naturally completes, the first thing to check is whether the exec timeout was too short, NOT whether the system ran out of memory.
+
+Do NOT reduce `--item-concurrency` or `--experiment-concurrency` in response to a killed process unless you have confirmed the kill was actually caused by OOM (check `dmesg` or `journalctl` for OOM killer entries). A timeout kill is not a resource problem.
+
+Correct invocation pattern:
+
+```
+exec(command="cd ~/repos/agentic-testing-framework && source ~/.openclaw/secrets/langfuse.env && source .venv/bin/activate && python src/eval_harness.py --manifest <path> --run-name '<name>' --prompt-prefix '<prefix>' --repeat <N> --item-concurrency 3 --experiment-concurrency 2 [--model <model>]", background=true, timeout=900)
+```
+
+Then monitor with `process(action=poll, timeout=30000)` every 30s until the process exits. The `timeout` on `process poll` is just the poll wait, not a kill timeout — it controls how long each poll call blocks before returning.
 
 **Inputs:** Manifests (sync phase output), suffixed skill names (env setup output), run matrix (recency check output), repeat count (default 10).
 
@@ -199,6 +213,23 @@ For model A/B tests (Slack-triggered, single skill variant), the same suffixed s
 #### 3. Invoke the harness
 
 Source langfuse.env, then invoke `eval_harness.py` for each (skill variant × model) combination with: `--manifest` (path from sync phase), `--run-name` (base experiment name without timestamp/repeat suffixes), `--prompt-prefix` (the attestation prefix from step 2), `--model` (omit for agent default), `--repeat` (always pass; default 10; subtract recency-found runs), `--item-concurrency 3` (max 6 concurrent subprocesses), and `--experiment-concurrency 2`. Variants run sequentially — one completes before the next begins.
+
+**⚠️ Exec invocation requirements (DO NOT SKIP):**
+
+- Use `exec` with `background: true` — this returns a session ID immediately instead of blocking.
+- Set `timeout: 900` (15 minutes) minimum. The exec tool's default timeout (~120s) is NOT enough and will SIGKILL the harness. A SIGKILL from timeout is indistinguishable from an OOM kill to the agent — do NOT interpret a killed process as OOM without checking `dmesg`/`journalctl` first.
+- Do NOT reduce concurrency settings in response to a process kill unless OOM is confirmed via system logs. Timeout kills are not resource problems.
+- After starting the background process, monitor with `process(action=poll, timeout=30000)` repeatedly until the process exits.
+
+Example:
+
+```
+exec(
+  command="cd ~/repos/agentic-testing-framework && source ~/.openclaw/secrets/langfuse.env && source .venv/bin/activate && python src/eval_harness.py --manifest <path> --run-name '<name>' --prompt-prefix '<prefix>' --repeat <N> --item-concurrency 3 --experiment-concurrency 2 [--model <model>]",
+  background=true,
+  timeout=900
+)
+```
 
 
 #### 4. Monitor and capture results
