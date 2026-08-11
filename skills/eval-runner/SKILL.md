@@ -210,31 +210,13 @@ Variants run sequentially in separate exec calls, each with its own timeout. Do 
 
 **Harness directory:**
 
-`<atf-dir>` is the local agentic-testing-framework repo path. Resolve it at runtime — do not assume a fixed location.
-
-When the skill being evaluated lives in the agentic-testing-framework repo, run the harness from a worktree of the variant ref:
-
-```
-worktree_dir=<atf-dir>-worktrees/eval-<short-hash>-$(openssl rand -hex 3)
-git worktree add "$worktree_dir" <variant-ref>
-<harness-dir>="$worktree_dir"
-```
-
-Note: track the exact `$worktree_dir` path for cleanup — it includes a random suffix to avoid collisions when two concurrent evals use the same commit.
-
-For all other repos, use the standard checkout:
-
-```
-<harness-dir>=<atf-dir>
-```
-
-Clean up the worktree after the eval completes: `git worktree remove --force "$worktree_dir"`
+The harness always runs from `<atf-dir>` (the current ATF checkout). The harness is infrastructure — it is not the code under test. Skill variants are isolated via Environment Setup.
 
 Start the harness in the background, then poll until it completes:
 
 ```
 exec(
-  command="cd <harness-dir> && source ~/.openclaw/secrets/langfuse.env && source <atf-dir>/.venv/bin/activate && python src/eval_harness.py --manifest <path> --run-name '<name>' --prompt-prefix '<prefix>' --repeat <N> --item-concurrency 3 --experiment-concurrency 2 [--model <model>]",
+  command="cd <atf-dir> && source ~/.openclaw/secrets/langfuse.env && source <atf-dir>/.venv/bin/activate && python src/eval_harness.py --manifest <path> --run-name '<name>' --prompt-prefix '<prefix>' --repeat <N> --item-concurrency 3 --experiment-concurrency 2 [--model <model>]",
   background=true,
   timeout=<exec_timeout>
 )
@@ -338,7 +320,7 @@ Results posted to originating channel. No data passed to a next phase.
 
 - `trash` the suffixed directories created during Environment Setup (only those — do not remove directories from other concurrent runs)
 - If `$WORK_DIR` was preserved for the execute phase, clean it up
-- If a worktree was created for an ATF self-eval: `git worktree remove --force <atf-dir>-worktrees/eval-<short-hash>`
+
 
 ## References
 
