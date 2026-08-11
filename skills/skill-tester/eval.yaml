@@ -2,7 +2,7 @@ dataset: skill-tester
 
 description: "Skill-tester skill test cases — inference, confirmation, sync, execute, and report phases. Uses linear-create (brightfire/gpt-skills) as the subject skill."
 
-timeout_per_run: 1800  # 30 min — 26 test cases in skill-tester's own dataset
+timeout_per_run: 1800  # 30 min - max time to execute all items sequentially
 
 items:
   # ─── Inference + confirmation (stops at confirmation gate) ──────────
