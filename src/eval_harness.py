@@ -31,6 +31,7 @@ Credentials:
 """
 
 import argparse
+import asyncio
 import base64
 import json
 import os
@@ -267,7 +268,7 @@ def make_task(prompt_prefix, agent_id, timeout_seconds,
 
         return response_text, meta
 
-    def task(*, item, **kwargs):
+    async def task(*, item, **kwargs):
         prompt = item.input
         if not prompt:
             raise ValueError("Dataset item has no input")
@@ -275,11 +276,14 @@ def make_task(prompt_prefix, agent_id, timeout_seconds,
         if prompt_prefix:
             prompt = prompt_prefix + prompt
 
+        loop = asyncio.get_event_loop()
         last_error = None
         for attempt in range(1, max_retries + 2):
             session_key = f"eval-{uuid.uuid4().hex[:12]}-{item.id[:8]}"
             try:
-                response_text, meta = run_cli(prompt, session_key)
+                response_text, meta = await loop.run_in_executor(
+                    None, lambda: run_cli(prompt, session_key)
+                )
                 break
             except RuntimeError as e:
                 last_error = e
