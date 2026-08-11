@@ -133,7 +133,7 @@ class EvalFile(BaseModel):
     parse time.
 
     ``timeout_per_run`` is optional (default 600s). It is not synced to
-    Langfuse — it is read directly from eval.yaml by the eval-runner skill
+    Langfuse — it is read directly from eval.yaml by the execute skill
     during the Execute phase to compute the per-invocation exec timeout for
     the harness process: ``exec_timeout = timeout_per_run * repeat + 120``.
     Variants run sequentially in separate exec calls, each with its own timeout.
@@ -147,7 +147,7 @@ class EvalFile(BaseModel):
         default=600,
         gt=0,
         description="Estimated wall-clock seconds to run all eval items "
-            "sequentially. The eval-runner skill multiplies this by the repeat "
+            "sequentially. The execute skill multiplies this by the repeat "
             "count to derive the per-invocation exec timeout for the "
             "harness process: exec_timeout = timeout_per_run * repeat + 120. "
             "Default 600 (10 minutes). Must be a positive integer.",
