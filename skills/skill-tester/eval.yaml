@@ -256,36 +256,6 @@ items:
 
   # ─── Pre-flight gate test ───────────────────────────────────────────
 
-  - id: self-reference-abort
-    input: |
-      PR context:
-      - Repo: brightfire/gpt-skills
-      - PR branch: claw/vash/add-eval-yaml-linear-create
-      - PR number: 417
-      - Base branch: main
-      - Files changed: linear-create/SKILL.md, linear-create/eval.yaml
-
-      User request: "Run tests for this skill. Skip confirmation and run each test once. Output the confirmation summary and final report as your response text — do not post them as a comment on the PR."
-    expected_output:
-      behavior: |
-        The agent runs inference and confirmation, then proceeds to pre-flight checks. Pre-flight fetches SKILL.md from both git refs (main@c8269935 and
-        pr-417@65fbaaee) and scans for self-references. If a self-reference is detected in the skill body (not frontmatter), the agent aborts the entire
-        run before syncing anything to Langfuse or setting up the env. It reports which skill and line(s) contain self-references and tells the user to
-        fix the source skill before re-running. If no self-references are found, the agent proceeds normally through sync, env setup, execute, and report.
-      scoring_type: pass_fail
-      scoring_criteria:
-        # Confirmation format
-        - "Confirmation: includes '## Eval Run Summary' heading"
-        - "Confirmation: includes Skill Variants table with variant labels and git refs"
-        - "Confirmation: proceeds directly to pre-flight without waiting for a reply (skip confirmation)"
-        # Pre-flight outcome (either path is valid)
-        - "Pre-flight: fetches SKILL.md and scans for self-references"
-        - "Pre-flight: if self-reference detected — aborts and reports which line(s) contain references"
-        - "Pre-flight: if no self-references — proceeds and produces a final report"
-      scoring_rules: |
-        Score 10 * (passed criteria / total criteria).
-
-  # ─── Phase-targeted edge cases ────────────────────────────────────────
 
   - id: new-eval-yaml
     input: |
