@@ -2,7 +2,7 @@ dataset: skill-tester
 
 description: "Skill-tester skill test cases — inference, confirmation, sync, execute, and report phases. Uses linear-create (brightfire/gpt-skills) as the subject skill."
 
-timeout_per_run: 1800  # 30 min — 25 test cases in skill-tester's own dataset
+timeout_per_run: 1800  # 30 min — 26 test cases in skill-tester's own dataset
 
 items:
   # ─── Inference + confirmation (stops at confirmation gate) ──────────
@@ -36,14 +36,13 @@ items:
 
   - id: model-comparison-inference
     input: |
-      PR context:
+      Branch context:
       - Repo: brightfire/gpt-skills
-      - PR branch: claw/vash/add-eval-yaml-linear-create
-      - PR number: 417
+      - Branch: claw/vash/linear-create-model-comparison
       - Base branch: main
-      - Files changed: linear-create/eval.yaml
+      - Files changed: linear-create/SKILL.md
 
-      User request: "Test this PR against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6."
+      User request: "Test this branch against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6."
     expected_output:
       behavior: |
         The agent runs variant inference with the model dimension added, runs the recency check (no prior experiments, so baseline is included), and presents a
@@ -51,7 +50,7 @@ items:
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Variant Inference
-        - "Inference: identifies skill A/B — main (before) vs PR head (after)"
+        - "Inference: identifies skill A/B — main (before) vs branch head (after)"
         - "Inference: identifies two models — glm-5.2 and claude-sonnet-4-6"
         - "Recency: runs baseline recency check — no prior experiments found, baseline included for both models"
         - "Inference: recognizes the full matrix is 2 skill variants × 2 models = 4 runs"
@@ -65,27 +64,26 @@ items:
 
   - id: model-comparison-baseline-recent
     input: |
-      PR context:
+      Branch context:
       - Repo: brightfire/gpt-skills
-      - PR branch: claw/vash/add-eval-yaml-linear-create
-      - PR number: 417
+      - Branch: claw/vash/linear-create-model-comparison
       - Base branch: main
-      - Files changed: linear-create/eval.yaml
+      - Files changed: linear-create/SKILL.md
 
       Prior runs: 2 baseline (main) experiments already exist in Langfuse for the linear-create dataset — one for glm-5.2 and one for claude-sonnet-4-6, both created 2 days ago.
 
-      User request: "Test this PR against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6."
+      User request: "Test this branch against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6."
     expected_output:
       behavior: |
         The agent runs variant inference with the model dimension, runs the recency check and finds 2 recent baseline experiments — one per model. It skips the baseline
-        variant for both models — only the after (PR head) variant is included. The confirmation summary shows 1 skill variant × 2 models = 2 runs, with baseline status "already
+        variant for both models — only the after (branch head) variant is included. The confirmation summary shows 1 skill variant × 2 models = 2 runs, with baseline status "already
         tested, skipping" for both models.
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Variant Inference
         - "Inference: identifies two models — glm-5.2 and claude-sonnet-4-6"
         - "Recency: runs baseline recency check — finds 2 separate baseline experiments (one per model)"
-        - "Recency: skips baseline variant for both models — only after (PR head) is included"
+        - "Recency: skips baseline variant for both models — only after (branch head) is included"
         - "Recency: recognizes the reduced matrix is 1 skill variant × 2 models = 2 runs (not 4)"
         # Phase: Confirmation
         - "Confirmation: presents summary showing only after variant, both models, total run count (2)"
@@ -309,7 +307,7 @@ items:
         - "Ref Resolution: always runs for branch refs — re-fetches and re-pins commit hashes even though this is a rerun"
         - "Ref Resolution: uses PR API fallback for the deleted PR branch to resolve the head SHA"
         - "Recency: runs the recency check against resolved hashes and finds nothing has changed (same commit hash)"
-        - "Recency: finds existing experiments from prior runs and prunes them — does NOT re-run existing experiments"
+        - "Recency: identifies existing experiments from prior runs — all variants already tested, nothing new to run"
         - "Confirmation: indicates no changes since prior run and asks user to confirm forced re-run"
         - "Confirmation: user confirms — agent proceeds to pre-flight"
         # Phase: Pre-flight
@@ -790,7 +788,7 @@ items:
       - Base branch: main
       - Files changed: linear-create/eval.yaml
 
-      User request: "Run the eval for this PR. The execute phase completed and scores are available, but eval_report.py crashed with an error: 'ValueError: No matching experiments found for prefix skill-tester__openrouter-@preset-conversation-default__pr-417__65fbaaee__all'. Report the error to the PR."
+      User request: "Run the eval for this PR. The execute phase completed and scores are available, but eval_report.py crashed with an error: 'ValueError: No matching experiments found for prefix linear-create__openrouter-@preset-conversation-default__pr-417__65fbaaee__all'. Report the error to the PR."
     expected_output:
       behavior: |
         The agent detects that eval_report.py exited non-zero. It reports the error from stderr to the originating channel. It does NOT attempt to produce a verdict or
