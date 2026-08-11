@@ -13,5 +13,3 @@
 ### Notes
 
 <Optional: observations about score distribution, items that scored below passing, or areas to investigate. No verdict or comparison applies — this is a standalone evaluation.>
-
-**Pass% values come from `composite.pass_rate` in the `eval_report.py --json` output. Do not compute manually.**
