@@ -163,7 +163,7 @@ items:
         - "Pre-flight: fetches and scans skill for self-references"
         - "Sync: runs dataset_sync.py with --output-manifest"
         - "Env setup: creates suffixed skill directories"
-        - "Execute: invokes eval_harness.py with --repeat 3"
+        - "Execute: invokes eval_harness.py with --repeat 1"
         - "Report: runs eval_report.py and posts results"
         - "Cleanup: removes suffixed skill directories"
       scoring_rules: |
@@ -177,14 +177,14 @@ items:
       - PR number: 417
       - Base branch: main
 
-      User request: "Re-run tests for this skill. skip_confirmation"
+      User request: "Re-run tests for this skill. skip_confirmation repeat 1"
     expected_output:
       behavior: |
         The agent recognizes the re-run request and skips variant inference — reusing the previous variant spec directly. Ref resolution always runs for branch
         refs, so the agent re-fetches and re-pins all branch refs. Since the PR branch was deleted after merge, the agent uses the PR API fallback to resolve
         the head SHA to 65fbaaee. The recency check runs against the resolved hashes. If all variants already have sufficient existing experiments, the agent
         prunes them from the run matrix and reports that no new runs are needed — proceeding directly to the report phase using existing experiment data. If
-        the user forces a re-run, the agent proceeds through pre-flight, sync, env setup, execute (with --repeat 3), and report.
+        the user forces a re-run, the agent proceeds through pre-flight, sync, env setup, execute (with --repeat 1), and report.
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Variant Inference (skipped)
@@ -194,7 +194,7 @@ items:
         - "Recency: if existing experiments found — prunes them, does NOT re-run, proceeds to report with existing data"
         - "Recency: if user forces re-run — proceeds to pre-flight, sync, env setup, execute, report"
         # Phase: Execute (if runs are needed)
-        - "Execute: invokes eval_harness.py with --repeat 3"
+        - "Execute: invokes eval_harness.py with --repeat 1"
         # Phase: Report
         - "Report: generates report from existing or new experiment data"
         - "Report: posts results to the originating channel"
@@ -238,7 +238,7 @@ items:
       - Base branch: main
       - Files changed: linear-create/eval.yaml
 
-      User request: "Run tests for this skill. skip_confirmation"
+      User request: "Run tests for this skill. skip_confirmation repeat 1"
     expected_output:
       behavior: |
         The agent runs the full pipeline: inference, confirmation, pre-flight, sync, env setup, execute, and report. During the execute phase, if some items
@@ -253,7 +253,7 @@ items:
         - "Pre-flight: fetches and scans skill for self-references"
         - "Sync: runs dataset_sync.py with --output-manifest"
         - "Env setup: creates suffixed skill directories for both variants"
-        - "Execute: invokes eval_harness.py with --repeat 3 for each variant"
+        - "Execute: invokes eval_harness.py with --repeat 1 for each variant"
         - "Execute: if partial failures occur (some items fail, harness exit 0) — recognizes as NOT an immediate error"
         - "Execute: captures per-item failures in structured output"
         - "Execute: does NOT send immediate error notification for partial failures"
@@ -266,13 +266,13 @@ items:
 
   - id: execute-model-ab-slack-triggered
     input: |
-      Slack message: "@vashbrightfire Run tests for linear-create against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6 skip_confirmation"
+      Slack message: "@vashbrightfire Run tests for linear-create against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6 skip_confirmation repeat 1"
     expected_output:
       behavior: |
         The agent processes the Slack-triggered model A/B test request. It infers: skill = linear-create, models = glm-5.2 and claude-sonnet-4-6,
         branch = main (current HEAD, no PR or branch referenced). The agent runs through all phases: inference, confirmation, pre-flight, sync, env setup,
         execute, and report. During execute, the agent invokes the harness twice — once per model — using the same suffixed skill name (skill unchanged
-        between model variants). Both invocations use --repeat 3. The agent posts results back to the Slack channel.
+        between model variants). Both invocations use --repeat 1. The agent posts results back to the Slack channel.
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Variant Inference
@@ -288,7 +288,7 @@ items:
         # Phase: Env Setup
         - "Env setup: creates a single suffixed skill directory (skill unchanged between model variants)"
         # Phase: Execute
-        - "Execute: invokes harness twice — once per model, both with --repeat 3"
+        - "Execute: invokes harness twice — once per model, both with --repeat 1"
         - "Execute: both invocations use the same suffixed skill name (skill unchanged)"
         - "Execute: --model flag differs between invocations"
         - "Execute: experiment names differ only in the model-id segment"
@@ -313,7 +313,7 @@ items:
       - Base branch: main
       - Files changed: linear-create/SKILL.md, linear-create/eval.yaml
 
-      User request: "Run tests for this skill. skip_confirmation"
+      User request: "Run tests for this skill. skip_confirmation repeat 1"
     expected_output:
       behavior: |
         The agent runs inference and confirmation, then proceeds to pre-flight checks. Pre-flight fetches SKILL.md from both git refs (main@c8269935 and
@@ -345,7 +345,7 @@ items:
       - Base branch: main
       - Files changed: linear-create/eval.yaml (new file)
 
-      User request: "Run tests for this skill. skip_confirmation"
+      User request: "Run tests for this skill. skip_confirmation repeat 1"
     expected_output:
       behavior: |
         The agent runs inference, resolves refs (main to c8269935, PR head to 65fbaaee via PR API fallback), and verifies eval.yaml exists at both pinned
@@ -363,7 +363,7 @@ items:
         - "Confirmation: skips confirmation (skip_confirmation in request) and proceeds"
         - "Sync: syncs only the after version"
         - "Env setup: creates suffixed directory for after variant only"
-        - "Execute: invokes eval_harness.py with --repeat 3 for the after variant"
+        - "Execute: invokes eval_harness.py with --repeat 1 for the after variant"
         - "Report: generates standalone report (single variant)"
         - "Cleanup: removes suffixed skill directory"
       scoring_rules: |
@@ -400,7 +400,7 @@ items:
       - Base branch: main
       - Files changed: linear-create/eval.yaml
 
-      User request: "Run tests for this skill. skip_confirmation"
+      User request: "Run tests for this skill. skip_confirmation repeat 1"
     expected_output:
       behavior: |
         The agent runs the full pipeline: inference, confirmation, pre-flight, sync, env setup, execute, and report. During the report phase, if
@@ -415,7 +415,7 @@ items:
         - "Pre-flight: fetches and scans skill for self-references"
         - "Sync: runs dataset_sync.py with --output-manifest"
         - "Env setup: creates suffixed skill directories"
-        - "Execute: invokes eval_harness.py with --repeat 3"
+        - "Execute: invokes eval_harness.py with --repeat 1"
         - "Report: if wait_for_scores.py times out — proceeds with available scores rather than aborting"
         - "Report: notes the timeout in the report output"
         - "Report: runs eval_report.py with available partial scores"
@@ -434,12 +434,12 @@ items:
       - Base branch: main
       - Files changed: linear-create/eval.yaml
 
-      User request: "Just run tests for the PR version of linear-create — no need to compare against main. skip_confirmation"
+      User request: "Just run tests for the PR version of linear-create — no need to compare against main. skip_confirmation repeat 1"
     expected_output:
       behavior: |
         The agent recognizes this is a single-variant run (pr-417@65fbaaee only, no baseline comparison). It resolves the PR head to 65fbaaee via the
         PR API fallback, verifies eval.yaml exists at that commit, runs the recency check, and presents a confirmation summary. If confirmed, it proceeds
-        through pre-flight, sync (after only), env setup, execute (with --repeat 3), and report. During report, it uses standalone report mode
+        through pre-flight, sync (after only), env setup, execute (with --repeat 1), and report. During report, it uses standalone report mode
         (--prefix, not --variants), reports per-item scores and dimension breakdowns, and does NOT generate a verdict, deltas, or improvement suggestions.
       scoring_type: pass_fail
       scoring_criteria:
@@ -450,7 +450,7 @@ items:
         - "Pre-flight: fetches and scans skill for self-references"
         - "Sync: syncs only the after version (no baseline)"
         - "Env setup: creates suffixed directory for the after variant"
-        - "Execute: invokes eval_harness.py with --repeat 3"
+        - "Execute: invokes eval_harness.py with --repeat 1"
         - "Report: recognizes single-variant run and selects standalone report mode"
         - "Report: invokes eval_report.py with --prefix (NOT --variants), --by-dimension, --per-item, --since, and --json"
         - "Report: reports per-item scores and dimension breakdowns"
@@ -468,7 +468,7 @@ items:
       Branch: main
       Skill: linear-create
 
-      User request: "Run tests for the linear-create skill for the past 3 commits on main. skip_confirmation"
+      User request: "Run tests for the linear-create skill for the past 3 commits on main. skip_confirmation repeat 1"
     expected_output:
       behavior: |
         The agent recognizes this is a 3-variant run and selects raw score report mode.
