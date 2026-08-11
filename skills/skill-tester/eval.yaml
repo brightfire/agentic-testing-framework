@@ -41,16 +41,18 @@ items:
       Branch context:
       - Repo: brightfire/gpt-skills
       - Branch: fbae29ab
+      - Skill: linear-create
 
       User request: "Run tests for this skill against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6."
     expected_output:
       behavior: |
-        Runs variant inference with the model dimension added — single skill variant tested against two models.
+        Runs variant inference with the model dimension added — single skill variant (linear-create@fbae29ab) tested against two models.
         Resolves the commit ref, runs the recency check, and presents a confirmation summary showing 1 skill variant × 2 models = 2 experiments
         (each experiment runs all dataset items with the default repeat count). It stops at the confirmation gate — no further phases run.
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Variant Inference
+        - "Inference: identifies skill = linear-create from the branch context"
         - "Inference: identifies single skill variant — fbae29ab (no A/B, explicit commit hash given)"
         - "Inference: identifies two models — glm-5.2 and claude-sonnet-4-6"
         - "Inference: recognizes the full matrix is 1 skill variant × 2 models = 2 experiments"
@@ -69,17 +71,19 @@ items:
       Branch context:
       - Repo: brightfire/gpt-skills
       - Branch: fbae29ab
+      - Skill: linear-create
 
       User request: "Run tests for this skill against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6."
     expected_output:
       behavior: |
-        Runs variant inference with the model dimension — single skill variant tested against two models.
+        Runs variant inference with the model dimension — single skill variant (linear-create@fbae29ab) tested against two models.
         Resolves the commit ref, runs the recency check for both models. If prior experiments exist for a model, that model
         is pruned and the experiment count is reduced. If no prior experiments exist, both models are included. The total
         experiment count is 2 (or fewer if recency prunes some). It stops at the confirmation gate.
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Variant Inference
+        - "Inference: identifies skill = linear-create from the branch context"
         - "Inference: identifies single skill variant — fbae29ab"
         - "Inference: identifies two models — glm-5.2 and claude-sonnet-4-6"
         - "Ref Resolution: resolves the commit ref to fbae29ab"
@@ -98,17 +102,19 @@ items:
       Branch context:
       - Repo: brightfire/gpt-skills
       - Branch: fbae29ab
+      - Skill: linear-create
 
       User request: "Run tests for this skill against glm-5.2 and claude-sonnet-4-6."
     expected_output:
       behavior: |
-        Runs variant inference with the model dimension — single skill variant tested against two models.
+        Runs variant inference with the model dimension — single skill variant (linear-create@fbae29ab) tested against two models.
         Resolves the commit ref, runs the recency check. If no prior experiments exist for either model, both are included:
         1 skill variant × 2 models = 2 experiments. If prior experiments exist for some models, those are pruned and the
         experiment count is reduced accordingly. It stops at the confirmation gate.
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Variant Inference
+        - "Inference: identifies skill = linear-create from the branch context"
         - "Inference: identifies single skill variant — fbae29ab"
         - "Inference: identifies two models — glm-5.2 and claude-sonnet-4-6"
         - "Ref Resolution: resolves the commit ref to fbae29ab"
