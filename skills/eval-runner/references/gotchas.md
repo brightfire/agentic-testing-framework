@@ -15,3 +15,8 @@
 3. **Skill names are normalized** — OpenClaw normalizes skill names to `[a-z0-9-]` (lowercase, hyphens only). Suffixed names must stay within this charset. No dots, underscores, or uppercase.
 4. **Concurrent runs** — Each run should ALWAYS create its own unique directory by appending a short random suffix (e.g., 4 chars) after the hash: `<skill-name>-<label>-<7char-hash>-<4char-random>`. This ensures cleanup is always safe — no two runs share a directory, so one run's cleanup cannot remove another run's files.
 5. **Copying subdirectories** — Skills may have subdirectories (references/, scripts/, templates/, etc.). Copy the entire skill directory structure, not just SKILL.md. Internal relative paths in the skill body (e.g., `references/foo.md`) work because the structure is preserved.
+
+## Execute Phase
+
+1. **Exec timeout kills look like OOM** — The exec tool's default timeout is ~120s. The harness run takes 5–30 minutes. If the harness is exec'd without an explicit `timeout` of at least 900s, the exec tool SIGKILLs it at the default timeout. This SIGKILL is indistinguishable from an OOM kill to the agent. Do NOT throttle `--item-concurrency` or `--experiment-concurrency` in response to a killed process unless you have confirmed OOM via `dmesg` or `journalctl — the OOM killer leaves entries there. A timeout kill is not a resource problem; it's a missing `timeout` argument.
+2. **Always use `background: true`** — The harness must be started with `exec(background=true, timeout=900)` so it returns a session ID immediately. Then poll with `process(action=poll, timeout=30000)` until completion. Never use a foreground exec with a short `yieldMs` — the harness will be killed before it finishes.
