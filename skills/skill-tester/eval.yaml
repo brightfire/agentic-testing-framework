@@ -2,7 +2,7 @@ dataset: skill-tester
 
 description: "Skill-tester skill test cases — inference, confirmation, sync, execute, and report phases. Uses linear-create (example-org/skill-repo) as the subject skill."
 
-timeout_per_run: 600  # 10 min — 3 dataset items, short skill
+timeout_per_run: 1800  # 30 min — 25 test cases in skill-tester's own dataset
 
 items:
   # ─── Inference + confirmation (stops at confirmation gate) ──────────
