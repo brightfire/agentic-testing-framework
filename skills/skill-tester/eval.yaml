@@ -28,7 +28,6 @@ items:
         - "Inference: selects single model (agent default, no model comparison requested)"
         - "Inference: selects all dataset items — happy-path, tab-character-url-breakage, missing-info-detection"
         - "Ref Resolution: resolves main to bbbbbbb and PR head to aaaaaaa (via PR API fallback since branch is deleted)"
-        - "Recency: runs baseline recency check against Langfuse"
         # Phase: Confirmation
         - "Confirmation: presents summary with skill variants, model, dataset items, and baseline status"
         - "Confirmation: waits for user confirmation — does not proceed to any further phase"
@@ -57,7 +56,6 @@ items:
         - "Inference: recognizes the full matrix is 1 skill variant × 2 models = 2 experiments"
         - "Inference: selects all dataset items — happy-path, tab-character-url-breakage, missing-info-detection"
         - "Ref Resolution: resolves the commit ref to fbae29ab"
-        - "Recency: runs recency check against Langfuse for both models"
         # Phase: Confirmation
         - "Confirmation: presents summary showing model dimension, experiment count (2), and baseline status"
         - "Confirmation: waits for user confirmation — does not proceed to any further phase"
@@ -85,7 +83,6 @@ items:
       scoring_type: pass_fail
       scoring_criteria:
         - "Inference: identifies two models — glm-5.2 and claude-sonnet-4-6"
-        - "Recency: runs baseline recency check for both models"
         - "Confirmation: presents summary reflecting recency results"
         - "Confirmation: waits for user confirmation — does not proceed to any further phase"
       scoring_rules: |
@@ -110,7 +107,6 @@ items:
       scoring_type: pass_fail
       scoring_criteria:
         - "Inference: identifies single model — claude-sonnet-4-6"
-        - "Recency: runs baseline recency check"
         - "Confirmation: presents summary and waits for user confirmation"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
@@ -195,7 +191,6 @@ items:
         - "Inference: skips variant inference — reuses previous variant spec"
         - "Ref Resolution: re-fetches and re-pins commit hashes (always runs for branch refs)"
         - "Ref Resolution: uses PR API fallback for deleted branch — resolves head SHA to aaaaaaa"
-        - "Recency: runs recency check against resolved hashes"
         - "Recency: if existing experiments found — prunes them, does NOT re-run, proceeds to report with existing data"
         - "Recency: if user forces re-run — proceeds to pre-flight, sync, env setup, execute, report"
         # Phase: Execute (if runs are needed)
@@ -228,7 +223,6 @@ items:
         - "Inference: skips variant inference — reuses previous variant spec"
         - "Ref Resolution: re-resolves branch refs and detects the PR head has advanced"
         - "Ref Resolution: updates the variant spec with the new hash"
-        - "Recency: runs recency check against the new hash"
         - "Confirmation: presents summary with updated PR head hash"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
@@ -286,7 +280,6 @@ items:
         - "Inference: identifies two models — glm-5.2 and claude-sonnet-4-6"
         - "Inference: no PR or branch referenced — uses current main HEAD as the skill version"
         - "Ref Resolution: resolves main to current HEAD"
-        - "Recency: runs recency check for both model combinations"
         - "Confirmation: presents summary showing model dimension and waits for confirmation"
         # Phase: Pre-flight
         - "Pre-flight: fetches and scans skill for self-references"
@@ -366,7 +359,6 @@ items:
         - "Ref Resolution: verifies eval.yaml exists at both pinned commits"
         - "Ref Resolution: detects eval.yaml does not exist at base commit bbbbbbb — excludes base variant from matrix"
         - "Inference: only after variant (pr-101@aaaaaaa) has eval.yaml — single-variant run"
-        - "Recency: runs recency check for the after variant"
         - "Confirmation: presents summary noting the excluded base variant"
         - "Confirmation: waits for user confirmation"
         - "Sync: syncs only the after version"
@@ -397,7 +389,6 @@ items:
       scoring_criteria:
         - "Inference: identifies 5 skill variants — one per commit from the last 5 commits on main"
         - "Inference: uses short commit hashes as variant labels"
-        - "Recency: runs recency check for all 5 variants"
         - "Confirmation: presents variant summary and waits for user confirmation"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
@@ -459,7 +450,6 @@ items:
         - "Inference: identifies single skill variant (pr-101@aaaaaaa only, no baseline)"
         - "Ref Resolution: resolves PR head to aaaaaaa (via PR API fallback since branch is deleted)"
         - "Ref Resolution: verifies eval.yaml exists at aaaaaaa"
-        - "Recency: runs recency check for the single variant"
         - "Confirmation: presents summary showing single variant and waits for confirmation"
         - "Pre-flight: fetches and scans skill for self-references"
         - "Sync: syncs only the after version (no baseline)"
@@ -558,7 +548,6 @@ items:
         - "Ref Resolution: uses aaaaaaa as the pinned ref for the PR head variant"
         - "Ref Resolution: resolves base (main) to bbbbbbb normally"
         - "Ref Resolution: verifies eval.yaml exists at both pinned commits (aaaaaaa: yes, bbbbbbb: no — base excluded)"
-        - "Recency: runs recency check for the after variant"
         - "Confirmation: presents summary with variant and its pinned hash (aaaaaaa)"
         - "Confirmation: waits for user confirmation — does not proceed to any further phase"
       scoring_rules: |
