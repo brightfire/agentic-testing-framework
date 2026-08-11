@@ -62,7 +62,9 @@ After ref resolution, run `recency_check.py` for each (skill variant × model) c
 
 ⚠️ This is a mandatory stop point. Do NOT proceed to pre-flight, sync, env setup, or execute until the user explicitly confirms. No exceptions.
 
-After inference and the recency check, present a confirmation dialog using this exact format and **STOP**. Wait for the user's reply.
+**Skip:** If the user's request includes `skip_confirmation`, skip the confirmation gate entirely and proceed directly to pre-flight. Do not present a confirmation dialog or wait for a reply.
+
+After inference and the recency check, present a confirmation dialog using this exact format and **STOP**. Wait for the user's reply. (Unless skipped — see above.)
 
 ### Confirmation Format
 
