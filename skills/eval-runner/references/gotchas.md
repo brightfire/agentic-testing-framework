@@ -15,7 +15,3 @@
 3. **Skill names are normalized** — OpenClaw normalizes skill names to `[a-z0-9-]` (lowercase, hyphens only). Suffixed names must stay within this charset. No dots, underscores, or uppercase.
 4. **Concurrent runs** — Each run should ALWAYS create its own unique directory by appending a short random suffix (e.g., 4 chars) after the hash: `<skill-name>-<label>-<7char-hash>-<4char-random>`. This ensures cleanup is always safe — no two runs share a directory, so one run's cleanup cannot remove another run's files.
 5. **Copying subdirectories** — Skills may have subdirectories (references/, scripts/, templates/, etc.). Copy the entire skill directory structure, not just SKILL.md. Internal relative paths in the skill body (e.g., `references/foo.md`) work because the structure is preserved.
-
-## Execute Phase
-
-1. **Compute exec timeout from `timeout_per_run`** — Read `timeout_per_run` from eval.yaml (default 600s). `exec_timeout = timeout_per_run * repeat * num_variants + 120`. Run with `exec(background=true, timeout=<exec_timeout>)`, then poll with `process(action=poll, timeout=30000)` until completion.
