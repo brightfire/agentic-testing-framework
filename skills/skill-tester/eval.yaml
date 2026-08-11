@@ -369,7 +369,6 @@ items:
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
 
-  # PLACEHOLDER: requires a second linear-create PR to exist (not enough commits on main have eval.yaml yet — #417 just added it)
   - id: multi-commit-eval
     input: |
       Repo: brightfire/gpt-skills
@@ -377,14 +376,11 @@ items:
       Skill: linear-create
       eval.yaml path: linear-create/eval.yaml
 
-      User request: "Run tests for the past 5 commits on the main branch."
+      User request: "Run tests for the linear-create skill for the past 5 commits on the main branch."
     expected_output:
       behavior: |
-        # PLACEHOLDER: This test case requires enough commits on main to have eval.yaml.
-        # PR #417 just added eval.yaml, so only the most recent 1-2 commits on main have it. Older commits would be excluded.
-        # The test case structure is preserved for when enough commits with eval.yaml exist.
-        The agent runs variant inference and identifies 5 skill variants — one for each of the last 5 commits on main. The variant labels are the short
-        commit hashes. The agent runs the recency check for all 5 variants and presents the variant summary for confirmation.
+        The agent runs variant inference and identifies 5 skill variants — one for each of the last 5 commits on main.
+        The variant labels are the short commit hashes. The agent presents the variant summary for confirmation.
       scoring_type: pass_fail
       scoring_criteria:
         - "Inference: identifies 5 skill variants — one per commit from the last 5 commits on main"
@@ -466,19 +462,15 @@ items:
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
 
-  # PLACEHOLDER: requires a second linear-create PR to exist (needs 3+ variants for raw score report mode)
   - id: report-multi-variant-raw-scores
     input: |
       Repo: brightfire/gpt-skills
       Branch: main
       Skill: linear-create
 
-      User request: "Run tests for the past 3 commits on main for linear-create."
+      User request: "Run tests for the linear-create skill for the past 3 commits on main."
     expected_output:
       behavior: |
-        # PLACEHOLDER: This test case requires 3+ variants with eval.yaml, which needs enough commits on main to have eval.yaml.
-        # PR #417 just added eval.yaml, so not enough commits exist yet for a 3-variant raw score report.
-        # The test case structure is preserved for when enough commits with eval.yaml exist.
         The agent recognizes this is a 3-variant run and selects raw score report mode.
       scoring_type: pass_fail
       scoring_criteria:
