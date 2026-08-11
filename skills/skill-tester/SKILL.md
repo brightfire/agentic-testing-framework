@@ -50,10 +50,9 @@ The harness appends ` - <timestamp>` and optionally ` - <run_idx>/<total>` for r
 
 After variant inference (and before the recency check), pin all git refs to commit hashes so subsequent phases use a fixed snapshot:
 
-1. **PR context — always resolve from PR metadata.** When a PR number is available, resolve both base and head SHAs from the PR API: `gh api repos/<owner>/<repo>/pulls/<pr-number> --jq '.base.sha, .head.sha'`. Use `git fetch origin "<sha>"` for each to ensure both commits are present locally. Do not rely on fetching branch refs (e.g., `main`) for PR base resolution — a merged PR's base branch will have advanced past the original base commit, so `origin/main` resolves to the current post-merge tip, not the PR's recorded base.
-2. **Branch refs (non-PR context).** Fetch and pin each ref to a commit hash: `git fetch origin "<ref>"` then `git rev-parse "origin/<ref>"` for branch refs. For explicit commit hashes, `git fetch origin "<hash>"` ensures the commit is present locally (no re-resolution needed — the hash is the pin). If `git fetch origin "<branch>"` fails (branch deleted after merge), resolve the head SHA via the PR API: `gh api repos/<owner>/<repo>/pulls/<pr-number> --jq '.head.sha'` (or `.base.sha'` for the base ref). Then `git fetch origin "<sha>"` to ensure the commit is present locally. Use the SHA as the pinned ref.
-3. Replace the branch ref with the resolved commit hash in the variant spec.
-4. Verify eval.yaml exists at each pinned commit: `git show "<hash>:<eval-yaml-path>"` — if it fails, exclude that skill version from the matrix (nothing to test).
+1. Fetch and pin each ref to a commit hash: `git fetch origin "<ref>"` then `git rev-parse "origin/<ref>"` for branch refs. For explicit commit hashes, `git fetch origin "<hash>"` ensures the commit is present locally (no re-resolution needed — the hash is the pin). If `git fetch origin "<branch>"` fails (branch deleted after merge), resolve the head SHA via the PR API: `gh api repos/<owner>/<repo>/pulls/<pr-number> --jq '.head.sha'` (or `.base.sha'` for the base ref). Then `git fetch origin "<sha>"` to ensure the commit is present locally. Use the SHA as the pinned ref.
+2. Replace the branch ref with the resolved commit hash in the variant spec.
+3. Verify eval.yaml exists at each pinned commit: `git show "<hash>:<eval-yaml-path>"` — if it fails, exclude that skill version from the matrix (nothing to test).
 
 ## Recency Check
 
@@ -263,8 +262,6 @@ See [`references/execute-failure-handling.md`](references/execute-failure-handli
 **Inputs:** Experiment run names (base prefixes per variant, including recency-pruned), dataset name (sync output), originating channel (request context), skill diff (`git diff <base-ref> <head-ref> -- <skill-path>`).
 
 **All variants pruned:** If the recency check pruned all variants from the run matrix (every variant already has sufficient existing runs), the Execute Phase is a no-op. Proceed directly to the Report Phase using the existing experiment run names from the recency check output as the variant prefixes. Set `--since` to an earlier timestamp or omit it to capture the existing experiment data.
-
-**Repeat count for wait_for_scores.py when all variants are pruned:** The execute phase count is 0 when all variants are pruned, but `wait_for_scores.py --repeat 0` trivially satisfies the coverage predicate (zero scored traces meets the threshold). Use the recency check's run count (the number of existing runs found per variant) as `--repeat` instead, or skip `wait_for_scores.py` entirely and fetch scores directly — the existing runs are already complete and should be fully scored.
 
 ### Procedure
 
