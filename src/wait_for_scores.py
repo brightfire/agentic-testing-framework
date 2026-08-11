@@ -94,17 +94,15 @@ def fetch_trace_metadata(langfuse_host, auth_header, trace_id):
     observation (the one whose parentObservationId is null).
 
     In Langfuse v4, experiment metadata (experiment_name, dataset_item_id)
-    is stored as a top-level ``metadata`` field on the observation, not
-    inside ``traceContext.metadata`` (which was the v3 layout).  We request
-    the ``metadata`` field explicitly and read from it directly, falling
-    back to the v3 ``traceContext.metadata`` path for older traces.
+    is stored as a top-level ``metadata`` field on the observation.  We
+    request the ``metadata`` field explicitly and read from it directly.
     """
     try:
         resp = requests.get(
             f"{langfuse_host}/api/public/v2/observations",
             params={
                 "traceId": trace_id,
-                "fields": "core,basic,io,metadata,trace_context",
+                "fields": "core,basic,io,metadata",
                 "limit": 100,
             },
             headers={"Authorization": f"Basic {auth_header}"},
@@ -120,10 +118,6 @@ def fetch_trace_metadata(langfuse_host, auth_header, trace_id):
             observations[0],
         )
         md = root.get("metadata", {}) or {}
-        if not md:
-            # v3 fallback: metadata nested in traceContext
-            trace_ctx = root.get("traceContext", {}) or {}
-            md = trace_ctx.get("metadata", {}) or {}
         return {
             "experiment_name": md.get("experiment_name") or md.get("experiment_run_name", None),
             "dataset_item_id": md.get("dataset_item_id", None),
