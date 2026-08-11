@@ -1,4 +1,4 @@
-dataset: eval-runner
+dataset: skill-tester
 
 description: "End-to-end evaluation runner for OpenClaw skills — dataset sync, environment setup, variant isolation, and orchestrated eval runs via Langfuse."
 
@@ -14,7 +14,7 @@ items:
       - PR branch: claw/vash/skill-improvement
       - PR number: 123
       - Base branch: main
-      - Files changed: skills/eval-runner/SKILL.md
+      - Files changed: skills/skill-tester/SKILL.md
 
       User request: "Run the eval for this PR."
     expected_output:
@@ -40,7 +40,7 @@ items:
       - Repo: brightfire/agentic-testing-framework
       - Branch: claw/vash/skill-model-comparison
       - Base branch: main
-      - Files changed: skills/eval-runner/SKILL.md
+      - Files changed: skills/skill-tester/SKILL.md
 
       User request: "Test this branch against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6."
     expected_output:
@@ -68,7 +68,7 @@ items:
       - Repo: brightfire/agentic-testing-framework
       - Branch: claw/vash/skill-model-comparison
       - Base branch: main
-      - Files changed: skills/eval-runner/SKILL.md
+      - Files changed: skills/skill-tester/SKILL.md
 
       Prior runs: 2 baseline (before/main) experiments already exist in Langfuse for this dataset — one for glm-5.2 and one for claude-sonnet-4-6, both created 2 days ago.
 
@@ -99,7 +99,7 @@ items:
       - PR branch: claw/vash/skill-model-comparison
       - PR number: 42
       - Base branch: main
-      - Files changed: skills/eval-runner/SKILL.md
+      - Files changed: skills/skill-tester/SKILL.md
 
       Prior runs: A previous PR eval was already completed using openrouter/z-ai/glm-5.2 as the single model. Baseline (before/main) experiment exists in Langfuse for glm-5.2 only,
       created 1 day ago. No baseline experiment exists for claude-sonnet-4-6.
@@ -127,7 +127,7 @@ items:
       - PR branch: claw/vash/skill-model-comparison
       - PR number: 42
       - Base branch: main
-      - Files changed: skills/eval-runner/SKILL.md
+      - Files changed: skills/skill-tester/SKILL.md
 
       Prior runs: A previous PR eval was already completed using openrouter/z-ai/glm-5.2 as the single model. Baseline (before/main) experiment exists in Langfuse for glm-5.2 only,
       created 1 day ago. No baseline experiment exists for claude-sonnet-4-6.
@@ -159,7 +159,7 @@ items:
       - Repo: brightfire/agentic-testing-framework
       - Branch: claw/vash/skill-model-comparison
       - Base branch: main
-      - Files changed: skills/eval-runner/SKILL.md
+      - Files changed: skills/skill-tester/SKILL.md
 
       Prior runs: A previous eval was run as a re-run (after variant only, no baseline). No baseline (before/main) experiments exist in Langfuse for this dataset for any model.
 
@@ -191,7 +191,7 @@ items:
       - PR branch: claw/vash/skill-and-eval-update
       - PR number: 55
       - Base branch: main
-      - Files changed: skills/eval-runner/SKILL.md, skills/eval-runner/eval.yaml
+      - Files changed: skills/skill-tester/SKILL.md, skills/skill-tester/eval.yaml
 
       User request: "Test this PR against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6."
     expected_output:
@@ -224,7 +224,7 @@ items:
       - PR branch: claw/vash/skill-improvement
       - PR number: 123
       - Base branch: main
-      - Files changed: skills/eval-runner/SKILL.md
+      - Files changed: skills/skill-tester/SKILL.md
 
       Inference completed: skill A/B (main vs PR head), single model (agent default), all dataset items. Baseline included (no prior runs). User has confirmed the summary (@vashbrightfire confirm).
 
@@ -361,7 +361,7 @@ items:
       - PR branch: claw/vash/skill-improvement
       - PR number: 123
       - Base branch: main
-      - Files changed: skills/eval-runner/SKILL.md
+      - Files changed: skills/skill-tester/SKILL.md
 
       Inference, confirmation, pre-flight, sync, and env setup all completed successfully. The user confirmed the eval.
 
@@ -389,7 +389,7 @@ items:
       - PR branch: claw/vash/skill-improvement
       - PR number: 123
       - Base branch: main
-      - Files changed: skills/eval-runner/SKILL.md
+      - Files changed: skills/skill-tester/SKILL.md
 
       Inference, confirmation, pre-flight, sync, and env setup all completed. The user confirmed the eval.
 
@@ -415,7 +415,7 @@ items:
       - PR branch: claw/vash/skill-improvement
       - PR number: 123
       - Base branch: main
-      - Files changed: skills/eval-runner/SKILL.md
+      - Files changed: skills/skill-tester/SKILL.md
 
       Inference, confirmation, pre-flight, sync, and env setup all completed. The user confirmed the eval.
 
@@ -437,7 +437,7 @@ items:
 
   - id: execute-model-ab-slack-triggered
     input: |
-      Slack-triggered model A/B test. The user wants to compare openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6 for the eval-runner skill.
+      Slack-triggered model A/B test. The user wants to compare openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6 for the skill-tester skill.
 
       Inference, confirmation, pre-flight, sync, and env setup all completed. The user confirmed the eval. Env setup created a single suffixed skill
       directory (skill unchanged between model variants).
@@ -466,8 +466,8 @@ items:
       - Repo: brightfire/agentic-testing-framework
       - Branch: claw/vash/skill-improvement
       - Base branch: main
-      - Files changed: skills/eval-runner/SKILL.md
-      Note: The branch head version of skills/eval-runner/SKILL.md contains a self-reference in the body — line 42 says "This skill, eval-runner, handles..." (uses the skill name in prose).
+      - Files changed: skills/skill-tester/SKILL.md
+      Note: The branch head version of skills/skill-tester/SKILL.md contains a self-reference in the body — line 42 says "This skill, skill-tester, handles..." (uses the skill name in prose).
 
       Inference completed: skill A/B (main vs branch head), single model, all dataset items. User has confirmed the summary (@vashbrightfire confirm).
 
@@ -499,7 +499,7 @@ items:
       - Repo: brightfire/agentic-testing-framework
       - Branch: claw/vash/add-eval-yaml
       - Base branch: main
-      - Files changed: skills/eval-runner/eval.yaml (new file — does not exist on base branch)
+      - Files changed: skills/skill-tester/eval.yaml (new file — does not exist on base branch)
 
       User request: "Run only the sync phase for this branch."
     expected_output:
@@ -521,7 +521,7 @@ items:
       - Repo: brightfire/agentic-testing-framework
       - Branch: claw/vash/eval-yaml-update
       - Base branch: main
-      - Files changed: skills/eval-runner/eval.yaml
+      - Files changed: skills/skill-tester/eval.yaml
 
       During sync, the "before" version sync failed — dataset_sync.py exited with code 1 and the output shows "LANGFUSE_SECRET_KEY not set".
 
@@ -546,8 +546,8 @@ items:
     input: |
       Repo: brightfire/agentic-testing-framework
       Branch: main
-      Skill: eval-runner
-      eval.yaml path: skills/eval-runner/eval.yaml
+      Skill: skill-tester
+      eval.yaml path: skills/skill-tester/eval.yaml
 
       User request: "Run the evaluation for the past 5 commits on the main branch."
     expected_output:
@@ -578,7 +578,7 @@ items:
       - PR branch: claw/vash/skill-improvement
       - PR number: 77
       - Base branch: main
-      - Files changed: skills/eval-runner/SKILL.md
+      - Files changed: skills/skill-tester/SKILL.md
 
       Inference completed: skill A/B (main vs PR head), single model (agent default), all dataset items. Baseline included (no prior runs). User has confirmed the summary (@vashbrightfire confirm). Pre-flight and sync completed successfully — the dataset was synced to Langfuse.
 
@@ -608,7 +608,7 @@ items:
       - PR branch: claw/vash/skill-improvement
       - PR number: 123
       - Base branch: main
-      - Files changed: skills/eval-runner/SKILL.md
+      - Files changed: skills/skill-tester/SKILL.md
 
       User request: "Run the eval for this PR. The execute phase already completed but score polling timed out after 3 minutes — not all scores have arrived yet. Go ahead and generate the report with whatever scores are available so far."
     expected_output:
@@ -635,7 +635,7 @@ items:
       - PR branch: claw/vash/skill-improvement
       - PR number: 123
       - Base branch: main
-      - Files changed: skills/eval-runner/SKILL.md
+      - Files changed: skills/skill-tester/SKILL.md
 
       User request: "Run the eval for this PR. The execute phase completed but no scores are available in Langfuse yet — the evaluator hasn't produced any scores. Generate whatever report you can with the current state."
     expected_output:
@@ -661,9 +661,9 @@ items:
       - PR branch: claw/vash/skill-improvement
       - PR number: 123
       - Base branch: main
-      - Files changed: skills/eval-runner/SKILL.md
+      - Files changed: skills/skill-tester/SKILL.md
 
-      User request: "Just test the PR version of eval-runner — no need to compare against main."
+      User request: "Just test the PR version of skill-tester — no need to compare against main."
 
       Inference: single skill variant (pr-123 only, no baseline). Single model (agent default). All dataset items. User has confirmed (@vashbrightfire confirm). Pre-flight, sync,
       env setup, and execute all completed successfully. Scores are available.
@@ -689,9 +689,9 @@ items:
     input: |
       Repo: brightfire/agentic-testing-framework
       Branch: main
-      Skill: eval-runner
+      Skill: skill-tester
 
-      User request: "Test the past 3 commits on main for eval-runner."
+      User request: "Test the past 3 commits on main for skill-tester."
 
       Inference: 3 skill variants (one per commit, labels are short hashes a1b2c3d, e5f6g7h, i9j0k1l). Single model. All dataset items. User has confirmed. Pre-flight, sync,
       env setup, and execute all completed successfully for all 3 variants. Scores are available for all variants.
@@ -721,7 +721,7 @@ items:
       - PR branch: claw/vash/skill-improvement
       - PR number: 123
       - Base branch: main
-      - Files changed: skills/eval-runner/SKILL.md
+      - Files changed: skills/skill-tester/SKILL.md
 
       User request: "Run the eval for this PR. The execute phase completed and scores are available for the main variant, but the pr-123 variant hasn't been scored yet by the evaluator. Generate the report with whatever data is available."
     expected_output:
@@ -747,9 +747,9 @@ items:
       - PR branch: claw/vash/skill-improvement
       - PR number: 123
       - Base branch: main
-      - Files changed: skills/eval-runner/SKILL.md
+      - Files changed: skills/skill-tester/SKILL.md
 
-      User request: "Run the eval for this PR. The execute phase completed and scores are available, but eval_report.py crashed with an error: 'ValueError: No matching experiments found for prefix eval-runner__openrouter-@preset-conversation-default__pr-123__e5f6g7h__all'. Report the error to the PR."
+      User request: "Run the eval for this PR. The execute phase completed and scores are available, but eval_report.py crashed with an error: 'ValueError: No matching experiments found for prefix skill-tester__openrouter-@preset-conversation-default__pr-123__e5f6g7h__all'. Report the error to the PR."
     expected_output:
       behavior: |
         The agent detects that eval_report.py exited non-zero. It reports the error from stderr to the originating channel. It does NOT attempt to produce a verdict or
