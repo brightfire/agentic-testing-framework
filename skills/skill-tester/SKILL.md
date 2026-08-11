@@ -48,6 +48,8 @@ The harness appends ` - <timestamp>` and optionally ` - <run_idx>/<total>` for r
 
 **Always resolve branch refs to commit hashes** — including on reruns. Explicit commit hashes from the user need no re-resolution.
 
+⚠️ **Run all ref resolution inline** — use `exec` commands directly. Do NOT spawn subagents or yield mid-resolution. The harness expects a complete response in a single turn; yielding produces an incomplete output that scores 0.
+
 After variant inference (and before the recency check), pin all git refs to commit hashes so subsequent phases use a fixed snapshot:
 
 1. Fetch and pin each ref to a commit hash: `git fetch origin "<ref>"` then `git rev-parse "origin/<ref>"` for branch refs. For explicit commit hashes, `git fetch origin "<hash>"` ensures the commit is present locally (no re-resolution needed — the hash is the pin). If `git fetch origin "<branch>"` fails (branch deleted after merge), resolve the head SHA via the PR API: `gh api repos/<owner>/<repo>/pulls/<pr-number> --jq '.head.sha'` (or `.base.sha'` for the base ref). Then `git fetch origin "<sha>"` to ensure the commit is present locally. Use the SHA as the pinned ref.
@@ -55,6 +57,8 @@ After variant inference (and before the recency check), pin all git refs to comm
 3. Verify eval.yaml exists at each pinned commit: `git show "<hash>:<eval-yaml-path>"` — if it fails, exclude that skill version from the matrix (nothing to test).
 
 ## Recency Check
+
+⚠️ **Run the recency check inline** — use `exec` to invoke `recency_check.py` directly. Do NOT spawn subagents or yield.
 
 After ref resolution, run `recency_check.py` for each (skill variant × model) combination. Source `~/.openclaw/secrets/langfuse.env`, then invoke `recency_check.py` with `--dataset` and `--filter` (base experiment name, without timestamp suffix). `--min-pass-percent 75` sets the pass threshold. Count run names on stdout — if count meets requested repeats, prune the combination. If fewer runs exist, only the difference needs to run. Empty stdout means no existing runs — include the combination. Exit 1 = script error (report and stop).
 
