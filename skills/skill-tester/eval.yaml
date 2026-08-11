@@ -362,13 +362,10 @@ items:
         variant and its pinned hash. It waits for user confirmation — does not proceed to any further phase.
       scoring_type: pass_fail
       scoring_criteria:
-        - "Ref Resolution: attempts `git fetch origin claw/vash/add-eval-yaml-linear-create` and detects the failure"
-        - "Ref Resolution: falls back to PR API — `gh api repos/brightfire/gpt-skills/pulls/417 --jq '.head.sha'`"
-        - "Ref Resolution: correctly resolves head SHA to 65fbaaee"
-        - "Ref Resolution: runs `git fetch origin 65fbaaee` to ensure the commit is present locally"
-        - "Ref Resolution: uses 65fbaaee as the pinned ref for the PR head variant"
-        - "Ref Resolution: resolves base (main) to c8269935 normally"
-        - "Ref Resolution: verifies eval.yaml exists at both pinned commits (65fbaaee: yes, c8269935: no — base excluded)"
+        - "Ref Resolution: correctly resolves variant B head SHA to 65fbaaee"
+        - "Ref Resolution: correctly resolves variant A (main) to c8269935"
+        - "Ref Resolution: verifies eval.yaml exists at both commits (65fbaaee: yes, c8269935: no)"
+        - "Ref Resolution: excludes variant A from matrix (no eval.yaml)"
         - "Confirmation: presents summary with variant and its pinned hash (65fbaaee)"
         - "Confirmation: waits for user confirmation — does not proceed to any further phase"
       scoring_rules: |
