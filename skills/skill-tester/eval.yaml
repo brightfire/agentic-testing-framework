@@ -238,7 +238,7 @@ items:
 
       Inference completed: skill A/B (main vs PR head), single model (agent default), all dataset items. Baseline included (no prior runs). User has confirmed the summary (@vashbrightfire confirm).
 
-      Proceed with the eval.
+      Proceed with the eval. Run 3 repeats per variant.
     expected_output:
       behavior: |
         # PLACEHOLDER: This test case requires a second linear-create PR to exist (needs both main and PR head to have eval.yaml).
@@ -290,7 +290,7 @@ items:
       - PR number: 417
       - Base branch: main
 
-      User request: "Re-run the previous eval for this PR."
+      User request: "Re-run the previous eval for this PR. Use 3 repeats per variant."
       The PR head has not changed since the previous eval. The user confirms they want to force a re-run (@vashbrightfire confirm).
     expected_output:
       behavior: |
@@ -307,7 +307,7 @@ items:
         - "Ref Resolution: always runs for branch refs — re-fetches and re-pins commit hashes even though this is a rerun"
         - "Ref Resolution: uses PR API fallback for the deleted PR branch to resolve the head SHA"
         - "Recency: runs the recency check against resolved hashes and finds nothing has changed (same commit hash)"
-        - "Recency: identifies existing experiments from prior runs — all variants already tested, nothing new to run"
+        - "Recency: identifies existing experiments from prior runs — all variants already have sufficient runs (reported as reused/pruned)"
         - "Confirmation: indicates no changes since prior run and asks user to confirm forced re-run"
         - "Confirmation: user confirms — agent proceeds to pre-flight"
         # Phase: Pre-flight
@@ -383,7 +383,7 @@ items:
       - Base branch: main
       - Files changed: linear-create/eval.yaml
 
-      Inference, confirmation, pre-flight, sync, and env setup all completed successfully. The user confirmed the eval.
+      Inference, confirmation, pre-flight, sync, and env setup all completed successfully. The user confirmed the eval. The harness was invoked with --repeat 3 per variant.
 
       During the execute phase, the first harness invocation (variant A / main) crashed with exit code 1 and a Python traceback — the harness hit an
       unexpected error while spawning the `openclaw agent` subprocess for the first dataset item. The second variant (pr-417) has not yet been attempted.
@@ -412,7 +412,7 @@ items:
       - Base branch: main
       - Files changed: linear-create/eval.yaml
 
-      Inference, confirmation, pre-flight, sync, and env setup all completed. The user confirmed the eval.
+      Inference, confirmation, pre-flight, sync, and env setup all completed. The user confirmed the eval. The harness was invoked with --repeat 3 per variant.
 
       During the execute phase, the harness exited with code 1 because all dataset items failed — the summary shows "Total failures: 3" with 0 successful
       items. This happened for both variants.
@@ -439,7 +439,7 @@ items:
       - Base branch: main
       - Files changed: linear-create/eval.yaml
 
-      Inference, confirmation, pre-flight, sync, and env setup all completed. The user confirmed the eval.
+      Inference, confirmation, pre-flight, sync, and env setup all completed. The user confirmed the eval. The harness was invoked with --repeat 3 per variant.
 
       During the execute phase, the harness completed (exit 0) for both variants. Variant A (main) had 1 failed item out of 3. Variant B (pr-417)
       had 0 failed items. The harness summary shows "Total failures: 1" for variant A.
@@ -460,7 +460,7 @@ items:
 
   - id: execute-model-ab-slack-triggered
     input: |
-      Slack-triggered model A/B test. The user wants to compare openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6 for the linear-create skill.
+      Slack-triggered model A/B test. The user wants to compare openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6 for the linear-create skill. The user requested 3 repeats per variant.
 
       Inference, confirmation, pre-flight, sync, and env setup all completed. The user confirmed the eval. Env setup created a single suffixed skill
       directory (skill unchanged between model variants).
@@ -483,6 +483,7 @@ items:
 
   # ─── Pre-flight gate test ───────────────────────────────────────────
 
+  # PLACEHOLDER: requires a real PR with an actual self-reference in SKILL.md — PR #417 only adds eval.yaml, SKILL.md is unchanged from main
   - id: self-reference-abort
     input: |
       PR context:
@@ -491,13 +492,16 @@ items:
       - PR number: 417
       - Base branch: main
       - Files changed: linear-create/SKILL.md, linear-create/eval.yaml
-      Note: The PR head version of linear-create/SKILL.md contains a self-reference in the body — line 42 says "This skill, linear-create, handles..." (uses the skill name in prose).
 
       Inference completed: skill A/B (main vs PR head), single model, all dataset items. User has confirmed the summary (@vashbrightfire confirm).
 
       Proceed with the eval.
     expected_output:
       behavior: |
+        # PLACEHOLDER: This test case requires a real PR with an actual self-reference in SKILL.md.
+        # PR #417 only adds eval.yaml — SKILL.md is unchanged from main, so no self-reference exists to detect.
+        # The test case structure is preserved for when a suitable PR exists. The agent must discover the self-reference
+        # by inspecting the pinned skill, not from the input.
         The agent proceeds to pre-flight checks (inference and confirmation already done). Pre-flight detects a self-reference — the skill name appearing in the SKILL.md body — and
         aborts the entire run before syncing anything to Langfuse or setting up the env. It reports which skill and line(s) contain self-references and tells the user to fix the
         source skill before re-running.
