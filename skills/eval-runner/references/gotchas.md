@@ -18,5 +18,4 @@
 
 ## Execute Phase
 
-1. **Exec timeout kills look like OOM** — The exec tool's default timeout is ~120s. The harness run takes 5–30 minutes. If the harness is exec'd without an explicit `timeout` of at least 900s, the exec tool SIGKILLs it at the default timeout. This SIGKILL is indistinguishable from an OOM kill to the agent. Do NOT throttle `--item-concurrency` or `--experiment-concurrency` in response to a killed process unless you have confirmed OOM via `dmesg` or `journalctl — the OOM killer leaves entries there. A timeout kill is not a resource problem; it's a missing `timeout` argument.
-2. **Always use `background: true`** — The harness must be started with `exec(background=true, timeout=900)` so it returns a session ID immediately. Then poll with `process(action=poll, timeout=30000)` until completion. Never use a foreground exec with a short `yieldMs` — the harness will be killed before it finishes.
+1. **Always use `background: true` with `timeout=900`** — The harness takes 5–30 minutes. The exec tool's default timeout (~120s) will kill it before it finishes. Always start with `exec(background=true, timeout=900)`, then poll with `process(action=poll, timeout=30000)` until completion.
