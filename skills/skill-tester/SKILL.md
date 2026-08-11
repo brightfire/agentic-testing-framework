@@ -62,7 +62,7 @@ After ref resolution, run `recency_check.py` for each (skill variant × model) c
 
 ⚠️ This is a mandatory stop point. Do NOT proceed to pre-flight, sync, env setup, or execute until the user explicitly confirms. No exceptions.
 
-**Skip:** If the user's request asks to skip confirmation (e.g., "skip confirmation"), still present the confirmation summary (variant matrix, models, items, recency status) but do not wait for a reply — proceed directly to pre-flight after outputting it.
+**Skip:** If the user's request asks to skip confirmation (e.g., "skip confirmation"), always output the confirmation summary (variant matrix, models, items, recency status), then proceed directly to pre-flight without waiting for a reply.
 
 After inference and the recency check, present a confirmation dialog using this exact format and **STOP**. Wait for the user's reply. (Unless skipped — see above.)
 
@@ -285,7 +285,7 @@ Count the experiment prefixes (variants). The report mode depends on the count:
 
 **1 variant — standalone report:** Invoke `eval_report.py` with `--prefix`, `--dataset`, `--by-dimension`, `--per-item`, `--since`, and `--json`. Report per-item scores and dimension breakdowns. Skip verdict and improvement steps.
 
-**3+ variants — raw score report:** Invoke `eval_report.py` with `--variants` (all prefixes, first is variant A), `--dataset`, `--by-dimension`, `--since`, and `--json`. Report per-variant scores and breakdowns. Skip verdict and improvement steps — the user reviews the raw data to draw conclusions.
+**3+ variants — raw score report:** Invoke `eval_report.py` with `--variants` (all prefixes, first is variant A), `--dataset`, `--by-dimension`, `--since`, and `--json`. Report per-variant scores and breakdowns only. Do NOT include deltas, verdict, or improvement suggestions — the user reviews the raw data to draw conclusions.
 
 For all modes: if execute start time is unavailable, use a timestamp a few minutes before the earliest experiment run. First prefix is variant A in `--variants` mode. `--json` for structured output.
 
