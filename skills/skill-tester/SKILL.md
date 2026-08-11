@@ -62,7 +62,7 @@ After ref resolution, run `recency_check.py` for each (skill variant × model) c
 
 ⚠️ This is a mandatory stop point. Do NOT proceed to pre-flight, sync, env setup, or execute until the user explicitly confirms. No exceptions.
 
-**Skip:** If the user's request includes `skip_confirmation`, skip the confirmation gate entirely and proceed directly to pre-flight. Do not present a confirmation dialog or wait for a reply.
+**Skip:** If the user's request asks to skip confirmation (e.g., "skip confirmation"), skip the confirmation gate entirely and proceed directly to pre-flight. Do not present a confirmation dialog or wait for a reply.
 
 After inference and the recency check, present a confirmation dialog using this exact format and **STOP**. Wait for the user's reply. (Unless skipped — see above.)
 
@@ -88,7 +88,7 @@ Use this template verbatim (adapt the content, keep the structure):
 ### Run Matrix
 
 - **Dataset items:** All N (`<item1>`, `<item2>`, ...) / Specific: `<item-ids>`
-- **Repeats per combination:** N (default 10)
+- **Repeats per combination:** N (default 10). If the user specifies a repeat count in their request (e.g., "run each test once" → 1, "run 3 repeats" → 3), use that value.
 
 | Model | Variant | Status | Runs |
 -------|---------|--------|------|

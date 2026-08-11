@@ -159,7 +159,7 @@ items:
       scoring_type: pass_fail
       scoring_criteria:
         - "Inference: identifies skill A/B — main vs PR head"
-        - "Confirmation: skips confirmation (skip_confirmation in request) and proceeds to pre-flight"
+        - "Confirmation: skips confirmation (skip confirmation requested in input) and proceeds to pre-flight"
         - "Pre-flight: fetches and scans skill for self-references"
         - "Sync: runs dataset_sync.py with --output-manifest"
         - "Env setup: creates suffixed skill directories"
@@ -177,7 +177,7 @@ items:
       - PR number: 417
       - Base branch: main
 
-      User request: "Re-run tests for this skill. skip_confirmation repeat 1"
+      User request: "Re-run tests for this skill. Skip confirmation and run each test once"
     expected_output:
       behavior: |
         The agent recognizes the re-run request and skips variant inference — reusing the previous variant spec directly. Ref resolution always runs for branch
@@ -238,7 +238,7 @@ items:
       - Base branch: main
       - Files changed: linear-create/eval.yaml
 
-      User request: "Run tests for this skill. skip_confirmation repeat 1"
+      User request: "Run tests for this skill. Skip confirmation and run each test once"
     expected_output:
       behavior: |
         The agent runs the full pipeline: inference, confirmation, pre-flight, sync, env setup, execute, and report. During the execute phase, if some items
@@ -249,7 +249,7 @@ items:
       scoring_criteria:
         - "Inference: identifies skill A/B — main@bbbbbbb vs pr-101@aaaaaaa"
         - "Ref Resolution: resolves main to bbbbbbb and PR head to aaaaaaa (via PR API fallback)"
-        - "Confirmation: skips confirmation (skip_confirmation in request) and proceeds to pre-flight"
+        - "Confirmation: skips confirmation (skip confirmation requested in input) and proceeds to pre-flight"
         - "Pre-flight: fetches and scans skill for self-references"
         - "Sync: runs dataset_sync.py with --output-manifest"
         - "Env setup: creates suffixed skill directories for both variants"
@@ -266,7 +266,7 @@ items:
 
   - id: execute-model-ab-slack-triggered
     input: |
-      Slack message: "@vashbrightfire Run tests for linear-create against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6 skip_confirmation repeat 1"
+      Slack message: "@vashbrightfire Run tests for linear-create against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6 Skip confirmation and run each test once"
     expected_output:
       behavior: |
         The agent processes the Slack-triggered model A/B test request. It infers: skill = linear-create, models = glm-5.2 and claude-sonnet-4-6,
@@ -280,7 +280,7 @@ items:
         - "Inference: identifies two models — glm-5.2 and claude-sonnet-4-6"
         - "Inference: no PR or branch referenced — uses current main HEAD as the skill version"
         - "Ref Resolution: resolves main to current HEAD"
-        - "Confirmation: skips confirmation (skip_confirmation in request) and proceeds to pre-flight"
+        - "Confirmation: skips confirmation (skip confirmation requested in input) and proceeds to pre-flight"
         # Phase: Pre-flight
         - "Pre-flight: fetches and scans skill for self-references"
         # Phase: Sync
@@ -313,7 +313,7 @@ items:
       - Base branch: main
       - Files changed: linear-create/SKILL.md, linear-create/eval.yaml
 
-      User request: "Run tests for this skill. skip_confirmation repeat 1"
+      User request: "Run tests for this skill. Skip confirmation and run each test once"
     expected_output:
       behavior: |
         The agent runs inference and confirmation, then proceeds to pre-flight checks. Pre-flight fetches SKILL.md from both git refs (main@bbbbbbb and
@@ -324,7 +324,7 @@ items:
       scoring_criteria:
         - "Inference: identifies skill A/B — main@bbbbbbb vs pr-101@aaaaaaa"
         - "Ref Resolution: resolves main to bbbbbbb and PR head to aaaaaaa (via PR API fallback)"
-        - "Confirmation: skips confirmation (skip_confirmation in request) and proceeds to pre-flight"
+        - "Confirmation: skips confirmation (skip confirmation requested in input) and proceeds to pre-flight"
         - "Pre-flight: fetches SKILL.md from both git refs via git show"
         - "Pre-flight: scans skill body (not frontmatter) for self-references using word-boundary regex"
         - "Pre-flight: if self-reference detected — aborts the entire run, does not proceed to sync"
@@ -345,13 +345,13 @@ items:
       - Base branch: main
       - Files changed: linear-create/eval.yaml (new file)
 
-      User request: "Run tests for this skill. skip_confirmation repeat 1"
+      User request: "Run tests for this skill. Skip confirmation and run each test once"
     expected_output:
       behavior: |
         The agent runs inference, resolves refs (main to bbbbbbb, PR head to aaaaaaa via PR API fallback), and verifies eval.yaml exists at both pinned
         commits. At the base commit (bbbbbbb, before #101 merged), eval.yaml does not exist — the agent excludes the base variant from the matrix (nothing
         to test). Only the after variant (pr-101@aaaaaaa) has eval.yaml, so only that variant is included. The agent runs the recency check, presents a
-        confirmation summary noting the excluded base variant, skips confirmation (skip_confirmation in request), and proceeds through sync (after only), env setup,
+        confirmation summary noting the excluded base variant, skips confirmation (skip confirmation requested in input), and proceeds through sync (after only), env setup,
         execute, and report as a single-variant run.
       scoring_type: pass_fail
       scoring_criteria:
@@ -360,7 +360,7 @@ items:
         - "Ref Resolution: detects eval.yaml does not exist at base commit bbbbbbb — excludes base variant from matrix"
         - "Inference: only after variant (pr-101@aaaaaaa) has eval.yaml — single-variant run"
         - "Confirmation: presents summary noting the excluded base variant"
-        - "Confirmation: skips confirmation (skip_confirmation in request) and proceeds"
+        - "Confirmation: skips confirmation (skip confirmation requested in input) and proceeds"
         - "Sync: syncs only the after version"
         - "Env setup: creates suffixed directory for after variant only"
         - "Execute: invokes eval_harness.py with --repeat 1 for the after variant"
@@ -400,7 +400,7 @@ items:
       - Base branch: main
       - Files changed: linear-create/eval.yaml
 
-      User request: "Run tests for this skill. skip_confirmation repeat 1"
+      User request: "Run tests for this skill. Skip confirmation and run each test once"
     expected_output:
       behavior: |
         The agent runs the full pipeline: inference, confirmation, pre-flight, sync, env setup, execute, and report. During the report phase, if
@@ -411,7 +411,7 @@ items:
       scoring_criteria:
         - "Inference: identifies skill A/B — main@bbbbbbb vs pr-101@aaaaaaa"
         - "Ref Resolution: resolves main to bbbbbbb and PR head to aaaaaaa (via PR API fallback)"
-        - "Confirmation: skips confirmation (skip_confirmation in request) and proceeds to pre-flight"
+        - "Confirmation: skips confirmation (skip confirmation requested in input) and proceeds to pre-flight"
         - "Pre-flight: fetches and scans skill for self-references"
         - "Sync: runs dataset_sync.py with --output-manifest"
         - "Env setup: creates suffixed skill directories"
@@ -434,7 +434,7 @@ items:
       - Base branch: main
       - Files changed: linear-create/eval.yaml
 
-      User request: "Just run tests for the PR version of linear-create — no need to compare against main. skip_confirmation repeat 1"
+      User request: "Just run tests for the PR version of linear-create — no need to compare against main. Skip confirmation and run each test once"
     expected_output:
       behavior: |
         The agent recognizes this is a single-variant run (pr-101@aaaaaaa only, no baseline comparison). It resolves the PR head to aaaaaaa via the
@@ -446,7 +446,7 @@ items:
         - "Inference: identifies single skill variant (pr-101@aaaaaaa only, no baseline)"
         - "Ref Resolution: resolves PR head to aaaaaaa (via PR API fallback since branch is deleted)"
         - "Ref Resolution: verifies eval.yaml exists at aaaaaaa"
-        - "Confirmation: skips confirmation (skip_confirmation in request) and proceeds to pre-flight"
+        - "Confirmation: skips confirmation (skip confirmation requested in input) and proceeds to pre-flight"
         - "Pre-flight: fetches and scans skill for self-references"
         - "Sync: syncs only the after version (no baseline)"
         - "Env setup: creates suffixed directory for the after variant"
@@ -468,7 +468,7 @@ items:
       Branch: main
       Skill: linear-create
 
-      User request: "Run tests for the linear-create skill for the past 3 commits on main. skip_confirmation repeat 1"
+      User request: "Run tests for the linear-create skill for the past 3 commits on main. Skip confirmation and run each test once"
     expected_output:
       behavior: |
         The agent recognizes this is a 3-variant run and selects raw score report mode.
