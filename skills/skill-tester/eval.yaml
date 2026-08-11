@@ -1,8 +1,8 @@
-dataset: skill-tester
+dataset: linear-create
 
-description: "End-to-end evaluation runner for OpenClaw skills — dataset sync, environment setup, variant isolation, and orchestrated eval runs via Langfuse."
+description: "Eval-runner skill test cases — inference, confirmation, sync, execute, and report phases. Uses linear-create (example-org/skill-repo) as the subject skill."
 
-timeout_per_run: 1800  # 30 min — single experiment run (all items, repeat=1, concurrency=1)
+timeout_per_run: 600  # 10 min — 3 dataset items, short skill
 
 items:
   # ─── Inference + confirmation (stops at confirmation gate) ──────────
@@ -10,11 +10,11 @@ items:
   - id: pr-triggered-inference
     input: |
       PR context:
-      - Repo: brightfire/agentic-testing-framework
-      - PR branch: claw/vash/skill-improvement
-      - PR number: 123
+      - Repo: example-org/skill-repo
+      - PR branch: claw/vash/add-eval-yaml-linear-create
+      - PR number: 417
       - Base branch: main
-      - Files changed: skills/skill-tester/SKILL.md
+      - Files changed: linear-create/eval.yaml
 
       User request: "Run the eval for this PR."
     expected_output:
@@ -36,13 +36,14 @@ items:
 
   - id: model-comparison-inference
     input: |
-      Branch context:
-      - Repo: brightfire/agentic-testing-framework
-      - Branch: claw/vash/skill-model-comparison
+      PR context:
+      - Repo: example-org/skill-repo
+      - PR branch: claw/vash/add-eval-yaml-linear-create
+      - PR number: 417
       - Base branch: main
-      - Files changed: skills/skill-tester/SKILL.md
+      - Files changed: linear-create/eval.yaml
 
-      User request: "Test this branch against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6."
+      User request: "Test this PR against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6."
     expected_output:
       behavior: |
         The agent runs variant inference with the model dimension added, runs the recency check (no prior experiments, so baseline is included), and presents a
@@ -50,7 +51,7 @@ items:
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Variant Inference
-        - "Inference: identifies skill A/B — main (before) vs branch head (after)"
+        - "Inference: identifies skill A/B — main (before) vs PR head (after)"
         - "Inference: identifies two models — glm-5.2 and claude-sonnet-4-6"
         - "Recency: runs baseline recency check — no prior experiments found, baseline included for both models"
         - "Inference: recognizes the full matrix is 2 skill variants × 2 models = 4 runs"
@@ -64,26 +65,27 @@ items:
 
   - id: model-comparison-baseline-recent
     input: |
-      Branch context:
-      - Repo: brightfire/agentic-testing-framework
-      - Branch: claw/vash/skill-model-comparison
+      PR context:
+      - Repo: example-org/skill-repo
+      - PR branch: claw/vash/add-eval-yaml-linear-create
+      - PR number: 417
       - Base branch: main
-      - Files changed: skills/skill-tester/SKILL.md
+      - Files changed: linear-create/eval.yaml
 
-      Prior runs: 2 baseline (before/main) experiments already exist in Langfuse for this dataset — one for glm-5.2 and one for claude-sonnet-4-6, both created 2 days ago.
+      Prior runs: 2 baseline (main) experiments already exist in Langfuse for the linear-create dataset — one for glm-5.2 and one for claude-sonnet-4-6, both created 2 days ago.
 
-      User request: "Test this branch against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6."
+      User request: "Test this PR against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6."
     expected_output:
       behavior: |
         The agent runs variant inference with the model dimension, runs the recency check and finds 2 recent baseline experiments — one per model. It skips the baseline
-        variant for both models — only the after (branch head) variant is included. The confirmation summary shows 1 skill variant × 2 models = 2 runs, with baseline status "already
+        variant for both models — only the after (PR head) variant is included. The confirmation summary shows 1 skill variant × 2 models = 2 runs, with baseline status "already
         tested, skipping" for both models.
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Variant Inference
         - "Inference: identifies two models — glm-5.2 and claude-sonnet-4-6"
         - "Recency: runs baseline recency check — finds 2 separate baseline experiments (one per model)"
-        - "Recency: skips baseline variant for both models — only after (branch head) is included"
+        - "Recency: skips baseline variant for both models — only after (PR head) is included"
         - "Recency: recognizes the reduced matrix is 1 skill variant × 2 models = 2 runs (not 4)"
         # Phase: Confirmation
         - "Confirmation: presents summary showing only after variant, both models, total run count (2)"
@@ -92,21 +94,24 @@ items:
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
 
+  # PLACEHOLDER: requires a second linear-create PR to exist (a future PR that modifies the skill, not just adds eval.yaml)
   - id: model-comparison-after-pr-eval
     input: |
       PR context:
-      - Repo: brightfire/agentic-testing-framework
-      - PR branch: claw/vash/skill-model-comparison
-      - PR number: 42
+      - Repo: example-org/skill-repo
+      - PR branch: claw/vash/skill-improvement
+      - PR number: 500
       - Base branch: main
-      - Files changed: skills/skill-tester/SKILL.md
+      - Files changed: linear-create/SKILL.md
 
-      Prior runs: A previous PR eval was already completed using openrouter/z-ai/glm-5.2 as the single model. Baseline (before/main) experiment exists in Langfuse for glm-5.2 only,
+      Prior runs: A previous PR eval was already completed using openrouter/z-ai/glm-5.2 as the single model. Baseline (main) experiment exists in Langfuse for glm-5.2 only,
       created 1 day ago. No baseline experiment exists for claude-sonnet-4-6.
 
       User request: "Now test this PR against glm-5.2 and claude-sonnet-4-6."
     expected_output:
       behavior: |
+        # PLACEHOLDER: This test case requires a second linear-create PR to exist (PR #101 only adds eval.yaml, not SKILL.md changes).
+        # The test case structure is preserved for when a suitable PR exists.
         The agent runs variant inference and the baseline recency check. It finds that glm-5.2 was already tested in the prior run (skip). Only claude-sonnet-4-6 needs to run —
         both baseline and PR-head since no prior experiments exist for it. The agent asks for confirmation to proceed with only the new model (claude-sonnet-4-6).
       scoring_type: pass_fail
@@ -116,27 +121,30 @@ items:
         - "Recency: recognizes glm-5.2 was already tested in the prior run (skip)"
         - "Recency: recognizes claude-sonnet-4-6 has no prior experiments (include both baseline and PR-head)"
         - "Confirmation: asks user to confirm proceeding with only claude-sonnet-4-6"
-        - "Recency: recognizes the matrix is 2 runs: pr-42×claude-sonnet-4-6, main×claude-sonnet-4-6"
+        - "Recency: recognizes the matrix is 2 runs: pr-500×claude-sonnet-4-6, main×claude-sonnet-4-6"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
 
+  # PLACEHOLDER: requires a second linear-create PR to exist (a future PR that modifies the skill, not just adds eval.yaml)
   - id: model-b-only-after-pr-eval
     input: |
       PR context:
-      - Repo: brightfire/agentic-testing-framework
-      - PR branch: claw/vash/skill-model-comparison
-      - PR number: 42
+      - Repo: example-org/skill-repo
+      - PR branch: claw/vash/skill-improvement
+      - PR number: 500
       - Base branch: main
-      - Files changed: skills/skill-tester/SKILL.md
+      - Files changed: linear-create/SKILL.md
 
-      Prior runs: A previous PR eval was already completed using openrouter/z-ai/glm-5.2 as the single model. Baseline (before/main) experiment exists in Langfuse for glm-5.2 only,
+      Prior runs: A previous PR eval was already completed using openrouter/z-ai/glm-5.2 as the single model. Baseline (main) experiment exists in Langfuse for glm-5.2 only,
       created 1 day ago. No baseline experiment exists for claude-sonnet-4-6.
 
       User request: "Now test this PR against claude-sonnet-4-6."
     expected_output:
       behavior: |
+        # PLACEHOLDER: This test case requires a second linear-create PR to exist (PR #101 only adds eval.yaml, not SKILL.md changes).
+        # The test case structure is preserved for when a suitable PR exists.
         The agent runs variant inference with a single model (claude-sonnet-4-6), and runs the recency check. It finds no baseline experiment for claude-sonnet-4-6, so the
-        baseline variant is included. The confirmation summary shows: main×claude-sonnet-4-6, pr-42×claude-sonnet-4-6 = 2 runs. Baseline status notes claude-sonnet-4-6 as "no
+        baseline variant is included. The confirmation summary shows: main×claude-sonnet-4-6, pr-500×claude-sonnet-4-6 = 2 runs. Baseline status notes claude-sonnet-4-6 as "no
         prior baseline."
       scoring_type: pass_fail
       scoring_criteria:
@@ -144,7 +152,7 @@ items:
         - "Inference: identifies single model — claude-sonnet-4-6"
         - "Recency: runs baseline recency check — finds no baseline experiment for claude-sonnet-4-6"
         - "Recency: includes baseline variant for claude-sonnet-4-6 (no prior baseline)"
-        - "Inference: recognizes the matrix is 2 runs: main×claude-sonnet-4-6, pr-42×claude-sonnet-4-6"
+        - "Inference: recognizes the matrix is 2 runs: main×claude-sonnet-4-6, pr-500×claude-sonnet-4-6"
         # Phase: Confirmation
         - "Confirmation: presents summary showing both before and after variants for claude-sonnet-4-6"
         - "Confirmation: shows total run count (2)"
@@ -155,20 +163,21 @@ items:
 
   - id: model-ab-baseline-missing
     input: |
-      Branch context:
-      - Repo: brightfire/agentic-testing-framework
-      - Branch: claw/vash/skill-model-comparison
+      PR context:
+      - Repo: example-org/skill-repo
+      - PR branch: claw/vash/add-eval-yaml-linear-create
+      - PR number: 417
       - Base branch: main
-      - Files changed: skills/skill-tester/SKILL.md
+      - Files changed: linear-create/eval.yaml
 
-      Prior runs: A previous eval was run as a re-run (after variant only, no baseline). No baseline (before/main) experiments exist in Langfuse for this dataset for any model.
+      Prior runs: A previous eval was run as a re-run (after variant only, no baseline). No baseline (main) experiments exist in Langfuse for the linear-create dataset for any model.
 
-      User request: "Test this branch against glm-5.2 and claude-sonnet-4-6."
+      User request: "Test this PR against glm-5.2 and claude-sonnet-4-6."
     expected_output:
       behavior: |
         The agent runs variant inference with the model dimension, and runs the recency check. It finds no baseline experiments for either model, so the baseline variant
-        is included for both. The confirmation summary shows the full 2×2 matrix: main×glm-5.2, main×claude-sonnet-4-6, claw-vash-skill-model-comparison×glm-5.2,
-        claw-vash-skill-model-comparison×claude-sonnet-4-6 = 4 runs. Baseline status notes "no prior baseline" for both models.
+        is included for both. The confirmation summary shows the full 2×2 matrix: main×glm-5.2, main×claude-sonnet-4-6, pr-101×glm-5.2,
+        pr-101×claude-sonnet-4-6 = 4 runs. Baseline status notes "no prior baseline" for both models.
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Variant Inference
@@ -184,18 +193,21 @@ items:
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
 
+  # PLACEHOLDER: requires a second linear-create PR to exist (a future PR that changes both SKILL.md and eval.yaml)
   - id: skill-and-eval-changed-model-ab
     input: |
       PR context:
-      - Repo: brightfire/agentic-testing-framework
+      - Repo: example-org/skill-repo
       - PR branch: claw/vash/skill-and-eval-update
-      - PR number: 55
+      - PR number: 500
       - Base branch: main
-      - Files changed: skills/skill-tester/SKILL.md, skills/skill-tester/eval.yaml
+      - Files changed: linear-create/SKILL.md, linear-create/eval.yaml
 
       User request: "Test this PR against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6."
     expected_output:
       behavior: |
+        # PLACEHOLDER: This test case requires a second linear-create PR to exist (a future PR that changes both SKILL.md and eval.yaml).
+        # The test case structure is preserved for when a suitable PR exists.
         The agent runs variant inference with the model dimension, and notes that eval.yaml has changed in addition to SKILL.md — meaning both before and after eval versions will
         need syncing (two dataset timestamps). It runs the recency check (no prior experiments, baseline included for both models). The confirmation summary shows the full
         2×2 matrix (2 skill variants × 2 models = 4 runs) and notes that eval.yaml changed, so both eval versions will be synced. It waits for confirmation — no further phases run.
@@ -217,20 +229,24 @@ items:
 
   # ─── Full run (post-confirmation → sync → env setup) ────────────────
 
+  # PLACEHOLDER: requires a second linear-create PR to exist (needs A/B: main vs PR head — only works if both have eval.yaml, which means post-#101 + a future PR)
   - id: pr-triggered-full-run
     input: |
       PR context:
-      - Repo: brightfire/agentic-testing-framework
+      - Repo: example-org/skill-repo
       - PR branch: claw/vash/skill-improvement
-      - PR number: 123
+      - PR number: 500
       - Base branch: main
-      - Files changed: skills/skill-tester/SKILL.md
+      - Files changed: linear-create/SKILL.md
 
       Inference completed: skill A/B (main vs PR head), single model (agent default), all dataset items. Baseline included (no prior runs). User has confirmed the summary (@vashbrightfire confirm).
 
       Proceed with the eval.
     expected_output:
       behavior: |
+        # PLACEHOLDER: This test case requires a second linear-create PR to exist (needs both main and PR head to have eval.yaml).
+        # PR #101 only adds eval.yaml — after merge, main has eval.yaml, but a future PR is needed for a meaningful A/B comparison.
+        # The test case structure is preserved for when a suitable PR exists.
         The agent executes pre-flight checks, sync (both versions), and env setup (both variants). Inference and confirmation are already done — the agent does not re-present a
         confirmation summary.
       scoring_type: pass_fail
@@ -264,7 +280,7 @@ items:
         - "Report: runs eval_report.py with --variants, --by-dimension, --json, --threshold, and --since"
         - "Report: parses JSON output and generates a verdict (improvement, regression, or neutral) based on deltas"
         - "Report: generates improvement suggestions for items with significant regressions (delta < -threshold)"
-        - "Report: posts results as a comment on PR #123 via gh api"
+        - "Report: posts results as a comment on PR #500 via gh api"
         - "Report: cleans up suffixed skill directories after posting results"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
@@ -272,9 +288,9 @@ items:
   - id: rerun-previous-eval
     input: |
       PR context:
-      - Repo: brightfire/agentic-testing-framework
-      - PR branch: claw/vash/skill-improvement
-      - PR number: 123
+      - Repo: example-org/skill-repo
+      - PR branch: claw/vash/add-eval-yaml-linear-create
+      - PR number: 417
       - Base branch: main
 
       User request: "Re-run the previous eval for this PR."
@@ -282,8 +298,9 @@ items:
     expected_output:
       behavior: |
         The agent recognizes the re-run request and skips variant inference — reusing the previous variant spec directly. Ref resolution always runs for branch refs, so the
-        agent re-fetches and re-pins all branch refs. The recency check runs against the resolved hashes and finds that nothing has changed since the prior run (same commit hash,
-        all variants already tested). The agent indicates there are no changes and asks the user to confirm a forced re-run. The user confirms.
+        agent re-fetches and re-pins all branch refs. Since the PR branch was deleted after merge, the agent uses the PR API fallback to resolve the head SHA. The recency
+        check runs against the resolved hashes and finds that nothing has changed since the prior run (same commit hash, all variants already tested). The agent indicates
+        there are no changes and asks the user to confirm a forced re-run. The user confirms.
         The agent proceeds to pre-flight checks, then syncs all variants that need re-execution (both baseline and after, since the user forced a full re-run). It then sets up the
         env for all requested variants.
       scoring_type: pass_fail
@@ -291,6 +308,7 @@ items:
         # Phase: Variant Inference (skipped)
         - "Inference: skips variant inference — reuses previous variant spec"
         - "Ref Resolution: always runs for branch refs — re-fetches and re-pins commit hashes even though this is a rerun"
+        - "Ref Resolution: uses PR API fallback for the deleted PR branch to resolve the head SHA"
         - "Recency: runs the recency check against resolved hashes and finds nothing has changed (same commit hash)"
         - "Confirmation: indicates no changes since prior run and asks user to confirm forced re-run"
         - "Confirmation: user confirms — agent proceeds to pre-flight"
@@ -317,18 +335,22 @@ items:
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
 
+  # PLACEHOLDER: requires a second linear-create PR to exist (needs a branch that still exists — #101's branch is deleted)
   - id: rerun-branch-advanced
     input: |
       PR context:
-      - Repo: brightfire/agentic-testing-framework
+      - Repo: example-org/skill-repo
       - PR branch: claw/vash/skill-improvement
-      - PR number: 123
+      - PR number: 500
       - Base branch: main
 
       User request: "Re-run the previous eval for this PR."
       The previous eval ran against PR head commit a1b2c3d. Since then, the PR branch has advanced — the current PR head is now e5f6g7h (2 new commits pushed to the branch).
     expected_output:
       behavior: |
+        # PLACEHOLDER: This test case requires a second linear-create PR with a branch that still exists.
+        # PR #101's branch (claw/vash/add-eval-yaml-linear-create) was deleted after merge, so branch advancement cannot be tested.
+        # The test case structure is preserved for when a suitable PR exists.
         The agent recognizes the re-run request and skips variant inference — reusing the previous variant spec. Ref resolution always runs (for branch refs, regardless of
         whether this is an initial run or a rerun), so the agent re-fetches and re-pins all branch refs. It detects that the PR head has advanced from a1b2c3d to e5f6g7h.
         The agent informs the user that the PR head has advanced from a1b2c3d to e5f6g7h, updates the variant spec with the new hash, and proceeds with the updated commit.
@@ -357,21 +379,21 @@ items:
   - id: execute-harness-crash
     input: |
       PR context:
-      - Repo: brightfire/agentic-testing-framework
-      - PR branch: claw/vash/skill-improvement
-      - PR number: 123
+      - Repo: example-org/skill-repo
+      - PR branch: claw/vash/add-eval-yaml-linear-create
+      - PR number: 417
       - Base branch: main
-      - Files changed: skills/skill-tester/SKILL.md
+      - Files changed: linear-create/eval.yaml
 
       Inference, confirmation, pre-flight, sync, and env setup all completed successfully. The user confirmed the eval.
 
       During the execute phase, the first harness invocation (variant A / main) crashed with exit code 1 and a Python traceback — the harness hit an
-      unexpected error while spawning the `openclaw agent` subprocess for the first dataset item. The second variant (pr-123) has not yet been attempted.
+      unexpected error while spawning the `openclaw agent` subprocess for the first dataset item. The second variant (pr-101) has not yet been attempted.
     expected_output:
       behavior: |
         The agent detects the harness crash from the non-zero exit code. It immediately reports the failure to the originating channel as an error
         notification — including which variant failed, the error message, and the experiment name. It does NOT wait for the report phase. It then
-        continues with the remaining variant (pr-123) rather than aborting the entire execute phase, since the failure is variant-specific (not systemic).
+        continues with the remaining variant (pr-101) rather than aborting the entire execute phase, since the failure is variant-specific (not systemic).
       scoring_type: pass_fail
       scoring_criteria:
         - "Execute: detects harness crash from non-zero exit code"
@@ -385,15 +407,15 @@ items:
   - id: execute-all-items-failed
     input: |
       PR context:
-      - Repo: brightfire/agentic-testing-framework
-      - PR branch: claw/vash/skill-improvement
-      - PR number: 123
+      - Repo: example-org/skill-repo
+      - PR branch: claw/vash/add-eval-yaml-linear-create
+      - PR number: 417
       - Base branch: main
-      - Files changed: skills/skill-tester/SKILL.md
+      - Files changed: linear-create/eval.yaml
 
       Inference, confirmation, pre-flight, sync, and env setup all completed. The user confirmed the eval.
 
-      During the execute phase, the harness exited with code 1 because all dataset items failed — the summary shows "Total failures: 5" with 0 successful
+      During the execute phase, the harness exited with code 1 because all dataset items failed — the summary shows "Total failures: 3" with 0 successful
       items. This happened for both variants.
     expected_output:
       behavior: |
@@ -411,16 +433,16 @@ items:
   - id: execute-partial-failure
     input: |
       PR context:
-      - Repo: brightfire/agentic-testing-framework
-      - PR branch: claw/vash/skill-improvement
-      - PR number: 123
+      - Repo: example-org/skill-repo
+      - PR branch: claw/vash/add-eval-yaml-linear-create
+      - PR number: 417
       - Base branch: main
-      - Files changed: skills/skill-tester/SKILL.md
+      - Files changed: linear-create/eval.yaml
 
       Inference, confirmation, pre-flight, sync, and env setup all completed. The user confirmed the eval.
 
-      During the execute phase, the harness completed (exit 0) for both variants. Variant A (main) had 2 failed items out of 10. Variant B (pr-123)
-      had 0 failed items. The harness summary shows "Total failures: 2" for variant A.
+      During the execute phase, the harness completed (exit 0) for both variants. Variant A (main) had 1 failed item out of 3. Variant B (pr-101)
+      had 0 failed items. The harness summary shows "Total failures: 1" for variant A.
     expected_output:
       behavior: |
         The agent recognizes that partial failures (some items failed, but harness completed with exit 0) are NOT an immediate error condition. It
@@ -437,7 +459,7 @@ items:
 
   - id: execute-model-ab-slack-triggered
     input: |
-      Slack-triggered model A/B test. The user wants to compare openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6 for the skill-tester skill.
+      Slack-triggered model A/B test. The user wants to compare openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6 for the linear-create skill.
 
       Inference, confirmation, pre-flight, sync, and env setup all completed. The user confirmed the eval. Env setup created a single suffixed skill
       directory (skill unchanged between model variants).
@@ -462,14 +484,15 @@ items:
 
   - id: self-reference-abort
     input: |
-      Branch context:
-      - Repo: brightfire/agentic-testing-framework
-      - Branch: claw/vash/skill-improvement
+      PR context:
+      - Repo: example-org/skill-repo
+      - PR branch: claw/vash/add-eval-yaml-linear-create
+      - PR number: 417
       - Base branch: main
-      - Files changed: skills/skill-tester/SKILL.md
-      Note: The branch head version of skills/skill-tester/SKILL.md contains a self-reference in the body — line 42 says "This skill, skill-tester, handles..." (uses the skill name in prose).
+      - Files changed: linear-create/SKILL.md, linear-create/eval.yaml
+      Note: The PR head version of linear-create/SKILL.md contains a self-reference in the body — line 42 says "This skill, linear-create, handles..." (uses the skill name in prose).
 
-      Inference completed: skill A/B (main vs branch head), single model, all dataset items. User has confirmed the summary (@vashbrightfire confirm).
+      Inference completed: skill A/B (main vs PR head), single model, all dataset items. User has confirmed the summary (@vashbrightfire confirm).
 
       Proceed with the eval.
     expected_output:
@@ -495,19 +518,22 @@ items:
 
   - id: new-eval-yaml
     input: |
-      Branch context:
-      - Repo: brightfire/agentic-testing-framework
-      - Branch: claw/vash/add-eval-yaml
+      PR context:
+      - Repo: example-org/skill-repo
+      - PR branch: claw/vash/add-eval-yaml-linear-create
+      - PR number: 417
       - Base branch: main
-      - Files changed: skills/skill-tester/eval.yaml (new file — does not exist on base branch)
+      - Files changed: linear-create/eval.yaml (new file — does not exist on base branch at the PR base commit)
 
-      User request: "Run only the sync phase for this branch."
+      User request: "Run only the sync phase for this PR."
     expected_output:
       behavior: |
-        The agent checks for eval.yaml at the base commit and finds it doesn't exist. It excludes the base variant from the matrix (nothing to test) and proceeds to sync only the after version. The confirmation prompt notes the excluded base variant. The manifests list contains one entry — the after variant with `manifest: <path>`.
+        The agent checks for eval.yaml at the base commit and finds it doesn't exist (at the PR base commit, before #101 merged). It excludes the base variant from the matrix
+        (nothing to test) and proceeds to sync only the after version. The confirmation prompt notes the excluded base variant. The manifests list contains one entry — the after
+        variant with `manifest: <path>`.
       scoring_type: pass_fail
       scoring_criteria:
-        - "Recognizes eval.yaml doesn't exist on base branch (new eval.yaml)"
+        - "Recognizes eval.yaml doesn't exist on base branch at the PR base commit (new eval.yaml)"
         - "Excludes base variant from the matrix — not treated as error"
         - "Confirmation prompt notes the excluded base variant"
         - "Only syncs the after version"
@@ -517,15 +543,16 @@ items:
 
   - id: sync-failure-abort
     input: |
-      Branch context:
-      - Repo: brightfire/agentic-testing-framework
-      - Branch: claw/vash/eval-yaml-update
+      PR context:
+      - Repo: example-org/skill-repo
+      - PR branch: claw/vash/add-eval-yaml-linear-create
+      - PR number: 417
       - Base branch: main
-      - Files changed: skills/skill-tester/eval.yaml
+      - Files changed: linear-create/eval.yaml
 
       During sync, the "before" version sync failed — dataset_sync.py exited with code 1 and the output shows "LANGFUSE_SECRET_KEY not set".
 
-      User request: "Run only the sync phase for this branch."
+      User request: "Run only the sync phase for this PR."
     expected_output:
       behavior: |
         The agent recognizes the sync failure from the non-zero exit code, and aborts the sync phase. It does NOT attempt the after sync. It reports the error from the script
@@ -542,16 +569,20 @@ items:
 
   # ─── Multi-variant (N > 2) eval ─────────────────────────────────────
 
+  # PLACEHOLDER: requires a second linear-create PR to exist (not enough commits on main have eval.yaml yet — #101 just added it)
   - id: multi-commit-eval
     input: |
-      Repo: brightfire/agentic-testing-framework
+      Repo: example-org/skill-repo
       Branch: main
-      Skill: skill-tester
-      eval.yaml path: skills/skill-tester/eval.yaml
+      Skill: linear-create
+      eval.yaml path: linear-create/eval.yaml
 
       User request: "Run the evaluation for the past 5 commits on the main branch."
     expected_output:
       behavior: |
+        # PLACEHOLDER: This test case requires enough commits on main to have eval.yaml.
+        # PR #101 just added eval.yaml, so only the most recent 1-2 commits on main have it. Older commits would be excluded.
+        # The test case structure is preserved for when enough commits with eval.yaml exist.
         The agent runs variant inference and identifies 5 skill variants — one for each of the last 5 commits on main. The variant labels are the short commit hashes
         (e.g., `a1b2c3d`, `e5f6g7h`, `i9j0k1l`, `m3n4o5p`, `q7r8s9t`). The agent runs the recency check for all 5 variants. If any have matching experiments within the recency
         window, those are noted as reused. New or changed variants are included in the run. The agent presents the variant summary and waits for user confirmation. The
@@ -574,11 +605,11 @@ items:
   - id: no-evaluator-configured
     input: |
       PR context:
-      - Repo: brightfire/agentic-testing-framework
-      - PR branch: claw/vash/skill-improvement
-      - PR number: 77
+      - Repo: example-org/skill-repo
+      - PR branch: claw/vash/add-eval-yaml-linear-create
+      - PR number: 417
       - Base branch: main
-      - Files changed: skills/skill-tester/SKILL.md
+      - Files changed: linear-create/eval.yaml
 
       Inference completed: skill A/B (main vs PR head), single model (agent default), all dataset items. Baseline included (no prior runs). User has confirmed the summary (@vashbrightfire confirm). Pre-flight and sync completed successfully — the dataset was synced to Langfuse.
 
@@ -604,11 +635,11 @@ items:
   - id: report-timeout-partial-scores
     input: |
       PR context:
-      - Repo: brightfire/agentic-testing-framework
-      - PR branch: claw/vash/skill-improvement
-      - PR number: 123
+      - Repo: example-org/skill-repo
+      - PR branch: claw/vash/add-eval-yaml-linear-create
+      - PR number: 417
       - Base branch: main
-      - Files changed: skills/skill-tester/SKILL.md
+      - Files changed: linear-create/eval.yaml
 
       User request: "Run the eval for this PR. The execute phase already completed but score polling timed out after 3 minutes — not all scores have arrived yet. Go ahead and generate the report with whatever scores are available so far."
     expected_output:
@@ -623,7 +654,7 @@ items:
         - "Report: runs eval_report.py with --variants, --by-dimension, --json, --threshold, and --since using available partial scores"
         - "Report: generates a comparison report with whatever scores exist (partial coverage)"
         - "Report: generates a verdict based on available score deltas"
-        - "Report: posts results as a comment on PR #123"
+        - "Report: posts results as a comment on PR #101"
         - "Report: cleans up suffixed skill directories after posting results"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
@@ -631,11 +662,11 @@ items:
   - id: report-no-scores
     input: |
       PR context:
-      - Repo: brightfire/agentic-testing-framework
-      - PR branch: claw/vash/skill-improvement
-      - PR number: 123
+      - Repo: example-org/skill-repo
+      - PR branch: claw/vash/add-eval-yaml-linear-create
+      - PR number: 417
       - Base branch: main
-      - Files changed: skills/skill-tester/SKILL.md
+      - Files changed: linear-create/eval.yaml
 
       User request: "Run the eval for this PR. The execute phase completed but no scores are available in Langfuse yet — the evaluator hasn't produced any scores. Generate whatever report you can with the current state."
     expected_output:
@@ -649,7 +680,7 @@ items:
         - "Report: suggests checking evaluator configuration (e.g., evaluator not enabled, wrong dataset targeting)"
         - "Report: does NOT produce a verdict (improvement, regression, or neutral)"
         - "Report: does NOT produce a comparison table or delta analysis"
-        - "Report: posts the no-scores report to the originating channel (PR #123 comment)"
+        - "Report: posts the no-scores report to the originating channel (PR #101 comment)"
         - "Report: cleans up suffixed skill directories after posting the report"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
@@ -657,15 +688,15 @@ items:
   - id: report-single-variant-standalone
     input: |
       PR context:
-      - Repo: brightfire/agentic-testing-framework
-      - PR branch: claw/vash/skill-improvement
-      - PR number: 123
+      - Repo: example-org/skill-repo
+      - PR branch: claw/vash/add-eval-yaml-linear-create
+      - PR number: 417
       - Base branch: main
-      - Files changed: skills/skill-tester/SKILL.md
+      - Files changed: linear-create/eval.yaml
 
-      User request: "Just test the PR version of skill-tester — no need to compare against main."
+      User request: "Just test the PR version of linear-create — no need to compare against main."
 
-      Inference: single skill variant (pr-123 only, no baseline). Single model (agent default). All dataset items. User has confirmed (@vashbrightfire confirm). Pre-flight, sync,
+      Inference: single skill variant (pr-101 only, no baseline). Single model (agent default). All dataset items. User has confirmed (@vashbrightfire confirm). Pre-flight, sync,
       env setup, and execute all completed successfully. Scores are available.
     expected_output:
       behavior: |
@@ -680,23 +711,27 @@ items:
         - "Report: does NOT generate a verdict (improvement, regression, or neutral)"
         - "Report: does NOT compute deltas or comparison tables"
         - "Report: does NOT generate improvement suggestions"
-        - "Report: posts results to the originating channel (PR #123 comment)"
+        - "Report: posts results to the originating channel (PR #101 comment)"
         - "Report: cleans up suffixed skill directories after posting results"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
 
+  # PLACEHOLDER: requires a second linear-create PR to exist (needs 3+ variants for raw score report mode)
   - id: report-multi-variant-raw-scores
     input: |
-      Repo: brightfire/agentic-testing-framework
+      Repo: example-org/skill-repo
       Branch: main
-      Skill: skill-tester
+      Skill: linear-create
 
-      User request: "Test the past 3 commits on main for skill-tester."
+      User request: "Test the past 3 commits on main for linear-create."
 
       Inference: 3 skill variants (one per commit, labels are short hashes a1b2c3d, e5f6g7h, i9j0k1l). Single model. All dataset items. User has confirmed. Pre-flight, sync,
       env setup, and execute all completed successfully for all 3 variants. Scores are available for all variants.
     expected_output:
       behavior: |
+        # PLACEHOLDER: This test case requires 3+ variants with eval.yaml, which needs enough commits on main to have eval.yaml.
+        # PR #101 just added eval.yaml, so not enough commits exist yet for a 3-variant raw score report.
+        # The test case structure is preserved for when enough commits with eval.yaml exist.
         The agent recognizes this is a 3-variant run and selects raw score report mode. It invokes eval_report.py with --variants (all 3 prefixes, first is baseline),
         --by-dimension, --since, and --json. It reports per-variant scores and dimension breakdowns. It does NOT generate a verdict, deltas, or improvement suggestions —
         the user reviews the raw data to draw conclusions.
@@ -714,28 +749,31 @@ items:
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
 
+  # PLACEHOLDER: requires a second linear-create PR to exist (needs 2 variants — one with scores, one without)
   - id: report-partial-variant-coverage
     input: |
       PR context:
-      - Repo: brightfire/agentic-testing-framework
+      - Repo: example-org/skill-repo
       - PR branch: claw/vash/skill-improvement
-      - PR number: 123
+      - PR number: 500
       - Base branch: main
-      - Files changed: skills/skill-tester/SKILL.md
+      - Files changed: linear-create/SKILL.md
 
-      User request: "Run the eval for this PR. The execute phase completed and scores are available for the main variant, but the pr-123 variant hasn't been scored yet by the evaluator. Generate the report with whatever data is available."
+      User request: "Run the eval for this PR. The execute phase completed and scores are available for the main variant, but the pr-500 variant hasn't been scored yet by the evaluator. Generate the report with whatever data is available."
     expected_output:
       behavior: |
-        The agent detects that one variant (pr-123) is missing scores while the other (main) has scores. It notes which variant is missing data in the report, proceeds with
+        # PLACEHOLDER: This test case requires a second linear-create PR to exist (needs 2 variants — one with scores, one without).
+        # The test case structure is preserved for when a suitable PR exists.
+        The agent detects that one variant (pr-500) is missing scores while the other (main) has scores. It notes which variant is missing data in the report, proceeds with
         the available data, and the report reflects the incomplete coverage. It does not abort the report phase — it produces a partial report.
       scoring_type: pass_fail
       scoring_criteria:
-        - "Report: detects that pr-123 variant is missing scores while main variant has scores"
+        - "Report: detects that pr-500 variant is missing scores while main variant has scores"
         - "Report: notes which variant is missing data in the report output"
         - "Report: proceeds with available data rather than aborting the report phase"
         - "Report: report reflects the incomplete coverage (clearly shows which variant has no scores)"
         - "Report: does NOT treat missing variant scores as a reason to skip the report entirely"
-        - "Report: posts results to the originating channel (PR #123 comment)"
+        - "Report: posts results to the originating channel (PR #500 comment)"
         - "Report: cleans up suffixed skill directories after posting results"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
@@ -743,13 +781,13 @@ items:
   - id: report-eval-report-error
     input: |
       PR context:
-      - Repo: brightfire/agentic-testing-framework
-      - PR branch: claw/vash/skill-improvement
-      - PR number: 123
+      - Repo: example-org/skill-repo
+      - PR branch: claw/vash/add-eval-yaml-linear-create
+      - PR number: 417
       - Base branch: main
-      - Files changed: skills/skill-tester/SKILL.md
+      - Files changed: linear-create/eval.yaml
 
-      User request: "Run the eval for this PR. The execute phase completed and scores are available, but eval_report.py crashed with an error: 'ValueError: No matching experiments found for prefix skill-tester__openrouter-@preset-conversation-default__pr-123__e5f6g7h__all'. Report the error to the PR."
+      User request: "Run the eval for this PR. The execute phase completed and scores are available, but eval_report.py crashed with an error: 'ValueError: No matching experiments found for prefix linear-create__openrouter-@preset-conversation-default__pr-101__aaaaaaa__all'. Report the error to the PR."
     expected_output:
       behavior: |
         The agent detects that eval_report.py exited non-zero. It reports the error from stderr to the originating channel. It does NOT attempt to produce a verdict or
@@ -760,7 +798,77 @@ items:
         - "Report: reports the error message from stderr"
         - "Report: does NOT attempt to produce a verdict or comparison"
         - "Report: does NOT fabricate results or proceed with partial output"
-        - "Report: posts the error report to the originating channel (PR #123 comment)"
+        - "Report: posts the error report to the originating channel (PR #101 comment)"
         - "Report: cleans up suffixed skill directories after reporting the error"
+      scoring_rules: |
+        Score 10 * (passed criteria / total criteria).
+
+  # ─── Branch-deletion fallback ──────────────────────────────────────
+
+  - id: branch-deleted-fallback
+    input: |
+      PR context:
+      - Repo: example-org/skill-repo
+      - PR branch: claw/vash/add-eval-yaml-linear-create
+      - PR number: 417
+      - Base branch: main
+      - Files changed: linear-create/eval.yaml
+
+      Note: The PR branch (claw/vash/add-eval-yaml-linear-create) was deleted after the PR was merged.
+
+      User request: "Run the eval for this PR."
+    expected_output:
+      behavior: |
+        The agent runs variant inference (skill A/B: main vs PR head). During ref resolution, it attempts `git fetch origin claw/vash/add-eval-yaml-linear-create` which fails
+        (branch deleted after merge). The agent falls back to the PR API: `gh api repos/example-org/skill-repo/pulls/101 --jq '.head.sha'` and gets `aaaaaaa`. It then runs
+        `git fetch origin aaaaaaa` to ensure the commit is present locally, and uses `aaaaaaa` as the pinned ref for the PR head variant. For the base variant, it resolves
+        `main` normally. The agent verifies eval.yaml exists at both pinned commits. The agent runs the recency check (no prior experiments, both included) and presents a
+        confirmation summary with both variants and their pinned hashes. It waits for user confirmation — does not proceed to any further phase.
+      scoring_type: pass_fail
+      scoring_criteria:
+        - "Ref Resolution: attempts `git fetch origin claw/vash/add-eval-yaml-linear-create` and detects the failure"
+        - "Ref Resolution: falls back to PR API — `gh api repos/example-org/skill-repo/pulls/101 --jq '.head.sha'`"
+        - "Ref Resolution: correctly resolves head SHA to aaaaaaa"
+        - "Ref Resolution: runs `git fetch origin aaaaaaa` to ensure the commit is present locally"
+        - "Ref Resolution: uses aaaaaaa as the pinned ref for the PR head variant"
+        - "Ref Resolution: resolves base (main) ref normally"
+        - "Ref Resolution: verifies eval.yaml exists at both pinned commits"
+        - "Confirmation: presents summary with both variants and their pinned hashes"
+        - "Confirmation: waits for user confirmation — does not proceed to any further phase"
+      scoring_rules: |
+        Score 10 * (passed criteria / total criteria).
+
+  # ─── Recency check ─────────────────────────────────────────────────
+
+  - id: recency-check-existing-experiments
+    input: |
+      PR context:
+      - Repo: example-org/skill-repo
+      - PR branch: claw/vash/add-eval-yaml-linear-create
+      - PR number: 417
+      - Base branch: main
+      - Files changed: linear-create/eval.yaml
+
+      Prior runs: A previous eval was already completed for PR #101. Both the main and pr-101 variants have 10 completed experiment runs in Langfuse for the linear-create dataset,
+      created 1 day ago. All runs completed successfully.
+
+      User request: "Run the eval for this PR."
+    expected_output:
+      behavior: |
+        The agent runs variant inference (skill A/B: main vs PR head). It resolves refs (using branch-deletion fallback for the deleted PR branch, resolving the head SHA via
+        the PR API). It runs the recency check for both variants and finds that both main and pr-101 already have 10 completed runs (meeting the default repeat count).
+        The agent prunes both variants from the run matrix — no new runs are needed. The confirmation summary shows all variants as "already tested, skipping" and asks the
+        user to confirm a forced re-run. The agent does NOT proceed to sync, env setup, or execute without a forced re-run confirmation.
+      scoring_type: pass_fail
+      scoring_criteria:
+        - "Ref Resolution: uses branch-deletion fallback to resolve the deleted PR branch (PR API → head SHA)"
+        - "Recency: runs recency check for both main and pr-101 variants"
+        - "Recency: finds 10 existing runs for the main variant — meets the default repeat count"
+        - "Recency: finds 10 existing runs for the pr-101 variant — meets the default repeat count"
+        - "Recency: prunes both variants from the run matrix — no new runs needed"
+        - "Recency: does NOT re-run existing experiments"
+        - "Confirmation: presents summary showing all variants as 'already tested, skipping'"
+        - "Confirmation: asks user to confirm a forced re-run (does not proceed without confirmation)"
+        - "Confirmation: does NOT proceed to sync, env setup, or execute without forced re-run confirmation"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
