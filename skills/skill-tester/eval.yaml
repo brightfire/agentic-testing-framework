@@ -19,7 +19,7 @@ items:
       User request: "Run tests for this skill."
     expected_output:
       behavior: |
-        The agent reads the skill-tester skill, runs variant inference, resolves refs, and checks for prior experiments via the recency check. It presents a
+        Runs variant inference, resolves refs, and checks for prior experiments via the recency check. It presents a
         confirmation summary with the variant matrix and stops at the confirmation gate — it does not proceed to pre-flight, sync, env setup, or execute.
       scoring_type: pass_fail
       scoring_criteria:
@@ -46,7 +46,7 @@ items:
       User request: "Run tests for this skill against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6."
     expected_output:
       behavior: |
-        The agent reads the skill-tester skill, runs variant inference with the model dimension added, resolves refs, runs the recency check, and presents a
+        Runs variant inference with the model dimension added, resolves refs, runs the recency check, and presents a
         confirmation summary showing the full 2×2 matrix (2 skill variants × 2 models = 4 runs). It stops at the confirmation gate — no further phases run.
       scoring_type: pass_fail
       scoring_criteria:
@@ -74,7 +74,7 @@ items:
       User request: "Run tests for this skill against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6."
     expected_output:
       behavior: |
-        The agent reads the skill-tester skill, runs variant inference with the model dimension, resolves refs, and runs the recency check. If prior baseline
+        Runs variant inference with the model dimension, resolves refs, and runs the recency check. If prior baseline
         experiments exist for both models, it skips the baseline variant for both and presents a summary showing only the after variant: 1 skill variant ×
         2 models = 2 runs. If no prior baseline experiments exist, it includes the baseline variant for both and presents the full 2×2 matrix = 4 runs.
         It stops at the confirmation gate.
@@ -103,7 +103,7 @@ items:
       User request: "Run tests for this skill against glm-5.2 and claude-sonnet-4-6."
     expected_output:
       behavior: |
-        The agent reads the skill-tester skill, runs variant inference with the model dimension, resolves refs, and runs the recency check. If no prior
+        Runs variant inference with the model dimension, resolves refs, and runs the recency check. If no prior
         baseline experiments exist for either model, the baseline variant is included for both. The confirmation summary shows the full 2×2 matrix: 2 skill
         variants × 2 models = 4 runs, with baseline status "no prior baseline". If prior baseline experiments do exist, the agent correctly skips them.
         It stops at the confirmation gate.
@@ -599,7 +599,7 @@ items:
       User request: "Run tests for this skill."
     expected_output:
       behavior: |
-        The agent reads the skill-tester skill, runs variant inference (skill A/B: main vs PR head). During ref resolution, it attempts
+        Runs variant inference (skill A/B: main vs PR head). During ref resolution, it attempts
         `git fetch origin claw/vash/add-eval-yaml-linear-create` which fails (branch deleted after merge). The agent falls back to the PR API:
         `gh api repos/example-org/skill-repo/pulls/101 --jq '.head.sha'` and gets `aaaaaaa`. It then runs `git fetch origin aaaaaaa` to ensure
         the commit is present locally, and uses `aaaaaaa` as the pinned ref for the PR head variant. For the base variant, it resolves main to
