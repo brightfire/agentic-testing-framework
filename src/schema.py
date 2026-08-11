@@ -131,12 +131,25 @@ class EvalFile(BaseModel):
     All models use ``extra="forbid"`` — unknown fields at any level are
     rejected, catching typos like ``datset:`` or ``expectedoutput:`` at
     parse time.
+
+    ``timeout_per_run`` is optional (default 1800s). It is not synced to
+    Langfuse — it is read directly from eval.yaml by the eval-runner skill
+    during the Execute phase to compute the exec timeout for the harness
+    process: ``exec_timeout = timeout_per_run * repeat * num_variants``.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     dataset: str = Field(description="Langfuse dataset name")
     description: str = Field(description="Human-readable description of the dataset")
+    timeout_per_run: int = Field(
+        default=1800,
+        description="Estimated wall-clock seconds for a single experiment run "
+            "(all items, repeat=1, item-concurrency=1, experiment-concurrency=1). "
+            "The eval-runner skill multiplies this by the repeat count and "
+            "number of variants to derive the exec timeout for the harness process. "
+            "Default 1800 (30 minutes).",
+    )
     items: list[EvalItem] = Field(description="List of eval test cases")
 
     @field_validator("dataset")
