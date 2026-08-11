@@ -41,9 +41,8 @@ items:
       Branch context:
       - Repo: brightfire/gpt-skills
       - Branch: fbae29ab
-      - Skill: linear-create
 
-      User request: "Run tests for this skill against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6."
+      User request: "Run tests for the linear-create skill against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6."
     expected_output:
       behavior: |
         Runs variant inference with the model dimension added — single skill variant (linear-create@fbae29ab) tested against two models.
@@ -52,7 +51,7 @@ items:
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Variant Inference
-        - "Inference: identifies skill = linear-create from the branch context"
+        - "Inference: identifies skill = linear-create from the user request"
         - "Inference: identifies single skill variant — fbae29ab (no A/B, explicit commit hash given)"
         - "Inference: identifies two models — glm-5.2 and claude-sonnet-4-6"
         - "Inference: recognizes the full matrix is 1 skill variant × 2 models = 2 experiments"
@@ -71,9 +70,8 @@ items:
       Branch context:
       - Repo: brightfire/gpt-skills
       - Branch: fbae29ab
-      - Skill: linear-create
 
-      User request: "Run tests for this skill against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6."
+      User request: "Run tests for the linear-create skill against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6."
     expected_output:
       behavior: |
         Runs variant inference with the model dimension — single skill variant (linear-create@fbae29ab) tested against two models.
@@ -83,7 +81,7 @@ items:
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Variant Inference
-        - "Inference: identifies skill = linear-create from the branch context"
+        - "Inference: identifies skill = linear-create from the user request"
         - "Inference: identifies single skill variant — fbae29ab"
         - "Inference: identifies two models — glm-5.2 and claude-sonnet-4-6"
         - "Ref Resolution: resolves the commit ref to fbae29ab"
@@ -102,9 +100,8 @@ items:
       Branch context:
       - Repo: brightfire/gpt-skills
       - Branch: fbae29ab
-      - Skill: linear-create
 
-      User request: "Run tests for this skill against glm-5.2 and claude-sonnet-4-6."
+      User request: "Run tests for the linear-create skill against glm-5.2 and claude-sonnet-4-6."
     expected_output:
       behavior: |
         Runs variant inference with the model dimension — single skill variant (linear-create@fbae29ab) tested against two models.
@@ -114,7 +111,7 @@ items:
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Variant Inference
-        - "Inference: identifies skill = linear-create from the branch context"
+        - "Inference: identifies skill = linear-create from the user request"
         - "Inference: identifies single skill variant — fbae29ab"
         - "Inference: identifies two models — glm-5.2 and claude-sonnet-4-6"
         - "Ref Resolution: resolves the commit ref to fbae29ab"
@@ -187,7 +184,7 @@ items:
       - Base branch: main
       - Files changed: linear-create/SKILL.md, linear-create/eval.yaml
 
-      User request: "Run tests for this skill against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6."
+      User request: "Run tests for the linear-create skill against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6."
     expected_output:
       behavior: |
         # PLACEHOLDER: This test case requires a second linear-create PR to exist (a future PR that changes both SKILL.md and eval.yaml).
