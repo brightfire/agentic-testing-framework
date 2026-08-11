@@ -206,11 +206,28 @@ Read `timeout_per_run` from eval.yaml (default 600s). Compute:
 exec_timeout = timeout_per_run * repeat * num_variants + 120
 ```
 
+**Harness directory:**
+
+When the PR is against the agentic-testing-framework repo itself, the harness code (`eval_harness.py`, `schema.py`, etc.) may have changed in the PR. Run the harness from a worktree of the PR ref so the harness code matches what's being tested:
+
+```
+git worktree add $HOME/repos/agentic-testing-framework-worktrees/eval-<short-hash> <pr-ref>
+cd $HOME/repos/agentic-testing-framework-worktrees/eval-<short-hash> && source .venv/bin/activate
+```
+
+For all other repos, use the standard checkout:
+
+```
+cd $HOME/repos/agentic-testing-framework && source .venv/bin/activate
+```
+
+Clean up the worktree after the eval completes: `git worktree remove --force $HOME/repos/agentic-testing-framework-worktrees/eval-<short-hash>`
+
 Start the harness in the background, then poll until it completes:
 
 ```
 exec(
-  command="cd ~/repos/agentic-testing-framework && source ~/.openclaw/secrets/langfuse.env && source .venv/bin/activate && python src/eval_harness.py --manifest <path> --run-name '<name>' --prompt-prefix '<prefix>' --repeat <N> --item-concurrency 3 --experiment-concurrency 2 [--model <model>]",
+  command="cd <harness-dir> && source $HOME/.openclaw/secrets/langfuse.env && source .venv/bin/activate && python src/eval_harness.py --manifest <path> --run-name '<name>' --prompt-prefix '<prefix>' --repeat <N> --item-concurrency 3 --experiment-concurrency 2 [--model <model>]",
   background=true,
   timeout=<exec_timeout>
 )
@@ -312,7 +329,7 @@ Results posted to originating channel. No data passed to a next phase.
 
 ## Cleanup
 
-After the Report Phase posts results, remove the suffixed directories created during Environment Setup. Track which directories were created and `trash` only those — do not remove directories from other concurrent runs. If the run aborts after env setup, cleanup should still run. Also clean up `$WORK_DIR` if it was preserved for the execute phase.
+After the Report Phase posts results, remove the suffixed directories created during Environment Setup. Track which directories were created and `trash` only those — do not remove directories from other concurrent runs. If the run aborts after env setup, cleanup should still run. Also clean up `$WORK_DIR` if it was preserved for the execute phase. If a worktree was created for an ATF self-eval, remove it: `git worktree remove --force $HOME/repos/agentic-testing-framework-worktrees/eval-<short-hash>`.
 
 ## References
 
