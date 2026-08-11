@@ -241,9 +241,7 @@ Count the experiment prefixes (variants). The report mode depends on the count:
 
 For all modes: if execute start time is unavailable, use a timestamp a few minutes before the earliest experiment run. First prefix is baseline in `--variants` mode. `--json` for structured output.
 
-See [`references/report-format.md`](references/report-format.md) for the JSON output schema, including the `pass_rate` field (percentage of scores >= 10.0).
-
-When formatting the report, populate the Pass% column from the `pass_rate` field in the JSON output (`variants[].composite.pass_rate` and `variants[].dimensions[].pass_rate`). Do not compute pass rate manually — use the value from the tool output directly.
+See [`references/report-format.md`](references/report-format.md) for the JSON output schema.
 
 Steps 3–5 apply only to 2-variant comparison reports.
 
