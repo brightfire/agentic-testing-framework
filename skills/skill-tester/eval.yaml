@@ -163,21 +163,20 @@ items:
 
   - id: model-ab-baseline-missing
     input: |
-      PR context:
+      Branch context:
       - Repo: example-org/skill-repo
-      - PR branch: claw/vash/add-eval-yaml-linear-create
-      - PR number: 417
+      - Branch: claw/vash/linear-create-model-comparison
       - Base branch: main
-      - Files changed: linear-create/eval.yaml
+      - Files changed: linear-create/SKILL.md
 
       Prior runs: A previous eval was run as a re-run (after variant only, no baseline). No baseline (main) experiments exist in Langfuse for the linear-create dataset for any model.
 
-      User request: "Test this PR against glm-5.2 and claude-sonnet-4-6."
+      User request: "Test this branch against glm-5.2 and claude-sonnet-4-6."
     expected_output:
       behavior: |
         The agent runs variant inference with the model dimension, and runs the recency check. It finds no baseline experiments for either model, so the baseline variant
-        is included for both. The confirmation summary shows the full 2×2 matrix: main×glm-5.2, main×claude-sonnet-4-6, pr-101×glm-5.2,
-        pr-101×claude-sonnet-4-6 = 4 runs. Baseline status notes "no prior baseline" for both models.
+        is included for both. The confirmation summary shows the full 2×2 matrix: main×glm-5.2, main×claude-sonnet-4-6, claw-vash-linear-create-model-comparison×glm-5.2,
+        claw-vash-linear-create-model-comparison×claude-sonnet-4-6 = 4 runs. Baseline status notes "no prior baseline" for both models.
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Variant Inference
