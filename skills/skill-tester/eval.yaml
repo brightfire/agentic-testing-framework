@@ -40,26 +40,25 @@ items:
     input: |
       Branch context:
       - Repo: brightfire/gpt-skills
-      - Branch: main
-      - Base branch: main
+      - Branch: fbae29ab
 
       User request: "Run tests for this skill against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6."
     expected_output:
       behavior: |
-        Runs variant inference with the model dimension added — single skill variant (main) tested against two models.
-        Resolves refs, runs the recency check, and presents a confirmation summary showing 1 skill variant × 2 models = 2 runs.
-        It stops at the confirmation gate — no further phases run.
+        Runs variant inference with the model dimension added — single skill variant tested against two models.
+        Resolves the commit ref, runs the recency check, and presents a confirmation summary showing 1 skill variant × 2 models = 2 experiments
+        (each experiment runs all dataset items with the default repeat count). It stops at the confirmation gate — no further phases run.
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Variant Inference
-        - "Inference: identifies single skill variant — main@c8269935 (no A/B, branch is main)"
+        - "Inference: identifies single skill variant — fbae29ab (no A/B, explicit commit hash given)"
         - "Inference: identifies two models — glm-5.2 and claude-sonnet-4-6"
-        - "Inference: recognizes the full matrix is 1 skill variant × 2 models = 2 runs"
+        - "Inference: recognizes the full matrix is 1 skill variant × 2 models = 2 experiments"
         - "Inference: selects all dataset items — happy-path, tab-character-url-breakage, missing-info-detection"
-        - "Ref Resolution: resolves main ref to c8269935"
+        - "Ref Resolution: resolves the commit ref to fbae29ab"
         - "Recency: runs recency check against Langfuse for both models"
         # Phase: Confirmation
-        - "Confirmation: presents summary showing model dimension, total run count (2), and baseline status"
+        - "Confirmation: presents summary showing model dimension, experiment count (2), and baseline status"
         - "Confirmation: waits for user confirmation — does not proceed to any further phase"
         - "Confirmation: does not run pre-flight, sync, or env setup"
       scoring_rules: |
@@ -69,24 +68,23 @@ items:
     input: |
       Branch context:
       - Repo: brightfire/gpt-skills
-      - Branch: main
-      - Base branch: main
+      - Branch: fbae29ab
 
       User request: "Run tests for this skill against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6."
     expected_output:
       behavior: |
-        Runs variant inference with the model dimension — single skill variant (main) tested against two models.
-        Resolves refs, runs the recency check for both models. If prior experiments exist for a model, that model is pruned
-        and the run count is reduced. If no prior experiments exist, both models are included. The total run count is
-        2 (or fewer if recency prunes some). It stops at the confirmation gate.
+        Runs variant inference with the model dimension — single skill variant tested against two models.
+        Resolves the commit ref, runs the recency check for both models. If prior experiments exist for a model, that model
+        is pruned and the experiment count is reduced. If no prior experiments exist, both models are included. The total
+        experiment count is 2 (or fewer if recency prunes some). It stops at the confirmation gate.
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Variant Inference
-        - "Inference: identifies single skill variant — main@c8269935"
+        - "Inference: identifies single skill variant — fbae29ab"
         - "Inference: identifies two models — glm-5.2 and claude-sonnet-4-6"
-        - "Ref Resolution: resolves main ref to c8269935"
+        - "Ref Resolution: resolves the commit ref to fbae29ab"
         - "Recency: runs recency check against Langfuse for both models"
-        - "Recency: if prior experiments exist for a model — prunes it, reduces run count accordingly"
+        - "Recency: if prior experiments exist for a model — prunes it, reduces experiment count accordingly"
         - "Recency: if no prior experiments exist for a model — includes it"
         # Phase: Confirmation
         - "Confirmation: presents summary reflecting actual recency results"
@@ -99,27 +97,26 @@ items:
     input: |
       Branch context:
       - Repo: brightfire/gpt-skills
-      - Branch: main
-      - Base branch: main
+      - Branch: fbae29ab
 
       User request: "Run tests for this skill against glm-5.2 and claude-sonnet-4-6."
     expected_output:
       behavior: |
-        Runs variant inference with the model dimension — single skill variant (main) tested against two models.
-        Resolves refs, runs the recency check. If no prior experiments exist for either model, both are included:
-        1 skill variant × 2 models = 2 runs. If prior experiments exist for some models, those are pruned and the
-        run count is reduced accordingly. It stops at the confirmation gate.
+        Runs variant inference with the model dimension — single skill variant tested against two models.
+        Resolves the commit ref, runs the recency check. If no prior experiments exist for either model, both are included:
+        1 skill variant × 2 models = 2 experiments. If prior experiments exist for some models, those are pruned and the
+        experiment count is reduced accordingly. It stops at the confirmation gate.
       scoring_type: pass_fail
       scoring_criteria:
         # Phase: Variant Inference
-        - "Inference: identifies single skill variant — main@c8269935"
+        - "Inference: identifies single skill variant — fbae29ab"
         - "Inference: identifies two models — glm-5.2 and claude-sonnet-4-6"
-        - "Ref Resolution: resolves main ref to c8269935"
+        - "Ref Resolution: resolves the commit ref to fbae29ab"
         - "Recency: runs recency check — correctly handles whether or not prior experiments exist"
-        - "Recency: if no prior experiments — includes both models, total run count is 2"
-        - "Recency: if prior experiments exist — prunes those models, reduces run count"
+        - "Recency: if no prior experiments — includes both models, total experiment count is 2"
+        - "Recency: if prior experiments exist — prunes those models, reduces experiment count"
         # Phase: Confirmation
-        - "Confirmation: presents summary showing correct run count based on recency results"
+        - "Confirmation: presents summary showing correct experiment count based on recency results"
         - "Confirmation: notes baseline status correctly"
         - "Confirmation: waits for user confirmation — does not proceed to any further phase"
       scoring_rules: |
@@ -335,7 +332,7 @@ items:
     expected_output:
       behavior: |
         The agent processes the Slack-triggered model A/B test request. It infers: skill = linear-create, models = glm-5.2 and claude-sonnet-4-6,
-        branch = main@c8269935 (current, no PR or branch referenced). The agent runs through all phases: inference, confirmation, pre-flight, sync, env setup,
+        branch = main (current HEAD, no PR or branch referenced). The agent runs through all phases: inference, confirmation, pre-flight, sync, env setup,
         execute, and report. During execute, the agent invokes the harness twice — once per model — using the same suffixed skill name (skill unchanged
         between model variants). Both invocations use --repeat 3. The agent posts results back to the Slack channel.
       scoring_type: pass_fail
@@ -343,8 +340,8 @@ items:
         # Phase: Variant Inference
         - "Inference: identifies skill = linear-create from the Slack message"
         - "Inference: identifies two models — glm-5.2 and claude-sonnet-4-6"
-        - "Inference: no PR or branch referenced — uses current main@c8269935 as the skill version"
-        - "Ref Resolution: resolves main to c8269935"
+        - "Inference: no PR or branch referenced — uses current main HEAD as the skill version"
+        - "Ref Resolution: resolves main to current HEAD"
         - "Recency: runs recency check for both model combinations"
         - "Confirmation: presents summary showing model dimension and waits for confirmation"
         # Phase: Pre-flight
