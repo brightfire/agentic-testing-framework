@@ -42,7 +42,6 @@ items:
       - Repo: brightfire/gpt-skills
       - Branch: claw/vash/linear-create-model-comparison
       - Base branch: main
-      - Files changed: linear-create/SKILL.md
 
       User request: "Run tests for this skill against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6."
     expected_output:
@@ -71,7 +70,6 @@ items:
       - Repo: brightfire/gpt-skills
       - Branch: claw/vash/linear-create-model-comparison
       - Base branch: main
-      - Files changed: linear-create/SKILL.md
 
       User request: "Run tests for this skill against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6."
     expected_output:
@@ -101,7 +99,6 @@ items:
       - Repo: brightfire/gpt-skills
       - Branch: claw/vash/linear-create-model-comparison
       - Base branch: main
-      - Files changed: linear-create/SKILL.md
 
       User request: "Run tests for this skill against glm-5.2 and claude-sonnet-4-6."
     expected_output:
