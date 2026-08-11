@@ -331,7 +331,9 @@ Results posted to originating channel. No data passed to a next phase.
 
 ## Cleanup
 
-After the Report Phase posts results, remove the suffixed directories created during Environment Setup. Track which directories were created and `trash` only those — do not remove directories from other concurrent runs. If the run aborts after env setup, cleanup should still run. Also clean up `$WORK_DIR` if it was preserved for the execute phase. If a worktree was created for an ATF self-eval, remove it: `git worktree remove --force <atf-dir>-worktrees/eval-<short-hash>`.
+- `trash` the suffixed directories created during Environment Setup (only those — do not remove directories from other concurrent runs)
+- If `$WORK_DIR` was preserved for the execute phase, clean it up
+- If a worktree was created for an ATF self-eval: `git worktree remove --force <atf-dir>-worktrees/eval-<short-hash>`
 
 ## References
 
