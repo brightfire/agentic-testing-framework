@@ -180,6 +180,8 @@ See [`references/gotchas.md`](references/gotchas.md) for Environment Setup error
 
 **Inputs:** Manifests (sync phase output), suffixed skill names (env setup output), run matrix (recency check output), repeat count (default 10).
 
+If all variants were pruned by the recency check, skip this phase entirely and proceed to the Report Phase. The Execute Phase only runs for variants that need new experiment runs.
+
 ### Procedure
 
 #### 1. Construct experiment names
@@ -258,6 +260,8 @@ See [`references/execute-failure-handling.md`](references/execute-failure-handli
 ## Report Phase
 
 **Inputs:** Experiment run names (base prefixes per variant, including recency-pruned), dataset name (sync output), originating channel (request context), skill diff (`git diff <base-ref> <head-ref> -- <skill-path>`).
+
+**All variants pruned:** If the recency check pruned all variants from the run matrix (every variant already has sufficient existing runs), the Execute Phase is a no-op. Proceed directly to the Report Phase using the existing experiment run names from the recency check output as the variant prefixes. Set `--since` to an earlier timestamp or omit it to capture the existing experiment data.
 
 ### Procedure
 
