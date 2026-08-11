@@ -18,4 +18,4 @@
 
 ## Execute Phase
 
-1. **Compute exec timeout from `timeout_per_run`** — The harness takes 5–30+ minutes depending on dataset size, repeats, and variants. Read `timeout_per_run` from eval.yaml (default 1800s), then compute `exec_timeout = timeout_per_run * repeat * num_variants + 120`. Always start with `exec(background=true, timeout=<exec_timeout>)`, then poll with `process(action=poll, timeout=30000)` until completion.
+1. **Compute exec timeout from `timeout_per_run`** — The harness takes 5–30+ minutes depending on dataset size, repeats, and variants. Read `timeout_per_run` from eval.yaml (default 600s), then compute `exec_timeout = timeout_per_run * repeat * num_variants + 120`. Always start with `exec(background=true, timeout=<exec_timeout>)`, then poll with `process(action=poll, timeout=30000)` until completion.
