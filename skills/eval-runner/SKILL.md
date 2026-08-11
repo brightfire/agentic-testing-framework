@@ -178,8 +178,6 @@ See [`references/gotchas.md`](references/gotchas.md) for Environment Setup error
 
 ## Execute Phase
 
-**Monitoring**: The harness run is long-running (typically 5–30 minutes depending on dataset size, repeats, and concurrency). After invoking it, actively monitor to completion and report results without waiting for the user to ask. Never background the harness and go silent — the agent that started the run is responsible for bringing results back.
-
 **Inputs:** Manifests (sync phase output), suffixed skill names (env setup output), run matrix (recency check output), repeat count (default 10).
 
 ### Procedure
