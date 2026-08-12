@@ -181,31 +181,6 @@ items:
         Score 10 * (passed criteria / total criteria).
 
 
-  # PLACEHOLDER: requires a linear-create PR with a branch that still exists — both #417 and #476 branches were deleted after merge
-  - id: rerun-branch-advanced
-    input: |
-      PR context:
-      - Repo: brightfire/gpt-skills
-      - PR branch: claw/vash/update-happy-path-test-case
-      - PR number: 476
-      - Base branch: main
-
-      User request: "Re-run tests for this skill."
-    expected_output:
-      behavior: |
-        # PLACEHOLDER: This test case requires a linear-create PR with a branch that still exists.
-        # Both PR #417 and #476 branches were deleted after merge, so branch advancement cannot be tested.
-        # The test case structure is preserved for when a suitable PR with a living branch exists.
-        The agent recognizes the re-run request, re-resolves refs, detects the branch has advanced, and proceeds with the updated commit.
-      scoring_type: pass_fail
-      scoring_criteria:
-        - "Inference: skips variant inference — reuses previous variant spec"
-        - "Ref Resolution: re-resolves branch refs and detects the PR head has advanced"
-        - "Ref Resolution: updates the variant spec with the new hash"
-        - "Confirmation: presents summary with updated PR head hash"
-      scoring_rules: |
-        Score 10 * (passed criteria / total criteria).
-
   # ─── Execute phase ──────────────────────────────────────────────────
 
 
