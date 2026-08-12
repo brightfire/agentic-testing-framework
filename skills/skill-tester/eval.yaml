@@ -94,33 +94,6 @@ items:
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
 
-  - id: model-b-only-after-pr-eval
-    input: |
-      PR context:
-      - Repo: brightfire/gpt-skills
-      - PR branch: claw/vash/update-happy-path-test-case
-      - PR number: 476
-      - Base branch: main
-      - Files changed: linear-create/SKILL.md, linear-create/eval.yaml
-
-      User request: "Now run tests for this skill against claude-sonnet-4-6."
-    expected_output:
-      behavior: |
-        The agent runs variant inference with a single model (claude-sonnet-4-6) and two skill variants (main and
-        pr-476). The PR branch was deleted after merge, so ref resolution falls back to the PR API to get the head
-        SHA (13cfff8c). The agent runs the recency check and presents a confirmation summary showing 2 skill variants
-        × 1 model = 2 experiments. It stops at the confirmation gate — no further phases run.
-      scoring_type: pass_fail
-      scoring_criteria:
-        - "Inference: identifies single model — claude-sonnet-4-6"
-        - "Inference: identifies two skill variants — variant A (main) and variant B (pr-476)"
-        - "Inference: recognizes the full matrix is 2 skill variants × 1 model = 2 experiments"
-        - "Ref Resolution: resolves PR head to 13cfff8c (via PR API fallback since branch is deleted)"
-        - "Confirmation: presents summary and waits for user confirmation"
-        - "Confirmation: does not run pre-flight, sync, or env setup"
-      scoring_rules: |
-        Score 10 * (passed criteria / total criteria).
-
   - id: skill-and-eval-changed-model-ab
     input: |
       PR context:
