@@ -58,6 +58,8 @@ After variant inference (and before the recency check), pin all git refs to comm
 
 After ref resolution, run `recency_check.py` for each (skill variant × model) combination. Source `~/.openclaw/secrets/langfuse.env`, then invoke `recency_check.py` with `--dataset` and `--filter` (base experiment name, without timestamp suffix). `--min-pass-percent 75` sets the pass threshold. Count run names on stdout — if count meets requested repeats, prune the combination. If fewer runs exist, only the difference needs to run. Empty stdout means no existing runs — include the combination. Exit 1 = script error (report and stop).
 
+**Legacy run caveat:** Runs from before the `expected_skill_name` metadata feature was introduced lack `expected_skill_name` in their run metadata. If the recency check prunes a combination based on such legacy runs, the report may include old evaluator scores that cannot verify the correct skill was read. During the transition period, consider forcing a re-run for combinations whose existing runs predate this feature, or filter legacy runs (those without `expected_skill_name` metadata) from the recency check so only attested runs count toward the threshold.
+
 ## Confirmation — HARD GATE
 
 ⚠️ This is a mandatory stop point. Do NOT proceed to pre-flight, sync, env setup, or execute until the user explicitly confirms. No exceptions.
@@ -245,6 +247,14 @@ exec(
 ```
 
 Then monitor with `process(action=poll, timeout=30000)` every 30s until the process exits.
+
+**Backward compatibility:** When running a self-eval (skill lives in the ATF repo) against a baseline variant whose harness predates the `--expected-skill-name` feature, passing the flag will cause argparse to fail. Before invoking the harness for a baseline variant, check whether that variant's harness supports it:
+
+```
+python src/eval_harness.py --help | grep -q expected-skill-name
+```
+
+If the check fails (exit code 1), omit `--expected-skill-name` from the invocation for that variant. The evaluator will not be able to verify the skill name for that variant, but the run will complete successfully.
 
 
 #### 4. Monitor and capture results
