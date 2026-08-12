@@ -505,6 +505,13 @@ def main():
     total = args.repeat
     all_results = []
 
+    # Warn if attestation prefix is set but expected skill name is omitted — the evaluator
+    # cannot verify which skill was read without this metadata.
+    if args.prompt_prefix and not args.expected_skill_name:
+        log("--prompt-prefix is set but --expected-skill-name is omitted. "
+            "The evaluator will not be able to verify the correct skill was read. "
+            "Consider passing --expected-skill-name to enable attestation verification.", "WARN")
+
     # Build run metadata — expected_skill_name lets the evaluator verify the correct skill was read
     run_metadata = {}
     if args.expected_skill_name:
