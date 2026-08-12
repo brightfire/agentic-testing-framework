@@ -145,7 +145,7 @@ def parse_eval_yaml(path):
         for item in validated.items
     ]
 
-    return validated.dataset, validated.description, items
+    return validated.dataset, validated.description, items, validated.timeout_per_run
 
 
 def ensure_dataset_exists(host, auth_header, dataset_name, description=None):
@@ -253,7 +253,7 @@ def get_server_version_timestamp(date_header, response_body=None):
     return datetime.now(timezone.utc)
 
 
-def write_manifest(output_path, dataset_name, manifest_items, sync_completed_at):
+def write_manifest(output_path, dataset_name, manifest_items, sync_completed_at, timeout_per_run=None):
     """Write the sync manifest JSON file if --output-manifest was provided.
 
     Returns True on success or if no output path was given, False on write
@@ -267,6 +267,8 @@ def write_manifest(output_path, dataset_name, manifest_items, sync_completed_at)
         "synced_at": sync_completed_at.isoformat(),
         "items": manifest_items,
     }
+    if timeout_per_run is not None:
+        manifest["timeout_per_run"] = timeout_per_run
     try:
         with open(output_path, "w") as f:
             json.dump(manifest, f, indent=2)
@@ -335,7 +337,7 @@ def main():
     args = parser.parse_args()
 
     # ── Parse and validate eval.yaml (no credentials needed) ──────────────
-    dataset_name, description, yaml_items = parse_eval_yaml(args.file)
+    dataset_name, description, yaml_items, timeout_per_run = parse_eval_yaml(args.file)
 
     # ── Filter to requested items if --items is specified ────────────────
     if args.items:
@@ -429,11 +431,11 @@ def main():
         if failed:
             log(f"{failed} upsert(s) failed — fix errors and re-run.", "WARN")
             sync_completed_at = datetime.now(timezone.utc)
-            write_manifest(args.output_manifest, dataset_name, manifest_items, sync_completed_at)
+            write_manifest(args.output_manifest, dataset_name, manifest_items, sync_completed_at, timeout_per_run)
             sys.exit(1)
         log("Nothing to archive — dataset is in sync.", "INFO")
         sync_completed_at = datetime.now(timezone.utc)
-        if not write_manifest(args.output_manifest, dataset_name, manifest_items, sync_completed_at):
+        if not write_manifest(args.output_manifest, dataset_name, manifest_items, sync_completed_at, timeout_per_run):
             sys.exit(1)
         return
 
@@ -471,7 +473,7 @@ def main():
     log(f"Failed:    {failed}")
 
     sync_completed_at = datetime.now(timezone.utc)
-    if not write_manifest(args.output_manifest, dataset_name, manifest_items, sync_completed_at):
+    if not write_manifest(args.output_manifest, dataset_name, manifest_items, sync_completed_at, timeout_per_run):
         sys.exit(1)
 
     sys.exit(0 if failed == 0 else 1)
