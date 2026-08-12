@@ -378,6 +378,12 @@ def main():
         help="Only run a specific dataset item by ID (partial match supported). Can be used with --manifest to further filter manifest items, or with --dataset."
     )
     parser.add_argument(
+        "--expected-skill-name", default=None,
+        help="Suffixed skill name the agent should read and confirm. Passed as experiment "
+             "run metadata so the evaluator can verify the correct skill was read. "
+             "Required when --prompt-prefix contains an attestation prefix."
+    )
+    parser.add_argument(
         "--manifest", default=None,
         help="Path to a sync manifest JSON file (from dataset_sync.py --output-manifest). "
              "The manifest is the source of truth: dataset name, item IDs, and per-item "
@@ -499,6 +505,11 @@ def main():
     total = args.repeat
     all_results = []
 
+    # Build run metadata — expected_skill_name lets the evaluator verify the correct skill was read
+    run_metadata = {}
+    if args.expected_skill_name:
+        run_metadata["expected_skill_name"] = args.expected_skill_name
+
     def run_single_experiment(run_idx):
         """Run a single experiment repeat. Thread-safe: each call creates its
         own OTel/Langfuse trace context."""
@@ -515,6 +526,7 @@ def main():
             description=args.description or f"Eval harness run on dataset '{dataset_name}'",
             task=task,
             max_concurrency=args.item_concurrency,
+            metadata=run_metadata,
         )
 
         log(f"  Run {run_idx}/{total} complete: {result.run_name}")
