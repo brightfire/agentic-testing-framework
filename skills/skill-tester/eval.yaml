@@ -1,6 +1,6 @@
 dataset: skill-tester
 
-description: "Skill-tester skill test cases — real runs through inference, confirmation, pre-flight, sync, execute, and report phases. Uses linear-create (example-org/skill-repo, PR #101) as the subject skill."
+description: "Skill-tester skill test cases — real runs through inference, confirmation, pre-flight, sync, execute, and report phases. Uses linear-create (example-org/skill-repo, PR #101 and #102) as the subject skill."
 
 timeout_per_run: 1800  # 30 min - max time to execute all items sequentially
 
@@ -64,127 +64,138 @@ items:
         Score 10 * (passed criteria / total criteria).
 
 
-  # PLACEHOLDER: requires a second linear-create PR to exist (a future PR that modifies the skill, not just adds eval.yaml)
   - id: model-ab-after-pr-eval
     input: |
       PR context:
       - Repo: example-org/skill-repo
-      - PR branch: claw/vash/skill-improvement
-      - PR number: 500
+      - PR branch: claw/vash/update-happy-path-test-case
+      - PR number: 476
       - Base branch: main
-      - Files changed: linear-create/SKILL.md
+      - Files changed: linear-create/SKILL.md, linear-create/eval.yaml
 
       User request: "Now run tests for this skill against glm-5.2 and claude-sonnet-4-6."
     expected_output:
       behavior: |
-        # PLACEHOLDER: This test case requires a second linear-create PR to exist (PR #101 only adds eval.yaml, not SKILL.md changes).
-        # The test case structure is preserved for when a suitable PR exists.
-        The agent runs variant inference and the recency check. It presents a confirmation summary with the variant matrix and stops at the confirmation gate.
+        The agent runs variant inference with the model dimension added — two skill variants (main and pr-102)
+        tested against two models (glm-5.2 and claude-sonnet-4-6). The PR branch was deleted after merge, so ref
+        resolution falls back to the PR API to get the head SHA (ddddddd). The agent verifies eval.yaml exists at
+        both pinned commits. It runs the recency check and presents a confirmation summary showing 2 skill variants
+        × 2 models = 4 experiments. It stops at the confirmation gate — no further phases run.
       scoring_type: pass_fail
       scoring_criteria:
+        - "Inference: identifies two skill variants — variant A (main) and variant B (pr-102)"
         - "Inference: identifies two models — glm-5.2 and claude-sonnet-4-6"
-        - "Confirmation: presents summary reflecting recency results"
+        - "Inference: recognizes the full matrix is 2 skill variants × 2 models = 4 experiments"
+        - "Inference: selects all dataset items — happy-path, tab-character-url-breakage, missing-info-detection"
+        - "Ref Resolution: resolves PR head to ddddddd (via PR API fallback since branch is deleted)"
+        - "Confirmation: presents summary showing model dimension, experiment count (4), and recency status"
         - "Confirmation: waits for user confirmation — does not proceed to any further phase"
+        - "Confirmation: does not run pre-flight, sync, or env setup"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
 
-  # PLACEHOLDER: requires a second linear-create PR to exist (a future PR that modifies the skill, not just adds eval.yaml)
   - id: model-b-only-after-pr-eval
     input: |
       PR context:
       - Repo: example-org/skill-repo
-      - PR branch: claw/vash/skill-improvement
-      - PR number: 500
+      - PR branch: claw/vash/update-happy-path-test-case
+      - PR number: 476
       - Base branch: main
-      - Files changed: linear-create/SKILL.md
+      - Files changed: linear-create/SKILL.md, linear-create/eval.yaml
 
       User request: "Now run tests for this skill against claude-sonnet-4-6."
     expected_output:
       behavior: |
-        # PLACEHOLDER: This test case requires a second linear-create PR to exist (PR #101 only adds eval.yaml, not SKILL.md changes).
-        # The test case structure is preserved for when a suitable PR exists.
-        The agent runs variant inference with a single model and presents a confirmation summary. It stops at the confirmation gate.
+        The agent runs variant inference with a single model (claude-sonnet-4-6) and two skill variants (main and
+        pr-102). The PR branch was deleted after merge, so ref resolution falls back to the PR API to get the head
+        SHA (ddddddd). The agent runs the recency check and presents a confirmation summary showing 2 skill variants
+        × 1 model = 2 experiments. It stops at the confirmation gate — no further phases run.
       scoring_type: pass_fail
       scoring_criteria:
         - "Inference: identifies single model — claude-sonnet-4-6"
+        - "Inference: identifies two skill variants — variant A (main) and variant B (pr-102)"
+        - "Inference: recognizes the full matrix is 2 skill variants × 1 model = 2 experiments"
+        - "Ref Resolution: resolves PR head to ddddddd (via PR API fallback since branch is deleted)"
         - "Confirmation: presents summary and waits for user confirmation"
+        - "Confirmation: does not run pre-flight, sync, or env setup"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
 
-  # PLACEHOLDER: requires a second linear-create PR to exist (a future PR that changes both SKILL.md and eval.yaml)
   - id: skill-and-eval-changed-model-ab
     input: |
       PR context:
       - Repo: example-org/skill-repo
-      - PR branch: claw/vash/skill-and-eval-update
-      - PR number: 500
+      - PR branch: claw/vash/update-happy-path-test-case
+      - PR number: 476
       - Base branch: main
       - Files changed: linear-create/SKILL.md, linear-create/eval.yaml
 
       User request: "Run tests for the linear-create skill against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6."
     expected_output:
       behavior: |
-        # PLACEHOLDER: This test case requires a second linear-create PR to exist (a future PR that changes both SKILL.md and eval.yaml).
-        # The test case structure is preserved for when a suitable PR exists.
-        The agent runs variant inference with the model dimension, notes eval.yaml changed, runs recency check, and presents a confirmation summary.
-        It stops at the confirmation gate.
+        The agent runs variant inference with the model dimension, notes both SKILL.md and eval.yaml changed, resolves
+        refs (PR head via PR API fallback since branch is deleted to ddddddd), verifies eval.yaml exists at both
+        pinned commits, runs the recency check, and presents a confirmation summary showing 2 skill variants × 2
+        models = 4 experiments. It stops at the confirmation gate.
       scoring_type: pass_fail
       scoring_criteria:
-        - "Inference: identifies two variants — variant A (main) and variant B (PR head)"
+        - "Inference: identifies two variants — variant A (main) and variant B (pr-102)"
         - "Inference: identifies two models — glm-5.2 and claude-sonnet-4-6"
         - "Inference: detects eval.yaml in changed files — both variant versions need syncing"
+        - "Ref Resolution: resolves PR head to ddddddd (via PR API fallback since branch is deleted)"
         - "Confirmation: presents summary and waits for user confirmation"
+        - "Confirmation: does not run pre-flight, sync, or env setup"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
 
   # ─── Full run (post-confirmation → sync → env setup → execute → report) ────
 
-  # PLACEHOLDER: requires a second linear-create PR to exist (needs two variants: main vs PR head — only works if both have eval.yaml)
   - id: pr-triggered-full-run
     input: |
       PR context:
       - Repo: example-org/skill-repo
-      - PR branch: claw/vash/skill-improvement
-      - PR number: 500
+      - PR branch: claw/vash/update-happy-path-test-case
+      - PR number: 476
       - Base branch: main
-      - Files changed: linear-create/SKILL.md
+      - Files changed: linear-create/SKILL.md, linear-create/eval.yaml
 
-      User request: "Run tests for this skill."
+      User request: "Run tests for this skill. Skip confirmation and run each test once. Output the confirmation summary and final report as your response text — do not post them as a comment on the PR."
     expected_output:
       behavior: |
-        # PLACEHOLDER: This test case requires a second linear-create PR to exist (needs both main and PR head to have eval.yaml).
-        # PR #101 only adds eval.yaml — after merge, main has eval.yaml, but a future PR is needed for a meaningful A/B comparison.
-        # The test case structure is preserved for when a suitable PR exists.
-        The agent runs the full pipeline: inference, confirmation, pre-flight, sync, env setup, execute, and report.
+        The agent runs the full pipeline: inference, confirmation (skip — proceed directly), pre-flight, sync, env
+        setup, execute, and report. Two skill variants (main@ccccccc and pr-102@ddddddd), single model (agent
+        default), all dataset items, --repeat 1. The PR branch was deleted, so ref resolution uses the PR API
+        fallback for the head SHA. Both variants have eval.yaml (eval.yaml was added to main by PR #101 before
+        PR #102 modified it), so both variants are included in the matrix.
       scoring_type: pass_fail
       scoring_criteria:
-        - "Inference: identifies two variants — variant A (main) and variant B (PR head)"
-        - "Confirmation: proceeds directly to pre-flight without waiting for a reply (skip confirmation) and proceeds to pre-flight"
+        - "Inference: identifies two variants — variant A (main) and variant B (pr-102)"
+        - "Confirmation: proceeds directly to pre-flight without waiting for a reply (skip confirmation)"
         - "Pre-flight: fetches and scans skill for self-references"
-        - "Sync: runs dataset_sync.py with --output-manifest"
-        - "Env setup: creates suffixed skill directories"
+        - "Sync: runs dataset_sync.py with --output-manifest for both variants"
+        - "Env setup: creates suffixed skill directories for both variants"
         - "Execute: invokes eval_harness.py with --repeat 1"
-        - "Report: runs eval_report.py and posts results"
+        - "Report: runs eval_report.py and outputs results as response text"
         - "Cleanup: removes suffixed skill directories"
       scoring_rules: |
         Score 10 * (passed criteria / total criteria).
 
 
-  # PLACEHOLDER: requires a second linear-create PR to exist (needs a branch that still exists — #101's branch is deleted)
+  # PLACEHOLDER: requires a linear-create PR with a branch that still exists — both #101 and #102 branches were deleted after merge
   - id: rerun-branch-advanced
     input: |
       PR context:
       - Repo: example-org/skill-repo
-      - PR branch: claw/vash/skill-improvement
-      - PR number: 500
+      - PR branch: claw/vash/update-happy-path-test-case
+      - PR number: 476
       - Base branch: main
 
       User request: "Re-run tests for this skill."
     expected_output:
       behavior: |
-        # PLACEHOLDER: This test case requires a second linear-create PR with a branch that still exists.
-        # PR #101's branch was deleted after merge, so branch advancement cannot be tested.
-        # The test case structure is preserved for when a suitable PR exists.
+        # PLACEHOLDER: This test case requires a linear-create PR with a branch that still exists.
+        # Both PR #101 and #102 branches were deleted after merge, so branch advancement cannot be tested.
+        # The test case structure is preserved for when a suitable PR with a living branch exists.
         The agent recognizes the re-run request, re-resolves refs, detects the branch has advanced, and proceeds with the updated commit.
       scoring_type: pass_fail
       scoring_criteria:
