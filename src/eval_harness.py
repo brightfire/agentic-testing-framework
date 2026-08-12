@@ -61,7 +61,7 @@ def load_manifest(manifest_path):
     manifest items. This pins the dataset to the state at the last item write,
     which is more precise than synced_at (which is a post-sync wall clock).
 
-    Returns (dataset_name, item_ids, version_datetime) or (None, None, None)
+    Returns (dataset_name, item_ids, version_datetime, timeout_per_run) or (None, None, None, None)
     if the manifest is invalid.
     """
     try:
@@ -69,17 +69,17 @@ def load_manifest(manifest_path):
             manifest = json.load(f)
     except (OSError, json.JSONDecodeError) as e:
         log(f"Failed to load manifest '{manifest_path}': {e}", "ERROR")
-        return None, None, None
+        return None, None, None, None
 
     dataset_name = manifest.get("dataset")
     if not dataset_name:
         log(f"Manifest '{manifest_path}' has no 'dataset' field", "ERROR")
-        return None, None, None
+        return None, None, None, None
 
     manifest_items = manifest.get("items")
     if not manifest_items or not isinstance(manifest_items, list):
         log(f"Manifest '{manifest_path}' has no 'items' list", "ERROR")
-        return None, None, None
+        return None, None, None, None
 
     item_ids = []
     item_timestamps = []
@@ -88,7 +88,7 @@ def load_manifest(manifest_path):
         item_ts = entry.get("timestamp")
         if not item_id or not item_ts:
             log(f"Manifest item missing 'id' or 'timestamp': {entry}", "ERROR")
-            return None, None, None
+            return None, None, None, None
         item_ids.append(item_id)
         try:
             ts_str = item_ts.replace("Z", "+00:00")
@@ -98,12 +98,13 @@ def load_manifest(manifest_path):
             item_timestamps.append(dt)
         except ValueError as e:
             log(f"Failed to parse item timestamp '{item_ts}': {e}", "ERROR")
-            return None, None, None
+            return None, None, None, None
 
     # Derive dataset version from the latest per-item timestamp
     version_dt = max(item_timestamps)
     log(f"Loaded manifest '{manifest_path}' — dataset '{dataset_name}', {len(item_ids)} items, version pinned to {version_dt.isoformat()} (max item timestamp)")
-    return dataset_name, item_ids, version_dt
+    timeout_per_run = manifest.get("timeout_per_run")
+    return dataset_name, item_ids, version_dt, timeout_per_run
 
 
 def log(msg, level="INFO"):
@@ -428,11 +429,15 @@ def main():
     dataset_version = None
     manifest_item_ids = None  # None = no manifest; list = filter to these IDs
     if args.manifest:
-        manifest_dataset, manifest_item_ids, dataset_version = load_manifest(args.manifest)
+        manifest_dataset, manifest_item_ids, dataset_version, manifest_timeout = load_manifest(args.manifest)
         if manifest_dataset is None:
             log(f"Failed to load manifest from '{args.manifest}' — aborting.", "ERROR")
             sys.exit(1)
         dataset_name = manifest_dataset
+        # If --timeout wasn't explicitly set and manifest has timeout_per_run, use it
+        if manifest_timeout and args.timeout == 180:
+            args.timeout = manifest_timeout
+            log(f"Using timeout_per_run={manifest_timeout}s from manifest as --timeout", "INFO")
     else:
         dataset_name = args.dataset
 
