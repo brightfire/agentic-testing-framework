@@ -196,8 +196,6 @@ The harness appends ` - <timestamp>` (and ` - <run_idx>/<total>` for repeats) at
 
 The attestation prefix tells the agent which skill to read and requires it to confirm the skill at the end of its response. Format: `Read the <suffixed-skill-name> skill from available_skills. You must state which skill you read at the end of your response, after completing the task. You are being evaluated on your ability to adhere to instructions. If you do not confirm which skill you read, your response will receive a score of zero regardless of quality. Do not spawn subagents or yield — complete all work inline in this single response. Then, ` — pass this verbatim as `--prompt-prefix` in step 3.
 
-**Also pass `--expected-skill-name <suffixed-skill-name>`** in step 3. This passes the suffixed skill name as experiment run metadata, which the evaluator uses to verify the agent read the correct skill (not just any skill). Without this, the evaluator cannot distinguish between the correct suffixed skill and a different version.
-
 For model comparison tests (Slack-triggered, single skill variant), the same suffixed skill name is used for both model runs — only `--model` differs.
 
 #### 3. Invoke the harness
