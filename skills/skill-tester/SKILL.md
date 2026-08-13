@@ -41,6 +41,8 @@ Variant inference outputs (git ref, label) pairs for each variant. Ref resolutio
 - `<item-scope>`: `all` or 8-char SHA-256 prefix of sorted item IDs joined by `|`
 - Example: `linear-create-eval__pr-123__e5f6g7h__all`
 
+The harness appends `__<model-id>`, ` - <timestamp>`, and ` - <run_idx>/<total>` for repeats at runtime — the base name passed via `--run-name` must NOT include these suffixes.
+
 ## Ref Resolution
 
 **Always resolve branch refs to commit hashes** — including on reruns. Explicit commit hashes from the user need no re-resolution.
@@ -187,8 +189,6 @@ If all variants were pruned by the recency check, skip this phase entirely and p
 #### 1. Construct experiment names
 
 For each skill variant, construct the base experiment name following the naming convention defined in the Variant Inference section.
-
-The harness appends `__<model-id>`, ` - <timestamp>`, and ` - <run_idx>/<total>` for repeats at runtime — the base name passed via `--run-name` must NOT include these suffixes.
 
 #### 2. Construct skill-reading prefix
 
