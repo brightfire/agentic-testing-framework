@@ -203,7 +203,6 @@ For model comparison tests (Slack-triggered, single skill variant), the same suf
 
 Source langfuse.env, then invoke `eval_harness.py` for each (skill variant × model) combination with: `--manifest` (path from sync phase), `--run-name` (base experiment name without timestamp/repeat suffixes), `--prompt-prefix` (the skill-reading prefix from step 2), `--expected-skill-name` (the suffixed skill name from step 2), `--model` (omit for agent default), `--repeat` (always pass; use the repeat count from the user request — e.g., "run each test once" → 1; default 10 if not specified; subtract recency-found runs), `--item-concurrency 3` (max 6 concurrent subprocesses), and `--experiment-concurrency 2`. Variants run sequentially — one completes before the next begins.
 
-
 **Computing the exec timeout:**
 
 Read `timeout_per_run` from eval.yaml (default 600s). Compute per invocation:
@@ -247,8 +246,6 @@ exec(
 ```
 
 Then monitor with `process(action=poll, timeout=30000)` every 30s until the process exits.
-
-
 
 #### 4. Monitor and capture results
 
