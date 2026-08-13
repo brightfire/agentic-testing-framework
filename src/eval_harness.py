@@ -817,10 +817,6 @@ def main():
     # --- Look up the agent's primary model ---
     # If --model was not explicitly set, look up the agent's model via
     # 'openclaw agents list --json' and pass it as --model to the CLI.
-    # This ensures no retry contamination: --model sets modelOverrideSource
-    # = "user" in the gateway, which makes resolveEffectiveModelFallbacks
-    # return [] — no fallbacks, no retry contamination prose, no session
-    # reuse on retry.
     resolved_model = args.model
     if not resolved_model:
         resolved_model = lookup_agent_model(args.agent)
