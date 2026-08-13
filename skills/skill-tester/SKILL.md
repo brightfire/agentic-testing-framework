@@ -195,9 +195,7 @@ The harness appends ` - <timestamp>` (and ` - <run_idx>/<total>` for repeats) at
 
 #### 2. Construct attestation prefix
 
-The attestation prefix tells the agent which skill to read. Verification is deterministic — the harness looks up the `openclaw.skill.used` span in the Langfuse trace after the agent completes, so the agent does NOT need to self-report which skill it read. Format: `Read the <suffixed-skill-name> skill from available_skills. Do not spawn subagents or yield — complete all work inline in this single response. Then, ` — pass this verbatim as `--prompt-prefix` in step 3.
-
-The harness stamps `skill_loaded` (from the span) and `expected_skill_name` onto the experiment observation's metadata. The evaluator checks `metadata.skill_loaded` against `metadata.expected_skill_name` — if they match, attestation is confirmed. If `skill_loaded` is null or doesn't match, that's a failed attestation criterion (not an auto-zero). The evaluator scores the rest of the criteria normally.
+Format: `Read the <suffixed-skill-name> skill from available_skills. Do not spawn subagents or yield — complete all work inline in this single response. Then, ` — pass this verbatim as `--prompt-prefix` in step 3.
 
 For model comparison tests (Slack-triggered, single skill variant), the same suffixed skill name is used for both model runs — only `--model` differs.
 
