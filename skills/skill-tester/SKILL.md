@@ -293,6 +293,8 @@ Source langfuse.env, then invoke `wait_for_scores.py` with: `--dataset`, one `--
 
 **Adjusting for attestation-excluded items:** When the harness uses `--expected-skill-name` and some items fail attestation (excluded from scoring), subtract the **unique** failed item count from `--expected-items`. The harness logs `N failed attestation items` at the end of each experiment run, but with `--repeat > 1` the same item may fail multiple times — deduplicate by `item_id` before counting. For example, if the manifest has 10 items and 2 unique items failed attestation (even if one failed in 3 repeats), pass `--expected-items 8`. If excluded items vary per variant, use per-variant `--expected-items` with separate calls.
 
+**Zero expected items edge case:** When deduplication produces zero (every unique manifest item failed attestation in at least one repeat but succeeded in another), pass `--expected-items 1` as a floor — passing 0 switches `wait_for_scores.py` to stabilization mode which can exit before all successful traces are scored.
+
 **Same repeat count across variants:** single call with all prefixes. **Different repeat counts:** call once per variant with per-variant `--repeat` and `--expected-items`. For recency-pruned variants, `--since` may need to be earlier or omitted. If item count is unknown, omit `--expected-items` — the script waits for score count stabilization.
 
 On timeout (exit 1): proceed to fetch scores anyway; note the timeout in the report. If no scores at all, check evaluator configuration.

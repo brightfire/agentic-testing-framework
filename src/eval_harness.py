@@ -206,7 +206,9 @@ def find_skill_used_span(langfuse_host, auth_header, trace_id, session_id=None,
     other traces with the same session ID. This handles the retry case where
     the skill.used span is on the original attempt's trace, not the retry's.
 
-    Returns the skill name string, or None if not found.
+    Returns (skill_name, trace_id) where skill_name is the skill name string
+    and trace_id is the trace where it was found (may differ from the input
+    trace_id if found on an alternate trace). Returns (None, None) if not found.
     """
     def _extract_skill_name(obs):
         """Extract the skill name from an observation's metadata."""
@@ -286,7 +288,7 @@ def find_skill_used_span(langfuse_host, auth_header, trace_id, session_id=None,
         if skill_name:
             if attempt > 0:
                 log(f"  Skill span found after {attempt + 1} poll attempts")
-            return skill_name
+            return skill_name, trace_id
         if attempt < max_wait - 1:
             import time as _time
             _time.sleep(1)
@@ -331,11 +333,11 @@ def find_skill_used_span(langfuse_host, auth_header, trace_id, session_id=None,
                 skill_name = _select_skill_name(found_skills)
                 if skill_name:
                     log(f"  Skill used span found on alternate trace {tid} (session: {session_id})")
-                    return skill_name
+                    return skill_name, tid
         except Exception as e:
             log(f"  Error finding alternate traces for session {session_id}: {e}", "WARN")
 
-    return None
+    return None, None
 
 
 def verify_attestation(langfuse_host, auth_header, trace_id, session_id, expected_skill_name):
@@ -656,7 +658,7 @@ def make_task(prompt_prefix, agent_id, timeout_seconds,
                 langfuse_client.update_current_span(metadata=span_metadata)
                 break
 
-            skill_loaded = await loop.run_in_executor(
+            skill_loaded, attestation_trace_id = await loop.run_in_executor(
                 None,
                 lambda: find_skill_used_span(
                     langfuse_host, auth_header, openclaw_trace_id,
@@ -685,11 +687,11 @@ def make_task(prompt_prefix, agent_id, timeout_seconds,
                         failed_attestation_items.append({
                             "item_id": item.id,
                             "reason": f"skill_mismatch: got '{skill_loaded}', expected '{expected_skill_name}'",
-                            "trace_id": openclaw_trace_id,
+                            "trace_id": attestation_trace_id or openclaw_trace_id,
                         })
                     # Stamp metadata on the experiment observation before raising
                     span_metadata = {
-                        "openclaw_trace_id": openclaw_trace_id,
+                        "openclaw_trace_id": attestation_trace_id or openclaw_trace_id,
                         "openclaw_session_id": openclaw_session_id,
                         "skill_loaded": skill_loaded,
                     }
@@ -705,8 +707,10 @@ def make_task(prompt_prefix, agent_id, timeout_seconds,
                         f"skill_loaded='{skill_loaded}', expected='{expected_skill_name}'"
                     )
                 # Stamp metadata on the experiment observation
+                # Use the trace where the skill span was actually found
+                stamped_trace_id = attestation_trace_id or openclaw_trace_id
                 span_metadata = {
-                    "openclaw_trace_id": openclaw_trace_id,
+                    "openclaw_trace_id": stamped_trace_id,
                     "openclaw_session_id": openclaw_session_id,
                     "skill_loaded": skill_loaded,
                 }
@@ -720,14 +724,8 @@ def make_task(prompt_prefix, agent_id, timeout_seconds,
             log(f"  Item {item.id}: attestation retry {attestation_attempts}/{max_total_attempts - 1} "
                 f"(expected '{expected_skill_name}', got '{skill_loaded}')", "WARN")
 
-            # Clean up scores from the failed attempt's trace so they don't pollute results
-            # Run in executor to avoid blocking the asyncio event loop
-            await loop.run_in_executor(
-                None,
-                lambda: delete_scores_for_observation(
-                    langfuse_host, auth_header, openclaw_trace_id, eval_score_names,
-                ),
-            )
+            # Note: experiment evaluator scores are attached to the experiment observation
+            # (not to the agent's OpenClaw trace), so no score cleanup is needed here.
 
             # Re-run the CLI with a fresh session
             retry_session_key = f"eval-{uuid.uuid4().hex[:12]}-{item.id[:8]}"
