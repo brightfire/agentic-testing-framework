@@ -37,16 +37,9 @@ Variant inference outputs (git ref, label) pairs for each variant. Ref resolutio
 <dataset-name>__<variant-label>__<git-hash>__<item-scope>
 ```
 
-The skill passes this base name (without the model) as `--run-name` to the harness. The harness resolves the model (via `--agent` lookup or `--model` override) and appends `__<model-id>` to produce the full experiment name:
-
-```
-<dataset-name>__<variant-label>__<git-hash>__<item-scope>__<model-id>
-```
-
 - `<variant-label>`: base branch name, `pr-<number>`, or commit ref, `/` → `-`
-- `<model-id>`: full provider-qualified model ID with `/` → `-` (e.g. `openrouter-z-ai-glm-5.2`), or `default` if no model is resolved
 - `<item-scope>`: `all` or 8-char SHA-256 prefix of sorted item IDs joined by `|`
-- Example: `linear-create-eval__pr-123__e5f6g7h__all__openrouter-z-ai-glm-5.2`
+- Example: `linear-create-eval__pr-123__e5f6g7h__all`
 
 The harness then appends ` - <timestamp>` and optionally ` - <run_idx>/<total>` for repeats at runtime.
 
