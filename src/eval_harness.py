@@ -265,8 +265,9 @@ def find_skill_used_span(langfuse_host, auth_header, trace_id, session_id=None,
     def _select_skill_name(found_skills):
         """Select the best skill name from a list of found skills.
 
-        If expected_skill_name is provided and a matching span exists, prefer
-        it. Otherwise return the first skill span found.
+        If expected_skill_name is provided, returns the matching skill name
+        if present, or None if not (so the caller keeps polling). If no
+        expected_skill_name is provided, returns the first skill found.
         """
         if not found_skills:
             return None
@@ -274,6 +275,8 @@ def find_skill_used_span(langfuse_host, auth_header, trace_id, session_id=None,
             for name in found_skills:
                 if name == expected_skill_name:
                     return name
+            # Expected skill not found yet — return None to keep polling
+            return None
         return found_skills[0]
 
     # 1. Poll for the skill span on the given trace (allow OTel exporter to flush)
@@ -349,13 +352,21 @@ def verify_attestation(langfuse_host, auth_header, trace_id, session_id, expecte
         return None, False
 
 
-def delete_scores_for_observation(langfuse_host, auth_header, trace_id):
-    """Delete all scores attached to observations on the given trace.
+def delete_scores_for_observation(langfuse_host, auth_header, trace_id,
+                                    eval_score_names=None):
+    """Delete scores attached to observations on the given trace that were
+    created by this evaluation run.
 
-    This is used to clean up scores from failed attestation runs so they
-    don't pollute experiment results. Queries for scores on the trace's
-    observations and deletes each one.
+    Only deletes scores whose name matches one of eval_score_names (the
+    evaluator names configured for this dataset). This avoids deleting
+    unrelated scores (safety, quality, cost, etc.) that may exist on the
+    agent trace from other sources.
+
+    If eval_score_names is None, no scores are deleted (safety default).
     """
+    if not eval_score_names:
+        log(f"  Skipping score cleanup for trace {trace_id} — no evaluator names provided", "INFO")
+        return 0
     try:
         # Fetch all observations on the trace to get their IDs
         resp = requests.get(
@@ -391,7 +402,9 @@ def delete_scores_for_observation(langfuse_host, auth_header, trace_id):
             scores = scores_resp.json().get("data", [])
             for score in scores:
                 score_id = score.get("id")
-                if not score_id:
+                score_name = score.get("name", "")
+                # Only delete scores whose name matches one of our evaluators
+                if score_name not in eval_score_names:
                     continue
                 del_resp = requests.delete(
                     f"{langfuse_host}/api/public/v2/scores/{score_id}",
@@ -435,7 +448,8 @@ def get_dataset(langfuse_client, dataset_name, version=None):
 def make_task(prompt_prefix, agent_id, timeout_seconds,
               langfuse_client, langfuse_host, auth_header, model=None,
               expected_skill_name=None, max_retries=2,
-              max_attestation_retries=2, failed_attestation_items=None):
+              max_attestation_retries=2, failed_attestation_items=None,
+              eval_score_names=None):
     """
     Build a task function for run_experiment.
 
@@ -456,8 +470,14 @@ def make_task(prompt_prefix, agent_id, timeout_seconds,
     attestation verification by checking the openclaw.skill.used span on
     the Langfuse trace. If the skill doesn't match (or no span is found),
     the harness retries the entire CLI call up to max_attestation_retries
-    times. Failed attestation items are tracked in failed_attestation_items
-    (a list, passed by reference) for post-experiment cleanup.
+    times. If all retries are exhausted, the item raises a RuntimeError so
+    run_experiment marks it as failed and it is excluded from scoring.
+    Failed attestation items are tracked in failed_attestation_items
+    (a list, passed by reference) for post-experiment reporting.
+
+    eval_score_names: set of evaluator score names configured for this
+    dataset. Only scores matching these names are cleaned up from failed
+    attestation attempts (safety: if None, no scores are deleted).
     """
 
     def run_cli(prompt, session_key):
@@ -632,6 +652,23 @@ def make_task(prompt_prefix, agent_id, timeout_seconds,
                             "reason": f"skill_mismatch: got '{skill_loaded}', expected '{expected_skill_name}'",
                             "trace_id": openclaw_trace_id,
                         })
+                    # Stamp metadata on the experiment observation before raising
+                    span_metadata = {
+                        "openclaw_trace_id": openclaw_trace_id,
+                        "openclaw_session_id": openclaw_session_id,
+                        "skill_loaded": skill_loaded,
+                    }
+                    if expected_skill_name:
+                        span_metadata["expected_skill_name"] = expected_skill_name
+                        span_metadata["attestation_passed"] = attestation_passed
+                    langfuse_client.update_current_span(metadata=span_metadata)
+                    # Raise an error so run_experiment marks this item as failed
+                    # and excludes it from scoring, rather than returning a response
+                    # from an agent that never loaded the expected skill
+                    raise RuntimeError(
+                        f"Attestation failed after {attestation_attempts} attempt(s): "
+                        f"skill_loaded='{skill_loaded}', expected='{expected_skill_name}'"
+                    )
                 # Stamp metadata on the experiment observation
                 span_metadata = {
                     "openclaw_trace_id": openclaw_trace_id,
@@ -649,7 +686,13 @@ def make_task(prompt_prefix, agent_id, timeout_seconds,
                 f"(expected '{expected_skill_name}', got '{skill_loaded}')", "WARN")
 
             # Clean up scores from the failed attempt's trace so they don't pollute results
-            delete_scores_for_observation(langfuse_host, auth_header, openclaw_trace_id)
+            # Run in executor to avoid blocking the asyncio event loop
+            await loop.run_in_executor(
+                None,
+                lambda: delete_scores_for_observation(
+                    langfuse_host, auth_header, openclaw_trace_id, eval_score_names,
+                ),
+            )
 
             # Re-run the CLI with a fresh session
             retry_session_key = f"eval-{uuid.uuid4().hex[:12]}-{item.id[:8]}"
@@ -748,6 +791,13 @@ def main():
              "doesn't match, the harness retries the item (up to 2 times by "
              "default) and cleans up scores from failed attempts. Required when "
              "--prompt-prefix contains an attestation prefix."
+    )
+    parser.add_argument(
+        "--eval-score-names", default=None,
+        help="Comma-separated list of evaluator score names configured for this "
+             "dataset (e.g. 'task_quality,attestation'). Only scores matching "
+             "these names are cleaned up from failed attestation attempts. "
+             "If omitted, no scores are deleted (safety default)."
     )
     parser.add_argument(
         "--manifest", default=None,
@@ -862,6 +912,12 @@ def main():
     # Track items that failed attestation across all experiments
     failed_attestation_items = []
 
+    # Parse evaluator score names for safe score cleanup
+    eval_score_names = None
+    if args.eval_score_names:
+        eval_score_names = set(s.strip() for s in args.eval_score_names.split(",") if s.strip())
+        log(f"Evaluator score names for cleanup: {eval_score_names}")
+
     task = make_task(
         prompt_prefix=args.prompt_prefix,
         agent_id=args.agent,
@@ -872,6 +928,7 @@ def main():
         model=args.model,
         expected_skill_name=args.expected_skill_name,
         failed_attestation_items=failed_attestation_items,
+        eval_score_names=eval_score_names,
     )
 
     # Run experiments — --repeat N creates N separate experiments, each with all dataset items.
