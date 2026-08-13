@@ -825,6 +825,17 @@ def main():
         else:
             log(f"Could not look up model for agent '{args.agent}' — falling back to agent default (no --model flag)", "WARN")
 
+    # --- Append model to run name ---
+    # The harness is responsible for encoding the model into the experiment name.
+    # The skill passes a base name (variant only, no model) via --run-name.
+    # We append -<model_short> so the experiment name identifies which model was used.
+    if resolved_model:
+        model_short = resolved_model.rsplit("/", 1)[-1]
+    else:
+        model_short = "default"
+    args.run_name = f"{args.run_name}-{model_short}"
+    log(f"Experiment base name (with model): {args.run_name}")
+
     task = make_task(
         prompt_prefix=args.prompt_prefix,
         agent_id=args.agent,

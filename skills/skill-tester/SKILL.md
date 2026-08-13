@@ -34,15 +34,21 @@ Variant inference outputs (git ref, label) pairs for each variant. Ref resolutio
 **Experiment naming convention:**
 
 ```
-<dataset-name>__<model-id>__<variant-label>__<git-hash>__<item-scope>
+<dataset-name>__<variant-label>__<git-hash>__<item-scope>
 ```
 
-- `<model-id>`: provider-qualified model ID, `/` → `-`, `@` preserved
-- `<variant-label>`: base branch name, `pr-<number>`, or commit ref, `/` → `-`
-- `<item-scope>`: `all` or 8-char SHA-256 prefix of sorted item IDs joined by `|`
-- Example: `linear-create-eval__openrouter-@preset-conversation-default__pr-123__e5f6g7h__all`
+The skill passes this base name (without the model) as `--run-name` to the harness. The harness resolves the model (via `--agent` lookup or `--model` override) and appends `-<model-short>` to produce the full experiment name:
 
-The harness appends ` - <timestamp>` and optionally ` - <run_idx>/<total>` for repeats at runtime.
+```
+<dataset-name>__<variant-label>__<git-hash>__<item-scope>-<model-short>
+```
+
+- `<variant-label>`: base branch name, `pr-<number>`, or commit ref, `/` → `-`
+- `<model-short>`: last `/`-separated segment of the resolved model ID (e.g. `glm-5.2` from `openrouter/z-ai/glm-5.2`), or `default` if no model is resolved
+- `<item-scope>`: `all` or 8-char SHA-256 prefix of sorted item IDs joined by `|`
+- Example: `linear-create-eval__pr-123__e5f6g7h__all-glm-5.2`
+
+The harness then appends ` - <timestamp>` and optionally ` - <run_idx>/<total>` for repeats at runtime.
 
 ## Ref Resolution
 
@@ -189,9 +195,9 @@ If all variants were pruned by the recency check, skip this phase entirely and p
 
 #### 1. Construct experiment names
 
-For each skill variant, construct the base experiment name following the naming convention defined in the Variant Inference section. For model comparison runs, include the model label in the name to distinguish the runs.
+For each skill variant, construct the base experiment name following the naming convention defined in the Variant Inference section. The base name must NOT include the model — the harness resolves the model (via `--agent` lookup or `--model` override) and appends it to the experiment name automatically.
 
-The harness appends ` - <timestamp>` (and ` - <run_idx>/<total>` for repeats) at runtime — the base name passed via `--run-name` must NOT include these suffixes.
+The harness appends ` - <timestamp>` (and ` - <run_idx>/<total>` for repeats) at runtime — the base name passed via `--run-name` must NOT include these suffixes either.
 
 #### 2. Construct skill-reading prefix
 
@@ -201,7 +207,7 @@ For model comparison tests (Slack-triggered, single skill variant), the same suf
 
 #### 3. Invoke the harness
 
-Source langfuse.env, then invoke `eval_harness.py` for each (skill variant × model) combination with: `--manifest` (path from sync phase), `--run-name` (base experiment name without timestamp/repeat suffixes), `--prompt-prefix` (the skill-reading prefix from step 2), `--expected-skill-name` (the suffixed skill name from step 2), `--agent` (from eval.yaml's `agent` field, default `main`), `--model` (omit for agent default — only pass explicitly for model comparison runs), `--repeat` (always pass; use the repeat count from the user request — e.g., "run each test once" → 1; default 10 if not specified; subtract recency-found runs), `--item-concurrency 3` (max 6 concurrent subprocesses), and `--experiment-concurrency 2`. Variants run sequentially — one completes before the next begins.
+Source langfuse.env, then invoke `eval_harness.py` for each (skill variant × model) combination with: `--manifest` (path from sync phase), `--run-name` (base experiment name without model, timestamp, or repeat suffixes — the harness appends the model), `--prompt-prefix` (the skill-reading prefix from step 2), `--expected-skill-name` (the suffixed skill name from step 2), `--agent` (from eval.yaml's `agent` field, default `main`), `--model` (omit for agent default — only pass explicitly for model comparison runs), `--repeat` (always pass; use the repeat count from the user request — e.g., "run each test once" → 1; default 10 if not specified; subtract recency-found runs), `--item-concurrency 3` (max 6 concurrent subprocesses), and `--experiment-concurrency 2`. Variants run sequentially — one completes before the next begins.
 
 **Computing the exec timeout:**
 
