@@ -833,7 +833,7 @@ def main():
         model_short = resolved_model.rsplit("/", 1)[-1]
     else:
         model_short = "default"
-    args.run_name = f"{args.run_name}-{model_short}"
+    args.run_name = f"{args.run_name}__{model_short}"
     log(f"Experiment base name (with model): {args.run_name}")
 
     task = make_task(
