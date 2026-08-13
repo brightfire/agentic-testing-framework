@@ -1,24 +1,18 @@
 #!/usr/bin/env python3
 """
-Wait for Scores — poll Langfuse until the evaluator has scored all experiment traces.
+Wait for Scores — poll Langfuse until the evaluator finishes scoring experiment traces.
 
 After the eval harness finishes, the Langfuse evaluator runs asynchronously.
-Instead of a fixed sleep, this script polls the scores API and waits until
-every expected dataset item has at least one score for each experiment prefix.
+This script polls the scores API and waits until each prefix has at least one
+score and the total score count stabilizes across consecutive polls.
 
 Usage:
-    # Wait for 5 items across two experiment prefixes (3-minute timeout)
+    # Wait for scores across two experiment prefixes (3-minute timeout)
     python3 wait_for_scores.py \
         --dataset linear-create-eval \
         --prefix "linear-create-eval__openrouter-z-ai-glm-5.2__main__a1b2c3d__all" \
         --prefix "linear-create-eval__openrouter-z-ai-glm-5.2__pr-15__e5f6g7h__all" \
-        --expected-items 5 \
         --timeout 180
-
-    # Without --expected-items: wait for score count to stabilize between polls
-    python3 wait_for_scores.py \
-        --dataset linear-create-eval \
-        --prefix "linear-create-eval__openrouter-z-ai-glm-5.2__pr-15__e5f6g7h__all"
 
     # Custom Langfuse host
     python3 wait_for_scores.py \
@@ -30,8 +24,8 @@ Credentials:
     LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY environment variables.
 
 Exit codes:
-    0 — all expected scores are present.
-    1 — timeout reached before all scores were found (or script error).
+    0 — score count has stabilized (evaluator finished).
+    1 — timeout reached or script error.
 """
 
 import argparse
@@ -126,67 +120,16 @@ def fetch_trace_metadata(langfuse_host, auth_header, trace_id):
         return {}
 
 
-def build_prefix_item_map(langfuse_host, auth_header, scores, prefixes):
-    """Build a mapping of prefix -> {dataset_item_id: {trace_id: set(score_names)}}.
+def build_prefix_item_map(langfuse_host, auth_header, scores, prefixes, metadata_cache):
+    """Build a mapping of prefix -> {dataset_item_id: set(trace_id)}.
 
     For each score, fetches trace metadata to determine which experiment
-    and dataset item it belongs to, then groups by prefix.
-
-    Tracks per-trace score names (dimensions) so readiness can verify
-    that each trace received ALL expected dimensions, not just that the
-    item has enough distinct traces and enough distinct names globally.
-    """
-    trace_cache = {}
-    prefix_items = {
-        p: defaultdict(lambda: defaultdict(set))
-        for p in prefixes
-    }
-
-    for score in scores:
-        subject = score.get("subject", {})
-        trace_id = subject.get("traceId")
-        if not trace_id:
-            trace_id = score.get("traceId")
-        if not trace_id:
-            continue
-
-        if trace_id not in trace_cache or not trace_cache[trace_id]:
-            md = fetch_trace_metadata(
-                langfuse_host, auth_header, trace_id
-            )
-            if md:
-                trace_cache[trace_id] = md
-
-        md = trace_cache.get(trace_id, {})
-        exp_name = md.get("experiment_name")
-        dataset_item_id = md.get("dataset_item_id")
-
-        if not exp_name or not dataset_item_id:
-            continue
-
-        score_name = score.get("name", "")
-
-        for prefix in prefixes:
-            if exp_name.startswith(prefix):
-                prefix_items[prefix][dataset_item_id][trace_id].add(score_name)
-                break
-
-    return prefix_items
-
-
-def build_prefix_item_map_cached(langfuse_host, auth_header, scores, prefixes, metadata_cache):
-    """Build a mapping of prefix -> {dataset_item_id: {trace_id: set(score_names)}} with a persistent metadata cache.
-
-    Like build_prefix_item_map, but reuses trace metadata from previous polling
-    iterations via metadata_cache (a dict mutated in place). Only traces not
-    already in the cache trigger a metadata fetch, avoiding redundant API calls
-    across polls.
-
-    Tracks per-trace score names (dimensions) so readiness can verify
-    that each trace received ALL expected dimensions.
+    and dataset item it belongs to, then groups by prefix. Reuses trace
+    metadata from previous polling iterations via metadata_cache (mutated
+    in place) to avoid redundant API calls across polls.
     """
     prefix_items = {
-        p: defaultdict(lambda: defaultdict(set))
+        p: defaultdict(set)
         for p in prefixes
     }
 
@@ -212,11 +155,9 @@ def build_prefix_item_map_cached(langfuse_host, auth_header, scores, prefixes, m
         if not exp_name or not dataset_item_id:
             continue
 
-        score_name = score.get("name", "")
-
         for prefix in prefixes:
             if exp_name.startswith(prefix):
-                prefix_items[prefix][dataset_item_id][trace_id].add(score_name)
+                prefix_items[prefix][dataset_item_id].add(trace_id)
                 break
 
     return prefix_items
@@ -233,22 +174,6 @@ def main():
     parser.add_argument(
         "--prefix", action="append", required=True, metavar="PREFIX",
         help="Experiment name prefix to check (repeatable for multiple variants)"
-    )
-    parser.add_argument(
-        "--expected-items", type=int, default=None,
-        help="Expected number of dataset items. If provided, waits until each prefix "
-             "has scores for that many unique items. If not provided, waits until each "
-             "prefix has at least 1 score and the total score count stabilizes."
-    )
-    parser.add_argument(
-        "--repeat", type=int, default=1,
-        help="Number of repeats per dataset item (default: 1). When set, --expected-items "
-             "is multiplied by --repeat to determine the required score count per item."
-    )
-    parser.add_argument(
-        "--dimensions", type=int, default=1,
-        help="Number of scoring dimensions per trace (default: 1). The expected score "
-             "count per item is --repeat * --dimensions."
     )
     parser.add_argument(
         "--timeout", type=int, default=180,
@@ -284,23 +209,14 @@ def main():
             sys.exit(1)
 
     prefixes = args.prefix
-    # Expected scores per item = repeat * dimensions
-    scores_per_item = args.repeat * args.dimensions
     log(f"Waiting for scores on dataset '{args.dataset}' for {len(prefixes)} prefix(es)")
     log(f"  Timeout: {args.timeout}s | Interval: {args.interval}s")
     if args.since:
         log(f"  Since: {args.since}")
-    if args.expected_items:
-        log(f"  Expected items per prefix: {args.expected_items} (repeat={args.repeat}, dims={args.dimensions}, scores/item={scores_per_item})")
-    else:
-        log("  No expected-items count; will wait for score count stabilization")
 
     deadline = time.monotonic() + args.timeout
     prev_total = None
     stable_count = 0
-    # Persist trace metadata cache across polling iterations to avoid re-fetching
-    # metadata for traces already seen in previous polls. Only new traces
-    # (those that appeared since the last poll) require metadata requests.
     trace_metadata_cache = {}
 
     while True:
@@ -314,60 +230,36 @@ def main():
             time.sleep(args.interval)
             continue
 
-        prefix_items = build_prefix_item_map_cached(
+        prefix_items = build_prefix_item_map(
             args.langfuse_host, auth_header, scores, prefixes, trace_metadata_cache
         )
 
-        total_scores = len(scores)
-        # For stabilization, count total trace-score pairs matching requested prefixes
+        # Count total score-bearing traces matching requested prefixes
         prefix_score_count = sum(
-            sum(len(trace_dims) for trace_dims in prefix_items[p].values())
+            sum(len(traces) for traces in prefix_items[p].values())
             for p in prefixes
         )
 
         # Log progress
         for p in prefixes:
             n_items = len(prefix_items[p])
-            if args.expected_items:
-                # Count items that have enough fully-scored traces.
-                # A trace is fully scored when it has ALL expected dimensions.
-                ready_items = sum(
-                    1 for trace_map in prefix_items[p].values()
-                    if sum(1 for dims in trace_map.values() if len(dims) >= args.dimensions) >= args.repeat
-                )
-                log(f"  {p}: {ready_items}/{args.expected_items} items fully scored ({n_items} items with some scores)")
-            else:
-                n_traces = sum(len(trace_map) for trace_map in prefix_items[p].values())
-                log(f"  {p}: {n_items} items scored ({n_traces} traces with scores)")
+            n_traces = sum(len(traces) for traces in prefix_items[p].values())
+            log(f"  {p}: {n_items} items scored ({n_traces} traces with scores)")
 
-        if args.expected_items:
-            # Mode 1: wait until each prefix has enough items where at least
-            # --repeat traces each have ALL --dimensions distinct score names.
-            all_ready = all(
-                sum(
-                    1 for trace_map in prefix_items[p].values()
-                    if sum(1 for dims in trace_map.values() if len(dims) >= args.dimensions) >= args.repeat
-                ) >= args.expected_items
-                for p in prefixes
-            )
-            if all_ready:
-                log("All prefixes have sufficient per-trace dimension coverage for all expected items. ✓")
-                sys.exit(0)
+        # Wait until each prefix has >= 1 score AND count stabilizes
+        all_have_scores = all(len(prefix_items[p]) >= 1 for p in prefixes)
+        if prev_total is not None and prefix_score_count == prev_total:
+            stable_count += 1
         else:
-            # Mode 2: wait until each prefix has >= 1 score AND prefix-matched count stabilized
-            all_have_scores = all(len(prefix_items[p]) >= 1 for p in prefixes)
-            if prev_total is not None and prefix_score_count == prev_total:
-                stable_count += 1
-            else:
-                stable_count = 0
-            stabilized = stable_count >= 2
-            if all_have_scores and stabilized:
-                log(f"Score count stabilized at {prefix_score_count} (prefix-matched, {stable_count} consecutive unchanged polls). ✓")
-                sys.exit(0)
-            prev_total = prefix_score_count
+            stable_count = 0
+        stabilized = stable_count >= 2
+        if all_have_scores and stabilized:
+            log(f"Score count stabilized at {prefix_score_count} ({stable_count} consecutive unchanged polls). ✓")
+            sys.exit(0)
+        prev_total = prefix_score_count
 
         if time.monotonic() >= deadline:
-            log("Timeout reached — not all scores are present yet.", "ERROR")
+            log("Timeout reached — scores have not stabilized yet.", "ERROR")
             sys.exit(1)
 
         time.sleep(args.interval)

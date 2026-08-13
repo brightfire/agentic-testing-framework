@@ -269,11 +269,9 @@ See [`references/execute-failure-handling.md`](references/execute-failure-handli
 
 #### 1. Wait for evaluator scoring
 
-After the execute phase completes, the Langfuse evaluator runs asynchronously. Instead of a fixed sleep, poll the Langfuse scores API until all expected scores are present (or a 3-minute timeout is reached).
+After the execute phase completes, the Langfuse evaluator runs asynchronously. Instead of a fixed sleep, poll the Langfuse scores API until the score count stabilizes (or a 3-minute timeout is reached).
 
-Source langfuse.env, then invoke `wait_for_scores.py` with: `--dataset`, one `--prefix` per variant (including recency-pruned), `--expected-items` (manifest item count), `--repeat` (execute phase count), `--dimensions` (scoring dimensions, default 1), `--since` (execute phase start ISO timestamp), and `--timeout 180`. The script multiplies `--repeat × --dimensions` to determine required scores per item. Polls every 10s; exits 0 when all prefixes have full coverage, or exits 1 on 3-min timeout.
-
-**Same repeat count across variants:** single call with all prefixes. **Different repeat counts:** call once per variant with per-variant `--repeat` and `--expected-items`. For recency-pruned variants, `--since` may need to be earlier or omitted. If item count is unknown, omit `--expected-items` — the script waits for score count stabilization.
+Source langfuse.env, then invoke `wait_for_scores.py` with: `--dataset`, one `--prefix` per variant (including recency-pruned), `--since` (execute phase start ISO timestamp), and `--timeout 180`. Polls every 10s; exits 0 when each prefix has at least one score and the count stabilizes across consecutive polls, or exits 1 on 3-min timeout.
 
 On timeout (exit 1): proceed to fetch scores anyway; note the timeout in the report. If no scores at all, check evaluator configuration.
 
