@@ -593,6 +593,9 @@ def make_task(prompt_prefix, agent_id, timeout_seconds,
                     )
                     if failed_attestation_items is not None:
                         failed_attestation_items.append({"item_id": item.id, "reason": "no_session_id"})
+                    raise RuntimeError(
+                        f"Attestation failed: no sessionId in CLI output — cannot verify skill loading"
+                    )
                 break
 
             # Run trace/span lookups in executor to avoid blocking the asyncio
@@ -616,11 +619,24 @@ def make_task(prompt_prefix, agent_id, timeout_seconds,
                     )
                     if failed_attestation_items is not None:
                         failed_attestation_items.append({"item_id": item.id, "reason": "no_trace_found"})
+                    raise RuntimeError(
+                        f"Attestation failed: could not find OpenClaw trace for session {openclaw_session_id}"
+                    )
                 break
 
             log(f"Linked OpenClaw trace: {openclaw_trace_id} (session: {openclaw_session_id})")
 
             # Look up the openclaw.skill.used span for deterministic attestation
+            # Skip span lookup entirely when no expected_skill_name is set
+            # (result cannot affect acceptance and polling wastes ~10s per item)
+            if not expected_skill_name:
+                span_metadata = {
+                    "openclaw_trace_id": openclaw_trace_id,
+                    "openclaw_session_id": openclaw_session_id,
+                }
+                langfuse_client.update_current_span(metadata=span_metadata)
+                break
+
             skill_loaded = await loop.run_in_executor(
                 None,
                 lambda: find_skill_used_span(
@@ -702,7 +718,9 @@ def make_task(prompt_prefix, agent_id, timeout_seconds,
                 )
             except RuntimeError as e:
                 log(f"  Item {item.id}: attestation retry CLI failed — {e}", "WARN")
-                # CLI failed on retry; use the previous response and stamp failure
+                # CLI failed on retry; stamp failure and raise so run_experiment
+                # excludes this item from scoring (do not return the previous
+                # unverified response)
                 if failed_attestation_items is not None:
                     failed_attestation_items.append({
                         "item_id": item.id,
@@ -717,7 +735,9 @@ def make_task(prompt_prefix, agent_id, timeout_seconds,
                     "attestation_passed": False,
                 }
                 langfuse_client.update_current_span(metadata=span_metadata)
-                break
+                raise RuntimeError(
+                    f"Attestation retry CLI failed: {e}"
+                ) from e
 
         return response_text
 
