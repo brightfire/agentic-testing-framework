@@ -223,10 +223,8 @@ Source langfuse.env, then invoke `eval_harness.py` for each (skill variant × mo
 Read `timeout_per_run` from eval.yaml (default 600s). Compute per invocation:
 
 ```
-exec_timeout = timeout_per_run * repeat * (1 + max_attestation_retries) + 120
+exec_timeout = timeout_per_run * repeat + 120
 ```
-
-The `max_attestation_retries` factor (default 2) accounts for attestation retries: each item can require up to 3 CLI calls (1 initial + 2 retries). If attestation is not used (no `--expected-skill-name`), use `timeout_per_run * repeat + 120` instead.
 
 Variants run sequentially in separate exec calls, each with its own timeout. Do not multiply by the number of variants — each exec call runs ONE variant.
 
