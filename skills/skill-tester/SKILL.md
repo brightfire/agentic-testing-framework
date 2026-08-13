@@ -34,15 +34,14 @@ Variant inference outputs (git ref, label) pairs for each variant. Ref resolutio
 **Experiment naming convention:**
 
 ```
-<dataset-name>__<model-id>__<variant-label>__<git-hash>__<item-scope>
+<dataset-name>__<variant-label>__<git-hash>__<item-scope>
 ```
 
-- `<model-id>`: provider-qualified model ID, `/` → `-`, `@` preserved
 - `<variant-label>`: base branch name, `pr-<number>`, or commit ref, `/` → `-`
 - `<item-scope>`: `all` or 8-char SHA-256 prefix of sorted item IDs joined by `|`
-- Example: `linear-create-eval__openrouter-@preset-conversation-default__pr-123__e5f6g7h__all`
+- Example: `linear-create-eval__pr-123__e5f6g7h__all`
 
-The harness appends ` - <timestamp>` and optionally ` - <run_idx>/<total>` for repeats at runtime.
+The harness appends `__<model-id>`, ` - <timestamp>`, and ` - <run_idx>/<total>` for repeats at runtime — the base name passed via `--run-name` must NOT include these suffixes.
 
 ## Ref Resolution
 
@@ -56,7 +55,7 @@ After variant inference (and before the recency check), pin all git refs to comm
 
 ## Recency Check
 
-After ref resolution, run `recency_check.py` for each (skill variant × model) combination. Source `~/.openclaw/secrets/langfuse.env`, then invoke `recency_check.py` with `--dataset` and `--filter` (base experiment name, without timestamp suffix). `--min-pass-percent 75` sets the pass threshold. Count run names on stdout — if count meets requested repeats, prune the combination. If fewer runs exist, only the difference needs to run. Empty stdout means no existing runs — include the combination. Exit 1 = script error (report and stop).
+After ref resolution, run `recency_check.py` for each (skill variant × model) combination. Source `~/.openclaw/secrets/langfuse.env`, then invoke `recency_check.py` with `--dataset` and `--filter` (model-qualified experiment prefix — `<base>__<model-id>`, not the bare base — because the harness appends `__<model-id>` before the ` - <timestamp>` separator that `recency_check.py` matches on). `--min-pass-percent 75` sets the pass threshold. Count run names on stdout — if count meets requested repeats, prune the combination. If fewer runs exist, only the difference needs to run. Empty stdout means no existing runs — include the combination. Exit 1 = script error (report and stop).
 
 
 ## Confirmation — HARD GATE
@@ -189,9 +188,7 @@ If all variants were pruned by the recency check, skip this phase entirely and p
 
 #### 1. Construct experiment names
 
-For each (skill variant × model) combination, construct the base experiment name following the naming convention defined in the Variant Inference section. When no model override is specified, use the agent's current default model ID.
-
-The harness appends ` - <timestamp>` (and ` - <run_idx>/<total>` for repeats) at runtime — the base name passed via `--run-name` must NOT include these suffixes.
+For each skill variant, construct the base experiment name following the naming convention defined in the Variant Inference section.
 
 #### 2. Construct skill-reading prefix
 
@@ -201,7 +198,7 @@ For model comparison tests (Slack-triggered, single skill variant), the same suf
 
 #### 3. Invoke the harness
 
-Source langfuse.env, then invoke `eval_harness.py` for each (skill variant × model) combination with: `--manifest` (path from sync phase), `--run-name` (base experiment name without timestamp/repeat suffixes), `--prompt-prefix` (the skill-reading prefix from step 2), `--expected-skill-name` (the suffixed skill name from step 2), `--model` (omit for agent default), `--repeat` (always pass; use the repeat count from the user request — e.g., "run each test once" → 1; default 10 if not specified; subtract recency-found runs), `--item-concurrency 3` (max 6 concurrent subprocesses), and `--experiment-concurrency 2`. Variants run sequentially — one completes before the next begins.
+Source langfuse.env, then invoke `eval_harness.py` for each (skill variant × model) combination with: `--manifest` (path from sync phase), `--run-name` (base experiment name without model, timestamp, or repeat suffixes — the harness appends the model), `--prompt-prefix` (the skill-reading prefix from step 2), `--expected-skill-name` (the suffixed skill name from step 2), `--agent` (from eval.yaml's `agent` field, default `main`), `--model` (omit for agent default — only pass explicitly for model comparison runs), `--repeat` (always pass; use the repeat count from the user request — e.g., "run each test once" → 1; default 10 if not specified; subtract recency-found runs), `--item-concurrency 3` (max 6 concurrent subprocesses), and `--experiment-concurrency 2`. Variants run sequentially — one completes before the next begins.
 
 **Computing the exec timeout:**
 
@@ -239,7 +236,7 @@ Start the harness in the background, then poll until it completes:
 
 ```
 exec(
-  command="cd <harness-dir> && source ~/.openclaw/secrets/langfuse.env && source <atf-dir>/.venv/bin/activate && python src/eval_harness.py --manifest <path> --run-name '<name>' --prompt-prefix '<prefix>' --expected-skill-name <suffixed-skill-name> --repeat <N> --item-concurrency 3 --experiment-concurrency 2 [--model <model>]",
+  command="cd <harness-dir> && source ~/.openclaw/secrets/langfuse.env && source <atf-dir>/.venv/bin/activate && python src/eval_harness.py --manifest <path> --run-name '<name>' --prompt-prefix '<prefix>' --expected-skill-name <suffixed-skill-name> --agent <agent-from-eval-yaml> --repeat <N> --item-concurrency 3 --experiment-concurrency 2 [--model <model>]",
   background=true,
   timeout=<exec_timeout>
 )
@@ -262,6 +259,8 @@ See [`references/execute-failure-handling.md`](references/execute-failure-handli
 ## Report Phase
 
 **Inputs:** Experiment run names (base prefixes per variant, including recency-pruned), dataset name (sync output), originating channel (request context), skill diff (`git diff <base-ref> <head-ref> -- <skill-path>`).
+
+**Variant prefixes are model-qualified:** The harness appends `__<model-id>` to the base experiment name. When passing variant prefixes to the Report Phase (and to `wait_for_scores.py`), use the full model-qualified prefix — `<base>__<model-id>` — not just the base. For model comparison runs (single skill variant, two models), each model produces a separate variant prefix: `<base>__<model-a>` and `<base>__<model-b>`. Passing the unqualified base would cause `eval_report.py` to match and aggregate both models into a single result, losing the model-to-model delta. For skill-variant comparisons (different git refs, same agent default model), all variants share the same `__<model-id>` suffix.
 
 **All variants pruned:** If the recency check pruned all variants from the run matrix (every variant already has sufficient existing runs), the Execute Phase is a no-op. Proceed directly to the Report Phase using the existing experiment run names from the recency check output as the variant prefixes. Set `--since` to an earlier timestamp or omit it to capture the existing experiment data.
 
