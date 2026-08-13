@@ -188,9 +188,7 @@ If all variants were pruned by the recency check, skip this phase entirely and p
 
 #### 1. Construct experiment names
 
-For each skill variant, construct the base experiment name following the naming convention defined in the Variant Inference section. The base name must NOT include the model — the harness resolves the model (via `--agent` lookup or `--model` override) and appends it to the experiment name automatically.
-
-The harness appends `__<model-id>`, ` - <timestamp>`, and ` - <run_idx>/<total>` for repeats at runtime — the base name passed via `--run-name` must NOT include these suffixes.
+For each skill variant, construct the base experiment name following the naming convention defined in the Variant Inference section. The harness appends `__<model-id>`, ` - <timestamp>`, and ` - <run_idx>/<total>` for repeats at runtime — the base name passed via `--run-name` must NOT include these suffixes.
 
 #### 2. Construct skill-reading prefix
 
