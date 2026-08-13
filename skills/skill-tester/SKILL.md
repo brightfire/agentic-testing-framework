@@ -193,7 +193,7 @@ For each (skill variant × model) combination, construct the base experiment nam
 
 The harness appends ` - <timestamp>` (and ` - <run_idx>/<total>` for repeats) at runtime — the base name passed via `--run-name` must NOT include these suffixes.
 
-#### 2. Construct attestation prefix
+#### 2. Construct skill-reading prefix
 
 Format: `Read the <suffixed-skill-name> skill from available_skills. Do not spawn subagents or yield — complete all work inline in this single response. Then, ` — pass this verbatim as `--prompt-prefix` in step 3.
 
@@ -214,7 +214,9 @@ The harness stamps `skill_loaded` and `expected_skill_name` onto each experiment
 
 #### 3. Invoke the harness
 
-Source langfuse.env, then invoke `eval_harness.py` for each (skill variant × model) combination with: `--manifest` (path from sync phase), `--run-name` (base experiment name without timestamp/repeat suffixes), `--prompt-prefix` (the attestation prefix from step 2), `--expected-skill-name` (the suffixed skill name from step 2), `--model` (omit for agent default), `--repeat` (always pass; use the repeat count from the user request — e.g., "run each test once" → 1; default 10 if not specified; subtract recency-found runs), `--item-concurrency 3` (max 6 concurrent subprocesses), and `--experiment-concurrency 2`. Variants run sequentially — one completes before the next begins.
+Source langfuse.env, then invoke `eval_harness.py` for each (skill variant × model) combination with: `--manifest` (path from sync phase), `--run-name` (base experiment name without timestamp/repeat suffixes), `--prompt-prefix` (the skill-reading prefix from step 2), `--expected-skill-name` (the suffixed skill name from step 2), `--model` (omit for agent default), `--repeat` (always pass; use the repeat count from the user request — e.g., "run each test once" → 1; default 10 if not specified; subtract recency-found runs), `--item-concurrency 3` (max 6 concurrent subprocesses), and `--experiment-concurrency 2`. Variants run sequentially — one completes before the next begins.
+
+**Deterministic attestation verification:** The harness verifies that the agent loaded the correct skill by checking the `openclaw.skill.used` span on the Langfuse trace. This is a deterministic string comparison — no LLM involved. If the skill doesn't match (or no span is found), the harness retries the item (up to 2 times) and cleans up scores from failed attempts. The evaluator only scores task quality criteria; it does not check attestation.
 
 **Computing the exec timeout:**
 
