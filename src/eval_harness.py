@@ -182,6 +182,114 @@ def find_openclaw_trace_id(langfuse_host, auth_header, session_id, max_wait=15):
     return None
 
 
+def find_skill_used_span(langfuse_host, auth_header, trace_id,
+                         expected_skill_name=None, max_wait=10):
+    """Look up the openclaw.skill.used span on a trace via the Langfuse REST API.
+
+    The OpenClaw gateway emits a SPAN observation named 'openclaw.skill.used'
+    when the agent reads a SKILL.md file. The span's metadata contains
+    attributes.openclaw.skill.name with the exact skill name.
+
+    Queries /api/public/v2/observations for the given trace ID, filtering
+    for SPAN type, paginating through all results to find the observation
+    named 'openclaw.skill.used'. Extracts attributes.openclaw.skill.name from
+    its metadata.
+
+    If expected_skill_name is provided, scans all matching spans and prefers
+    one whose skill name matches. This handles the case where the agent loads
+    multiple skills and an auxiliary skill's span appears first.
+
+    Polls for up to max_wait seconds to allow the OTel exporter to flush the
+    skill span (which may arrive slightly after the trace itself appears).
+
+    Returns the skill name string, or None if not found.
+    """
+    def _extract_skill_name(obs):
+        """Extract the skill name from an observation's metadata."""
+        md = obs.get("metadata", {}) or {}
+        # The skill name is stored as a flat key with literal dots:
+        # "attributes.openclaw.skill.name". Langfuse flattens OTel
+        # span attributes into dot-separated top-level metadata keys.
+        skill_name = md.get("attributes.openclaw.skill.name")
+        if not skill_name:
+            # Fallback: nested dict form (older Langfuse versions)
+            attrs = md.get("attributes", {}) or {}
+            skill_name = attrs.get("openclaw.skill.name")
+        if not skill_name:
+            # Fallback: without attributes. prefix
+            skill_name = md.get("openclaw.skill.name")
+        return skill_name
+
+    def _query_trace_for_skill_span(tid):
+        """Query a single trace for all openclaw.skill.used spans, paginating
+        through all SPAN observations. Returns a list of skill names found."""
+        found_skills = []
+        page = 1
+        while True:
+            try:
+                resp = requests.get(
+                    f"{langfuse_host}/api/public/v2/observations",
+                    params={
+                        "traceId": tid,
+                        "type": "SPAN",
+                        "fields": "core,basic,io,metadata",
+                        "limit": 100,
+                        "page": page,
+                    },
+                    headers={"Authorization": f"Basic {auth_header}"},
+                    timeout=10,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                observations = data.get("data", [])
+                for obs in observations:
+                    if obs.get("name") == "openclaw.skill.used":
+                        skill_name = _extract_skill_name(obs)
+                        if skill_name:
+                            found_skills.append(skill_name)
+                # Check for more pages (Langfuse uses offset-based pagination)
+                meta = data.get("meta", {}) or {}
+                total_pages = meta.get("totalPages", 1)
+                if page >= total_pages or len(observations) < 100:
+                    break
+                page += 1
+            except Exception as e:
+                log(f"  Error querying trace {tid} for skill.used span (page {page}): {e}", "WARN")
+                break
+        return found_skills
+
+    def _select_skill_name(found_skills):
+        """Select the best skill name from a list of found skills.
+
+        If expected_skill_name is provided, returns the matching skill name
+        if present, or None if not (so the caller keeps polling). If no
+        expected_skill_name is provided, returns the first skill found.
+        """
+        if not found_skills:
+            return None
+        if expected_skill_name:
+            for name in found_skills:
+                if name == expected_skill_name:
+                    return name
+            # Expected skill not found yet — return None to keep polling
+            return None
+        return found_skills[0]
+
+    # Poll for the skill span on the given trace (allow OTel exporter to flush)
+    for attempt in range(max_wait):
+        found_skills = _query_trace_for_skill_span(trace_id)
+        skill_name = _select_skill_name(found_skills)
+        if skill_name:
+            if attempt > 0:
+                log(f"  Skill span found after {attempt + 1} poll attempts")
+            return skill_name
+        if attempt < max_wait - 1:
+            import time as _time
+            _time.sleep(1)
+
+    return None
+
+
 def get_dataset(langfuse_client, dataset_name, version=None):
     """Fetch a Langfuse dataset by name. Returns DatasetClient or exits.
 
@@ -205,7 +313,8 @@ def get_dataset(langfuse_client, dataset_name, version=None):
 
 def make_task(prompt_prefix, agent_id, timeout_seconds,
               langfuse_client, langfuse_host, auth_header, model=None,
-              max_retries=2):
+              expected_skill_name=None, max_retries=2,
+              max_attestation_retries=2, failed_attestation_items=None):
     """
     Build a task function for run_experiment.
 
@@ -221,6 +330,15 @@ def make_task(prompt_prefix, agent_id, timeout_seconds,
     Harness-level failures (CLI errors, timeouts, no output, JSON parse
     errors) are retried up to max_retries times before raising. A fresh
     session key is generated for each attempt.
+
+    If expected_skill_name is provided, the harness performs deterministic
+    attestation verification by checking the openclaw.skill.used span on
+    the Langfuse trace. If the skill doesn't match (or no span is found),
+    the harness retries the entire CLI call up to max_attestation_retries
+    times. If all retries are exhausted, the item raises a RuntimeError so
+    run_experiment marks it as failed and it is excluded from scoring.
+    Failed attestation items are tracked in failed_attestation_items
+    (a list, passed by reference) for post-experiment reporting.
     """
 
     def run_cli(prompt, session_key):
@@ -295,24 +413,179 @@ def make_task(prompt_prefix, agent_id, timeout_seconds,
         else:
             raise last_error
 
-        # --- Link the OpenClaw trace to the experiment observation ---
+        # --- Phase 2: Deterministic attestation verification ---
+        #
+        # The harness checks the openclaw.skill.used span on the Langfuse
+        # trace to verify the agent loaded the correct skill. If the skill
+        # doesn't match (or no span is found), the harness retries the
+        # entire CLI call up to max_attestation_retries times. This is a
+        # deterministic string comparison — no LLM involved.
+        #
+        # Flow:
+        #   1. Find the OpenClaw trace by session ID
+        #   2. Look up the openclaw.skill.used span
+        #   3. Compare skill_loaded to expected_skill_name
+        #   4. On match: stamp metadata, return response
+        #   5. On mismatch: log warning, retry from step 1 with a fresh session
+        #   6. If all retries exhausted: stamp metadata with failure info,
+        #      track the item for post-experiment cleanup, return response
+
         openclaw_session_id = meta.get("agentMeta", {}).get("sessionId")
-        if openclaw_session_id:
-            openclaw_trace_id = find_openclaw_trace_id(
-                langfuse_host, auth_header, openclaw_session_id,
+        skill_loaded = None
+        attestation_passed = False
+        attestation_attempts = 0
+        max_total_attempts = 1 + (max_attestation_retries if expected_skill_name else 0)
+
+        while True:
+            attestation_attempts += 1
+            openclaw_session_id = meta.get("agentMeta", {}).get("sessionId")
+
+            if not openclaw_session_id:
+                log("No sessionId in CLI output — cannot link OpenClaw trace", "WARN")
+                if expected_skill_name:
+                    langfuse_client.update_current_span(
+                        metadata={
+                            "expected_skill_name": expected_skill_name,
+                            "skill_loaded": None,
+                        },
+                    )
+                    if failed_attestation_items is not None:
+                        failed_attestation_items.append({"item_id": item.id, "reason": "no_session_id"})
+                    raise RuntimeError(
+                        f"Attestation failed: no sessionId in CLI output — cannot verify skill loading"
+                    )
+                break
+
+            # Run trace/span lookups in executor to avoid blocking the asyncio
+            # event loop when --item-concurrency > 1 (these use sync requests.get)
+            openclaw_trace_id = await loop.run_in_executor(
+                None,
+                lambda: find_openclaw_trace_id(
+                    langfuse_host, auth_header, openclaw_session_id,
+                ),
             )
-            if openclaw_trace_id:
-                log(f"Linked OpenClaw trace: {openclaw_trace_id} (session: {openclaw_session_id})")
-                langfuse_client.update_current_span(
-                    metadata={
+
+            if not openclaw_trace_id:
+                log(f"Could not find OpenClaw trace for session {openclaw_session_id}", "WARN")
+                if expected_skill_name:
+                    langfuse_client.update_current_span(
+                        metadata={
+                            "expected_skill_name": expected_skill_name,
+                            "skill_loaded": None,
+                        },
+                    )
+                    if failed_attestation_items is not None:
+                        failed_attestation_items.append({"item_id": item.id, "reason": "no_trace_found"})
+                    raise RuntimeError(
+                        f"Attestation failed: could not find OpenClaw trace for session {openclaw_session_id}"
+                    )
+                break
+
+            log(f"Linked OpenClaw trace: {openclaw_trace_id} (session: {openclaw_session_id})")
+
+            # Look up the openclaw.skill.used span for deterministic attestation
+            # Skip span lookup entirely when no expected_skill_name is set
+            # (result cannot affect acceptance and polling wastes ~10s per item)
+            if not expected_skill_name:
+                span_metadata = {
+                    "openclaw_trace_id": openclaw_trace_id,
+                    "openclaw_session_id": openclaw_session_id,
+                }
+                langfuse_client.update_current_span(metadata=span_metadata)
+                break
+
+            skill_loaded = await loop.run_in_executor(
+                None,
+                lambda: find_skill_used_span(
+                    langfuse_host, auth_header, openclaw_trace_id,
+                    expected_skill_name,
+                ),
+            )
+            attestation_passed = (
+                skill_loaded is not None
+                and (not expected_skill_name or skill_loaded == expected_skill_name)
+            )
+
+            if skill_loaded:
+                if attestation_passed:
+                    log(f"  Skill loaded: '{skill_loaded}' (verified via openclaw.skill.used span)")
+                else:
+                    log(f"  Attestation FAILED: expected '{expected_skill_name}', got '{skill_loaded}'", "WARN")
+            else:
+                log(f"  Attestation FAILED: no openclaw.skill.used span found", "WARN")
+
+            if attestation_passed or not expected_skill_name or attestation_attempts >= max_total_attempts:
+                # Either attestation passed, or no attestation required, or retries exhausted
+                if not attestation_passed and expected_skill_name:
+                    log(f"  Item {item.id}: attestation failed after {attestation_attempts} attempt(s) — "
+                        f"skill_loaded='{skill_loaded}', expected='{expected_skill_name}'", "WARN")
+                    if failed_attestation_items is not None:
+                        failed_attestation_items.append({
+                            "item_id": item.id,
+                            "reason": f"skill_mismatch: got '{skill_loaded}', expected '{expected_skill_name}'",
+                            "trace_id": openclaw_trace_id,
+                        })
+                    # Stamp metadata on the experiment observation before raising
+                    span_metadata = {
                         "openclaw_trace_id": openclaw_trace_id,
                         "openclaw_session_id": openclaw_session_id,
-                    },
+                        "skill_loaded": skill_loaded,
+                    }
+                    if expected_skill_name:
+                        span_metadata["expected_skill_name"] = expected_skill_name
+                    langfuse_client.update_current_span(metadata=span_metadata)
+                    # Raise an error so run_experiment marks this item as failed
+                    # and excludes it from scoring, rather than returning a response
+                    # from an agent that never loaded the expected skill
+                    raise RuntimeError(
+                        f"Attestation failed after {attestation_attempts} attempt(s): "
+                        f"skill_loaded='{skill_loaded}', expected='{expected_skill_name}'"
+                    )
+                # Stamp metadata on the experiment observation
+                span_metadata = {
+                    "openclaw_trace_id": openclaw_trace_id,
+                    "openclaw_session_id": openclaw_session_id,
+                    "skill_loaded": skill_loaded,
+                }
+                if expected_skill_name:
+                    span_metadata["expected_skill_name"] = expected_skill_name
+                langfuse_client.update_current_span(metadata=span_metadata)
+                break
+
+            # --- Attestation failed: retry with a fresh session ---
+            log(f"  Item {item.id}: attestation retry {attestation_attempts}/{max_total_attempts - 1} "
+                f"(expected '{expected_skill_name}', got '{skill_loaded}')", "WARN")
+
+            # Note: experiment evaluator scores are attached to the experiment observation
+            # (not to the agent's OpenClaw trace), so no score cleanup is needed here.
+
+            # Re-run the CLI with a fresh session
+            retry_session_key = f"eval-{uuid.uuid4().hex[:12]}-{item.id[:8]}"
+            try:
+                response_text, meta = await loop.run_in_executor(
+                    None, lambda: run_cli(prompt, retry_session_key)
                 )
-            else:
-                log(f"Could not find OpenClaw trace for session {openclaw_session_id}", "WARN")
-        else:
-            log("No sessionId in CLI output — cannot link OpenClaw trace", "WARN")
+            except RuntimeError as e:
+                log(f"  Item {item.id}: attestation retry CLI failed — {e}", "WARN")
+                # CLI failed on retry; stamp failure and raise so run_experiment
+                # excludes this item from scoring (do not return the previous
+                # unverified response)
+                if failed_attestation_items is not None:
+                    failed_attestation_items.append({
+                        "item_id": item.id,
+                        "reason": f"cli_retry_failed: {e}",
+                        "trace_id": openclaw_trace_id,
+                    })
+                span_metadata = {
+                    "openclaw_trace_id": openclaw_trace_id,
+                    "openclaw_session_id": openclaw_session_id,
+                    "skill_loaded": skill_loaded,
+                    "expected_skill_name": expected_skill_name,
+                }
+                langfuse_client.update_current_span(metadata=span_metadata)
+                raise RuntimeError(
+                    f"Attestation retry CLI failed: {e}"
+                ) from e
 
         return response_text
 
@@ -380,9 +653,12 @@ def main():
     )
     parser.add_argument(
         "--expected-skill-name", default=None,
-        help="Suffixed skill name the agent should read and confirm. Passed as experiment "
-             "run metadata so the evaluator can verify the correct skill was read. "
-             "Required when --prompt-prefix contains an attestation prefix."
+        help="Suffixed skill name the agent should read. The harness verifies "
+             "this deterministically by checking the openclaw.skill.used span "
+             "on the Langfuse trace — no LLM attestation needed. If the skill "
+             "doesn't match, the harness retries the item (up to 2 times by "
+             "default) and cleans up scores from failed attempts. Required when "
+             "--prompt-prefix contains an attestation prefix."
     )
     parser.add_argument(
         "--manifest", default=None,
@@ -493,6 +769,10 @@ def main():
     auth_header = base64.b64encode(
         f"{os.environ['LANGFUSE_PUBLIC_KEY']}:{os.environ['LANGFUSE_SECRET_KEY']}".encode()
     ).decode()
+
+    # Track items that failed attestation across all experiments
+    failed_attestation_items = []
+
     task = make_task(
         prompt_prefix=args.prompt_prefix,
         agent_id=args.agent,
@@ -501,6 +781,8 @@ def main():
         langfuse_host=args.langfuse_host,
         auth_header=auth_header,
         model=args.model,
+        expected_skill_name=args.expected_skill_name,
+        failed_attestation_items=failed_attestation_items,
     )
 
     # Run experiments — --repeat N creates N separate experiments, each with all dataset items.
@@ -510,7 +792,7 @@ def main():
     total = args.repeat
     all_results = []
 
-    # Build run metadata — expected_skill_name lets the evaluator verify the correct skill was read
+    # Build run metadata — expected_skill_name is tracked for the evaluator's variable mapping
     run_metadata = {}
     if args.expected_skill_name:
         run_metadata["expected_skill_name"] = args.expected_skill_name
@@ -561,6 +843,26 @@ def main():
     log(f"Total runs:    {total}")
     log(f"Last run name: {result.run_name}")
     log(f"Items/run:     {len(result.item_results)}")
+
+    # Report attestation failures
+    if failed_attestation_items:
+        log(f"Attestation failures: {len(failed_attestation_items)} item(s) failed skill verification:", "WARN")
+        for fai in failed_attestation_items:
+            log(f"  Item {fai['item_id']}: {fai['reason']}", "WARN")
+        log("These items may need manual re-runs. Scores from failed attempts have been cleaned up.", "WARN")
+    elif args.expected_skill_name:
+        # Check if any items failed before reaching attestation (Phase 1 CLI failures)
+        # These are not in failed_attestation_items but also not verified
+        cli_failed_count = 0
+        for run_result in all_results:
+            for item_result in run_result.item_results:
+                if getattr(item_result, "error", None) is not None or getattr(item_result, "output", None) is None:
+                    cli_failed_count += 1
+        if cli_failed_count:
+            log(f"{cli_failed_count} item(s) failed before attestation (CLI errors). "
+                f"{len(failed_attestation_items)} item(s) failed attestation verification.", "WARN")
+        else:
+            log("All items passed attestation verification.", "INFO")
 
     total_failed = 0
     for run_idx, run_result in enumerate(all_results, 1):

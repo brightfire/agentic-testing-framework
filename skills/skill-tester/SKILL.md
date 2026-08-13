@@ -193,15 +193,15 @@ For each (skill variant × model) combination, construct the base experiment nam
 
 The harness appends ` - <timestamp>` (and ` - <run_idx>/<total>` for repeats) at runtime — the base name passed via `--run-name` must NOT include these suffixes.
 
-#### 2. Construct attestation prefix
+#### 2. Construct skill-reading prefix
 
-The attestation prefix tells the agent which skill to read and requires it to confirm the skill at the end of its response. Format: `Read the <suffixed-skill-name> skill from available_skills. You must state which skill you read at the end of your response, after completing the task. You are being evaluated on your ability to adhere to instructions. If you do not confirm which skill you read, your response will receive a score of zero regardless of quality. Do not spawn subagents or yield — complete all work inline in this single response. Then, ` — pass this verbatim as `--prompt-prefix` in step 3.
+Format: `Read the <suffixed-skill-name> skill from available_skills. Do not spawn subagents or yield — complete all work inline in this single response. Then, ` — pass this verbatim as `--prompt-prefix` in step 3.
 
 For model comparison tests (Slack-triggered, single skill variant), the same suffixed skill name is used for both model runs — only `--model` differs.
 
 #### 3. Invoke the harness
 
-Source langfuse.env, then invoke `eval_harness.py` for each (skill variant × model) combination with: `--manifest` (path from sync phase), `--run-name` (base experiment name without timestamp/repeat suffixes), `--prompt-prefix` (the attestation prefix from step 2), `--expected-skill-name` (the suffixed skill name from step 2), `--model` (omit for agent default), `--repeat` (always pass; use the repeat count from the user request — e.g., "run each test once" → 1; default 10 if not specified; subtract recency-found runs), `--item-concurrency 3` (max 6 concurrent subprocesses), and `--experiment-concurrency 2`. Variants run sequentially — one completes before the next begins.
+Source langfuse.env, then invoke `eval_harness.py` for each (skill variant × model) combination with: `--manifest` (path from sync phase), `--run-name` (base experiment name without timestamp/repeat suffixes), `--prompt-prefix` (the skill-reading prefix from step 2), `--expected-skill-name` (the suffixed skill name from step 2), `--model` (omit for agent default), `--repeat` (always pass; use the repeat count from the user request — e.g., "run each test once" → 1; default 10 if not specified; subtract recency-found runs), `--item-concurrency 3` (max 6 concurrent subprocesses), and `--experiment-concurrency 2`. Variants run sequentially — one completes before the next begins.
 
 **Computing the exec timeout:**
 
@@ -247,7 +247,6 @@ exec(
 
 Then monitor with `process(action=poll, timeout=30000)` every 30s until the process exits.
 
-
 #### 4. Monitor and capture results
 
 Capture per invocation: exit status, failed item indices (harness logs `N failed items — indices: [...]`), and dataset run URL.
@@ -270,11 +269,9 @@ See [`references/execute-failure-handling.md`](references/execute-failure-handli
 
 #### 1. Wait for evaluator scoring
 
-After the execute phase completes, the Langfuse evaluator runs asynchronously. Instead of a fixed sleep, poll the Langfuse scores API until all expected scores are present (or a 3-minute timeout is reached).
+After the execute phase completes, the Langfuse evaluator runs asynchronously. Instead of a fixed sleep, poll the Langfuse scores API until the score count stabilizes (or a 3-minute timeout is reached).
 
-Source langfuse.env, then invoke `wait_for_scores.py` with: `--dataset`, one `--prefix` per variant (including recency-pruned), `--expected-items` (manifest item count), `--repeat` (execute phase count), `--dimensions` (scoring dimensions, default 1), `--since` (execute phase start ISO timestamp), and `--timeout 180`. The script multiplies `--repeat × --dimensions` to determine required scores per item. Polls every 10s; exits 0 when all prefixes have full coverage, or exits 1 on 3-min timeout.
-
-**Same repeat count across variants:** single call with all prefixes. **Different repeat counts:** call once per variant with per-variant `--repeat` and `--expected-items`. For recency-pruned variants, `--since` may need to be earlier or omitted. If item count is unknown, omit `--expected-items` — the script waits for score count stabilization.
+Source langfuse.env, then invoke `wait_for_scores.py` with: `--dataset`, one `--prefix` per variant (including recency-pruned), `--since` (execute phase start ISO timestamp), and `--timeout 180`. Polls every 10s; exits 0 when each prefix has at least one score and the count stabilizes across consecutive polls, or exits 1 on 3-min timeout.
 
 On timeout (exit 1): proceed to fetch scores anyway; note the timeout in the report. If no scores at all, check evaluator configuration.
 
