@@ -6,8 +6,6 @@ See model class docstrings and field descriptions for the schema documentation.
 
 from typing import Literal, Union
 
-import re
-
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
@@ -167,22 +165,6 @@ class EvalFile(BaseModel):
             "the 'openclaw agent' CLI command.",
     )
     items: list[EvalItem] = Field(description="List of eval test cases")
-
-    @field_validator("agent")
-    @classmethod
-    def validate_agent(cls, v: str) -> str:
-        if not v.strip():
-            raise ValueError("agent must not be empty or whitespace-only")
-        v = v.strip()
-        # Constrain to OpenClaw identifier grammar: alphanumeric, hyphens,
-        # underscores, and dots. This prevents shell metacharacter injection
-        # when the agent ID is interpolated into harness CLI commands.
-        if not re.match(r"^[A-Za-z0-9_.-]+$", v):
-            raise ValueError(
-                "agent must contain only alphanumeric characters, "
-                "hyphens, underscores, and dots"
-            )
-        return v
 
     @field_validator("dataset")
     @classmethod
