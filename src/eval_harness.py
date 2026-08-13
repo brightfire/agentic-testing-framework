@@ -396,8 +396,6 @@ def make_task(prompt_prefix, agent_id, timeout_seconds,
             prompt = prompt_prefix + prompt
 
         loop = asyncio.get_event_loop()
-
-        # --- Phase 1: CLI execution with harness-level retries ---
         last_error = None
         for attempt in range(1, max_retries + 2):
             session_key = f"eval-{uuid.uuid4().hex[:12]}-{item.id[:8]}"
