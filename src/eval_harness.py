@@ -182,6 +182,103 @@ def find_openclaw_trace_id(langfuse_host, auth_header, session_id, max_wait=15):
     return None
 
 
+def find_skill_used_span(langfuse_host, auth_header, trace_id, session_id=None):
+    """Look up the openclaw.skill.used span on a trace via the Langfuse REST API.
+
+    The OpenClaw gateway emits a SPAN observation named 'openclaw.skill.used'
+    when the agent reads a SKILL.md file. The span's metadata contains
+    attributes.openclaw.skill.name with the exact skill name.
+
+    Queries /api/public/v2/observations for the given trace ID, filtering
+    for SPAN type, and finds the observation named 'openclaw.skill.used'.
+    Extracts attributes.openclaw.skill.name from its metadata.
+
+    If not found on the given trace and session_id is provided, also checks
+    other traces with the same session ID. This handles the retry case where
+    the skill.used span is on the original attempt's trace, not the retry's.
+
+    Returns the skill name string, or None if not found.
+    """
+    def _query_trace_for_skill_span(tid):
+        """Query a single trace for the openclaw.skill.used span."""
+        try:
+            resp = requests.get(
+                f"{langfuse_host}/api/public/v2/observations",
+                params={
+                    "traceId": tid,
+                    "type": "SPAN",
+                    "fields": "core,basic,io,metadata",
+                    "limit": 100,
+                },
+                headers={"Authorization": f"Basic {auth_header}"},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            observations = data.get("data", [])
+            for obs in observations:
+                if obs.get("name") == "openclaw.skill.used":
+                    md = obs.get("metadata", {}) or {}
+                    # The skill name is in attributes.openclaw.skill.name
+                    # Langfuse may store it nested or flattened depending on version
+                    attrs = md.get("attributes", {}) or {}
+                    skill_name = attrs.get("openclaw.skill.name")
+                    if not skill_name:
+                        # Try flattened key
+                        skill_name = md.get("openclaw.skill.name")
+                    if not skill_name:
+                        # Try io.metadata path
+                        io = obs.get("io", {}) or {}
+                        io_md = io.get("metadata", {}) or {}
+                        skill_name = io_md.get("openclaw.skill.name")
+                    return skill_name
+        except Exception as e:
+            log(f"  Error querying trace {tid} for skill.used span: {e}", "WARN")
+        return None
+
+    # 1. Check the given trace
+    skill_name = _query_trace_for_skill_span(trace_id)
+    if skill_name:
+        return skill_name
+
+    # 2. If not found and we have a session_id, check other traces
+    #    with the same session ID (retry fallback)
+    if session_id:
+        try:
+            filter_json = json.dumps([
+                {"type": "string", "column": "sessionId", "operator": "=", "value": session_id}
+            ])
+            resp = requests.get(
+                f"{langfuse_host}/api/public/v2/observations",
+                params={
+                    "filter": filter_json,
+                    "fields": "core,basic,trace_context",
+                    "limit": 50,
+                },
+                headers={"Authorization": f"Basic {auth_header}"},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            observations = data.get("data", [])
+            # Collect unique trace IDs (excluding the one we already checked)
+            other_trace_ids = set()
+            for obs in observations:
+                tid = obs.get("traceId")
+                if tid and tid != trace_id:
+                    other_trace_ids.add(tid)
+
+            for tid in other_trace_ids:
+                skill_name = _query_trace_for_skill_span(tid)
+                if skill_name:
+                    log(f"  Skill used span found on alternate trace {tid} (session: {session_id})")
+                    return skill_name
+        except Exception as e:
+            log(f"  Error finding alternate traces for session {session_id}: {e}", "WARN")
+
+    return None
+
+
 def get_dataset(langfuse_client, dataset_name, version=None):
     """Fetch a Langfuse dataset by name. Returns DatasetClient or exits.
 
@@ -205,7 +302,7 @@ def get_dataset(langfuse_client, dataset_name, version=None):
 
 def make_task(prompt_prefix, agent_id, timeout_seconds,
               langfuse_client, langfuse_host, auth_header, model=None,
-              max_retries=2):
+              expected_skill_name=None, max_retries=2):
     """
     Build a task function for run_experiment.
 
@@ -297,22 +394,45 @@ def make_task(prompt_prefix, agent_id, timeout_seconds,
 
         # --- Link the OpenClaw trace to the experiment observation ---
         openclaw_session_id = meta.get("agentMeta", {}).get("sessionId")
+        skill_loaded = None
         if openclaw_session_id:
             openclaw_trace_id = find_openclaw_trace_id(
                 langfuse_host, auth_header, openclaw_session_id,
             )
             if openclaw_trace_id:
                 log(f"Linked OpenClaw trace: {openclaw_trace_id} (session: {openclaw_session_id})")
+                # Look up the openclaw.skill.used span for deterministic attestation
+                skill_loaded = find_skill_used_span(
+                    langfuse_host, auth_header, openclaw_trace_id, openclaw_session_id,
+                )
+                if skill_loaded:
+                    log(f"  Skill loaded: '{skill_loaded}' (verified via openclaw.skill.used span)")
+                else:
+                    log(f"  No openclaw.skill.used span found — skill_loaded will be null", "WARN")
+                # Build metadata for the experiment observation
+                span_metadata = {
+                    "openclaw_trace_id": openclaw_trace_id,
+                    "openclaw_session_id": openclaw_session_id,
+                    "skill_loaded": skill_loaded,
+                }
+                if expected_skill_name:
+                    span_metadata["expected_skill_name"] = expected_skill_name
                 langfuse_client.update_current_span(
-                    metadata={
-                        "openclaw_trace_id": openclaw_trace_id,
-                        "openclaw_session_id": openclaw_session_id,
-                    },
+                    metadata=span_metadata,
                 )
             else:
                 log(f"Could not find OpenClaw trace for session {openclaw_session_id}", "WARN")
+                # Still stamp expected_skill_name if we have it
+                if expected_skill_name:
+                    langfuse_client.update_current_span(
+                        metadata={"expected_skill_name": expected_skill_name},
+                    )
         else:
             log("No sessionId in CLI output — cannot link OpenClaw trace", "WARN")
+            if expected_skill_name:
+                langfuse_client.update_current_span(
+                    metadata={"expected_skill_name": expected_skill_name},
+                )
 
         return response_text
 
@@ -380,9 +500,12 @@ def main():
     )
     parser.add_argument(
         "--expected-skill-name", default=None,
-        help="Suffixed skill name the agent should read and confirm. Passed as experiment "
-             "run metadata so the evaluator can verify the correct skill was read. "
-             "Required when --prompt-prefix contains an attestation prefix."
+        help="Suffixed skill name the agent should read. Passed as metadata "
+             "on each experiment observation so the evaluator can verify the correct "
+             "skill was loaded. Verification is deterministic — the harness looks up "
+             "the openclaw.skill.used span in the Langfuse trace and stamps "
+             "skill_loaded onto the observation metadata. Required when "
+             "--prompt-prefix contains an attestation prefix."
     )
     parser.add_argument(
         "--manifest", default=None,
@@ -501,6 +624,7 @@ def main():
         langfuse_host=args.langfuse_host,
         auth_header=auth_header,
         model=args.model,
+        expected_skill_name=args.expected_skill_name,
     )
 
     # Run experiments — --repeat N creates N separate experiments, each with all dataset items.
