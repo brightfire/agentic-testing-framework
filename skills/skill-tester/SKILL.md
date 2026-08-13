@@ -199,6 +199,19 @@ Format: `Read the <suffixed-skill-name> skill from available_skills. Do not spaw
 
 For model comparison tests (Slack-triggered, single skill variant), the same suffixed skill name is used for both model runs — only `--model` differs.
 
+#### 2a. Evaluator rubric: skill verification
+
+The harness stamps `skill_loaded` and `expected_skill_name` onto each experiment observation's metadata. The Langfuse evaluator (LLM-as-judge) should check these as an attestation criterion:
+
+- **`skill_loaded` matches `expected_skill_name`** → attestation confirmed. Score the criterion normally.
+- **`skill_loaded` is non-null but doesn't match** → attestation failed. This is a failed criterion (not an auto-zero) — score the remaining criteria normally.
+- **`skill_loaded` is null** → attestation unknown. This happens when:
+  - The OTel exporter hasn't flushed the `openclaw.skill.used` span yet (transient).
+  - The harness version running the baseline predates span lookup support (older harness code in a baseline worktree cannot stamp `skill_loaded`).
+  - The agent genuinely didn't load any skill.
+
+  **Fallback for null `skill_loaded`:** the evaluator should check the response text for the skill name (the suffixed skill name from `expected_skill_name`). If the response mentions reading the expected skill, treat attestation as confirmed. This preserves comparability between baselines running older harness code and improved variants running the current harness.
+
 #### 3. Invoke the harness
 
 Source langfuse.env, then invoke `eval_harness.py` for each (skill variant × model) combination with: `--manifest` (path from sync phase), `--run-name` (base experiment name without timestamp/repeat suffixes), `--prompt-prefix` (the attestation prefix from step 2), `--expected-skill-name` (the suffixed skill name from step 2), `--model` (omit for agent default), `--repeat` (always pass; use the repeat count from the user request — e.g., "run each test once" → 1; default 10 if not specified; subtract recency-found runs), `--item-concurrency 3` (max 6 concurrent subprocesses), and `--experiment-concurrency 2`. Variants run sequentially — one completes before the next begins.
