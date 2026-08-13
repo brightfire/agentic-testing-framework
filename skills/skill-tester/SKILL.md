@@ -41,8 +41,6 @@ Variant inference outputs (git ref, label) pairs for each variant. Ref resolutio
 - `<item-scope>`: `all` or 8-char SHA-256 prefix of sorted item IDs joined by `|`
 - Example: `linear-create-eval__pr-123__e5f6g7h__all`
 
-The harness then appends ` - <timestamp>` and optionally ` - <run_idx>/<total>` for repeats at runtime.
-
 ## Ref Resolution
 
 **Always resolve branch refs to commit hashes** — including on reruns. Explicit commit hashes from the user need no re-resolution.
