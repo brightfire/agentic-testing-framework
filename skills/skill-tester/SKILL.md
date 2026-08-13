@@ -216,15 +216,17 @@ The harness stamps `skill_loaded` and `expected_skill_name` onto each experiment
 
 Source langfuse.env, then invoke `eval_harness.py` for each (skill variant × model) combination with: `--manifest` (path from sync phase), `--run-name` (base experiment name without timestamp/repeat suffixes), `--prompt-prefix` (the skill-reading prefix from step 2), `--expected-skill-name` (the suffixed skill name from step 2), `--model` (omit for agent default), `--repeat` (always pass; use the repeat count from the user request — e.g., "run each test once" → 1; default 10 if not specified; subtract recency-found runs), `--item-concurrency 3` (max 6 concurrent subprocesses), and `--experiment-concurrency 2`. Variants run sequentially — one completes before the next begins.
 
-**Deterministic attestation verification:** The harness verifies that the agent loaded the correct skill by checking the `openclaw.skill.used` span on the Langfuse trace. This is a deterministic string comparison — no LLM involved. If the skill doesn't match (or no span is found), the harness retries the item (up to 2 times) and cleans up scores from failed attempts. The evaluator only scores task quality criteria; it does not check attestation.
+**Deterministic attestation verification:** The harness verifies that the agent loaded the correct skill by checking the `openclaw.skill.used` span on the Langfuse trace. This is a deterministic string comparison — no LLM involved. If the skill doesn't match (or no span is found), the harness retries the item (up to 2 times). Items that exhaust attestation retries are raised as errors and excluded from scoring. Scores from failed attestation attempts are cleaned up (only scores matching `--eval-score-names` are deleted). The evaluator checks `metadata.attestation_passed` as a criterion; for null `skill_loaded` on older baselines, the evaluator falls back to checking the response text per section 2a.
 
 **Computing the exec timeout:**
 
 Read `timeout_per_run` from eval.yaml (default 600s). Compute per invocation:
 
 ```
-exec_timeout = timeout_per_run * repeat + 120
+exec_timeout = timeout_per_run * repeat * (1 + max_attestation_retries) + 120
 ```
+
+The `max_attestation_retries` factor (default 2) accounts for attestation retries: each item can require up to 3 CLI calls (1 initial + 2 retries). If attestation is not used (no `--expected-skill-name`), use `timeout_per_run * repeat + 120` instead.
 
 Variants run sequentially in separate exec calls, each with its own timeout. Do not multiply by the number of variants — each exec call runs ONE variant.
 
@@ -254,13 +256,15 @@ Start the harness in the background, then poll until it completes:
 
 ```
 exec(
-  command="cd <harness-dir> && source ~/.openclaw/secrets/langfuse.env && source <atf-dir>/.venv/bin/activate && python src/eval_harness.py --manifest <path> --run-name '<name>' --prompt-prefix '<prefix>' --expected-skill-name <suffixed-skill-name> --repeat <N> --item-concurrency 3 --experiment-concurrency 2 [--model <model>]",
+  command="cd <harness-dir> && source ~/.openclaw/secrets/langfuse.env && source <atf-dir>/.venv/bin/activate && python src/eval_harness.py --manifest <path> --run-name '<name>' --prompt-prefix '<prefix>' --expected-skill-name <suffixed-skill-name> --eval-score-names '<score-names>' --repeat <N> --item-concurrency 3 --experiment-concurrency 2 [--model <model>]",
   background=true,
   timeout=<exec_timeout>
 )
 ```
 
 Then monitor with `process(action=poll, timeout=30000)` every 30s until the process exits.
+
+**`--eval-score-names`:** Comma-separated list of evaluator score names configured for this dataset in Langfuse (e.g. `'task_quality,attestation'`). Only scores matching these names are cleaned up from failed attestation attempts. If omitted, no scores are deleted (safety default). Resolve the names from the Langfuse UI → Datasets → <dataset> → Evaluators, or from the evaluator check output in the Evaluator Check phase.
 
 
 #### 4. Monitor and capture results
