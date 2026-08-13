@@ -1036,7 +1036,18 @@ def main():
             log(f"  Item {fai['item_id']}: {fai['reason']}", "WARN")
         log("These items may need manual re-runs. Scores from failed attempts have been cleaned up.", "WARN")
     elif args.expected_skill_name:
-        log("All items passed attestation verification.", "INFO")
+        # Check if any items failed before reaching attestation (Phase 1 CLI failures)
+        # These are not in failed_attestation_items but also not verified
+        cli_failed_count = 0
+        for run_result in all_results:
+            for item_result in run_result.item_results:
+                if getattr(item_result, "error", None) is not None or getattr(item_result, "output", None) is None:
+                    cli_failed_count += 1
+        if cli_failed_count:
+            log(f"{cli_failed_count} item(s) failed before attestation (CLI errors). "
+                f"{len(failed_attestation_items)} item(s) failed attestation verification.", "WARN")
+        else:
+            log("All items passed attestation verification.", "INFO")
 
     total_failed = 0
     for run_idx, run_result in enumerate(all_results, 1):
