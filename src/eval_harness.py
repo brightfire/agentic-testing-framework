@@ -219,18 +219,17 @@ def find_skill_used_span(langfuse_host, auth_header, trace_id, session_id=None):
             for obs in observations:
                 if obs.get("name") == "openclaw.skill.used":
                     md = obs.get("metadata", {}) or {}
-                    # The skill name is in attributes.openclaw.skill.name
-                    # Langfuse may store it nested or flattened depending on version
-                    attrs = md.get("attributes", {}) or {}
-                    skill_name = attrs.get("openclaw.skill.name")
+                    # The skill name is stored as a flat key with literal dots:
+                    # "attributes.openclaw.skill.name". Langfuse flattens OTel
+                    # span attributes into dot-separated top-level metadata keys.
+                    skill_name = md.get("attributes.openclaw.skill.name")
                     if not skill_name:
-                        # Try flattened key
+                        # Fallback: nested dict form (older Langfuse versions)
+                        attrs = md.get("attributes", {}) or {}
+                        skill_name = attrs.get("openclaw.skill.name")
+                    if not skill_name:
+                        # Fallback: without attributes. prefix
                         skill_name = md.get("openclaw.skill.name")
-                    if not skill_name:
-                        # Try io.metadata path
-                        io = obs.get("io", {}) or {}
-                        io_md = io.get("metadata", {}) or {}
-                        skill_name = io_md.get("openclaw.skill.name")
                     return skill_name
         except Exception as e:
             log(f"  Error querying trace {tid} for skill.used span: {e}", "WARN")
