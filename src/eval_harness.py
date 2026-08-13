@@ -112,6 +112,47 @@ def log(msg, level="INFO"):
     print(f"[{ts}] [{level}] {msg}", flush=True)
 
 
+def lookup_agent_model(agent_id):
+    """Look up an OpenClaw agent's primary model via 'openclaw agents list --json'.
+
+    Returns the model string (e.g. "openrouter/@preset/conversation-default")
+    or None if the agent is not found or the command fails.
+    """
+    try:
+        result = subprocess.run(
+            ["openclaw", "agents", "list", "--json"],
+            capture_output=True, text=True, timeout=15,
+        )
+        if result.returncode != 0:
+            log(f"'openclaw agents list --json' exited {result.returncode}: {result.stderr.strip()[:200]}", "WARN")
+            return None
+        # Parse stdout as JSON (stderr may contain doctor warnings — ignore it)
+        stdout = result.stdout.strip()
+        if not stdout:
+            log("'openclaw agents list --json' produced no stdout", "WARN")
+            return None
+        agents = json.loads(stdout)
+        for agent in agents:
+            if agent.get("id") == agent_id:
+                model = agent.get("model")
+                if model:
+                    log(f"Agent '{agent_id}' model: {model}")
+                    return model
+                log(f"Agent '{agent_id}' found but has no 'model' field", "WARN")
+                return None
+        log(f"Agent '{agent_id}' not found in 'openclaw agents list' output", "WARN")
+        return None
+    except json.JSONDecodeError as e:
+        log(f"Failed to parse 'openclaw agents list --json' output: {e}", "WARN")
+        return None
+    except subprocess.TimeoutExpired:
+        log("'openclaw agents list --json' timed out after 15s", "WARN")
+        return None
+    except Exception as e:
+        log(f"Agent model lookup failed: {e}", "WARN")
+        return None
+
+
 def validate_model(model_id):
     """Verify that the given model is available on the OpenClaw gateway.
     Returns True if available, False otherwise."""
@@ -773,6 +814,21 @@ def main():
     # Track items that failed attestation across all experiments
     failed_attestation_items = []
 
+    # --- Look up the agent's primary model ---
+    # If --model was not explicitly set, look up the agent's model via
+    # 'openclaw agents list --json' and pass it as --model to the CLI.
+    # This ensures no retry contamination: --model sets modelOverrideSource
+    # = "user" in the gateway, which makes resolveEffectiveModelFallbacks
+    # return [] — no fallbacks, no retry contamination prose, no session
+    # reuse on retry.
+    resolved_model = args.model
+    if not resolved_model:
+        resolved_model = lookup_agent_model(args.agent)
+        if resolved_model:
+            log(f"Using agent '{args.agent}' model: {resolved_model}")
+        else:
+            log(f"Could not look up model for agent '{args.agent}' — falling back to agent default (no --model flag)", "WARN")
+
     task = make_task(
         prompt_prefix=args.prompt_prefix,
         agent_id=args.agent,
@@ -780,7 +836,7 @@ def main():
         langfuse_client=langfuse_client,
         langfuse_host=args.langfuse_host,
         auth_header=auth_header,
-        model=args.model,
+        model=resolved_model,
         expected_skill_name=args.expected_skill_name,
         failed_attestation_items=failed_attestation_items,
     )
