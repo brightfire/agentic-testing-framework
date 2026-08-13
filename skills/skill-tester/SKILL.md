@@ -236,7 +236,7 @@ Start the harness in the background, then poll until it completes:
 
 ```
 exec(
-  command="cd <harness-dir> && source ~/.openclaw/secrets/langfuse.env && source <atf-dir>/.venv/bin/activate && python src/eval_harness.py --manifest <path> --run-name '<name>' --prompt-prefix '<prefix>' --expected-skill-name <suffixed-skill-name> --agent '<agent-from-eval-yaml>' --repeat <N> --item-concurrency 3 --experiment-concurrency 2 [--model <model>]",
+  command="cd <harness-dir> && source ~/.openclaw/secrets/langfuse.env && source <atf-dir>/.venv/bin/activate && python src/eval_harness.py --manifest <path> --run-name '<name>' --prompt-prefix '<prefix>' --expected-skill-name <suffixed-skill-name> --agent <agent-from-eval-yaml> --repeat <N> --item-concurrency 3 --experiment-concurrency 2 [--model <model>]",
   background=true,
   timeout=<exec_timeout>
 )
