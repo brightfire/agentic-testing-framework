@@ -182,7 +182,7 @@ def find_openclaw_trace_id(langfuse_host, auth_header, session_id, max_wait=15):
     return None
 
 
-def find_skill_used_span(langfuse_host, auth_header, trace_id, session_id=None,
+def find_skill_used_span(langfuse_host, auth_header, trace_id,
                          expected_skill_name=None, max_wait=10):
     """Look up the openclaw.skill.used span on a trace via the Langfuse REST API.
 
@@ -202,13 +202,7 @@ def find_skill_used_span(langfuse_host, auth_header, trace_id, session_id=None,
     Polls for up to max_wait seconds to allow the OTel exporter to flush the
     skill span (which may arrive slightly after the trace itself appears).
 
-    If not found on the given trace and session_id is provided, also checks
-    other traces with the same session ID. This handles the retry case where
-    the skill.used span is on the original attempt's trace, not the retry's.
-
-    Returns (skill_name, trace_id) where skill_name is the skill name string
-    and trace_id is the trace where it was found (may differ from the input
-    trace_id if found on an alternate trace). Returns (None, None) if not found.
+    Returns the skill name string, or None if not found.
     """
     def _extract_skill_name(obs):
         """Extract the skill name from an observation's metadata."""
@@ -281,85 +275,19 @@ def find_skill_used_span(langfuse_host, auth_header, trace_id, session_id=None,
             return None
         return found_skills[0]
 
-    # 1. Poll for the skill span on the given trace (allow OTel exporter to flush)
+    # Poll for the skill span on the given trace (allow OTel exporter to flush)
     for attempt in range(max_wait):
         found_skills = _query_trace_for_skill_span(trace_id)
         skill_name = _select_skill_name(found_skills)
         if skill_name:
             if attempt > 0:
                 log(f"  Skill span found after {attempt + 1} poll attempts")
-            return skill_name, trace_id
+            return skill_name
         if attempt < max_wait - 1:
             import time as _time
             _time.sleep(1)
 
-    # 2. If not found and we have a session_id, check other traces
-    #    with the same session ID (retry fallback)
-    if session_id:
-        try:
-            filter_json = json.dumps([
-                {"type": "string", "column": "sessionId", "operator": "=", "value": session_id}
-            ])
-            # Paginate through all observations for this session
-            other_trace_ids = set()
-            page = 1
-            while True:
-                resp = requests.get(
-                    f"{langfuse_host}/api/public/v2/observations",
-                    params={
-                        "filter": filter_json,
-                        "fields": "core,basic,trace_context",
-                        "limit": 100,
-                        "page": page,
-                    },
-                    headers={"Authorization": f"Basic {auth_header}"},
-                    timeout=10,
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                observations = data.get("data", [])
-                for obs in observations:
-                    tid = obs.get("traceId")
-                    if tid and tid != trace_id:
-                        other_trace_ids.add(tid)
-                meta = data.get("meta", {}) or {}
-                total_pages = meta.get("totalPages", 1)
-                if page >= total_pages or len(observations) < 100:
-                    break
-                page += 1
-
-            for tid in other_trace_ids:
-                found_skills = _query_trace_for_skill_span(tid)
-                skill_name = _select_skill_name(found_skills)
-                if skill_name:
-                    log(f"  Skill used span found on alternate trace {tid} (session: {session_id})")
-                    return skill_name, tid
-        except Exception as e:
-            log(f"  Error finding alternate traces for session {session_id}: {e}", "WARN")
-
-    return None, None
-
-
-def verify_attestation(langfuse_host, auth_header, trace_id, session_id, expected_skill_name):
-    """Verify that the agent loaded the expected skill by checking the
-    openclaw.skill.used span on the Langfuse trace.
-
-    Returns (skill_loaded, attestation_passed) where:
-      - skill_loaded: the skill name found on the trace (or None)
-      - attestation_passed: True if skill_loaded matches expected_skill_name
-    """
-    skill_loaded = find_skill_used_span(
-        langfuse_host, auth_header, trace_id, session_id, expected_skill_name,
-    )
-    if skill_loaded:
-        if expected_skill_name and skill_loaded != expected_skill_name:
-            log(f"  Attestation FAILED: expected '{expected_skill_name}', got '{skill_loaded}'", "WARN")
-            return skill_loaded, False
-        log(f"  Skill loaded: '{skill_loaded}' (verified via openclaw.skill.used span)")
-        return skill_loaded, True
-    else:
-        log(f"  Attestation FAILED: no openclaw.skill.used span found", "WARN")
-        return None, False
+    return None
 
 
 def get_dataset(langfuse_client, dataset_name, version=None):
@@ -570,11 +498,11 @@ def make_task(prompt_prefix, agent_id, timeout_seconds,
                 langfuse_client.update_current_span(metadata=span_metadata)
                 break
 
-            skill_loaded, attestation_trace_id = await loop.run_in_executor(
+            skill_loaded = await loop.run_in_executor(
                 None,
                 lambda: find_skill_used_span(
                     langfuse_host, auth_header, openclaw_trace_id,
-                    openclaw_session_id, expected_skill_name,
+                    expected_skill_name,
                 ),
             )
             attestation_passed = (
@@ -599,11 +527,11 @@ def make_task(prompt_prefix, agent_id, timeout_seconds,
                         failed_attestation_items.append({
                             "item_id": item.id,
                             "reason": f"skill_mismatch: got '{skill_loaded}', expected '{expected_skill_name}'",
-                            "trace_id": attestation_trace_id or openclaw_trace_id,
+                            "trace_id": openclaw_trace_id,
                         })
                     # Stamp metadata on the experiment observation before raising
                     span_metadata = {
-                        "openclaw_trace_id": attestation_trace_id or openclaw_trace_id,
+                        "openclaw_trace_id": openclaw_trace_id,
                         "openclaw_session_id": openclaw_session_id,
                         "skill_loaded": skill_loaded,
                     }
@@ -619,10 +547,8 @@ def make_task(prompt_prefix, agent_id, timeout_seconds,
                         f"skill_loaded='{skill_loaded}', expected='{expected_skill_name}'"
                     )
                 # Stamp metadata on the experiment observation
-                # Use the trace where the skill span was actually found
-                stamped_trace_id = attestation_trace_id or openclaw_trace_id
                 span_metadata = {
-                    "openclaw_trace_id": stamped_trace_id,
+                    "openclaw_trace_id": openclaw_trace_id,
                     "openclaw_session_id": openclaw_session_id,
                     "skill_loaded": skill_loaded,
                 }
