@@ -118,8 +118,6 @@ def fetch_trace_metadata(langfuse_host, auth_header, trace_id):
             "experiment_name": md.get("experiment_name") or md.get("experiment_run_name", None),
             "dataset_item_id": md.get("dataset_item_id", None),
             "openclaw_trace_id": md.get("openclaw_trace_id", None),
-            "skill_loaded": md.get("skill_loaded", None),
-            "expected_skill_name": md.get("expected_skill_name", None),
             "trace_input": root.get("input"),
             "trace_output": root.get("output"),
         }
@@ -169,8 +167,6 @@ def build_experiment_data(langfuse_host, auth_header, scores, name_prefix=None, 
             "score_name": score["name"],
             "trace_id": trace_id,
             "openclaw_trace_id": md.get("openclaw_trace_id"),
-            "skill_loaded": md.get("skill_loaded"),
-            "expected_skill_name": md.get("expected_skill_name"),
             "comment": score.get("comment", ""),
             "created_at": score.get("createdAt", ""),
         })
