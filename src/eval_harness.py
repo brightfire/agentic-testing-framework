@@ -449,7 +449,6 @@ def make_task(prompt_prefix, agent_id, timeout_seconds,
                         metadata={
                             "expected_skill_name": expected_skill_name,
                             "skill_loaded": None,
-                            "attestation_passed": False,
                         },
                     )
                     if failed_attestation_items is not None:
@@ -475,7 +474,6 @@ def make_task(prompt_prefix, agent_id, timeout_seconds,
                         metadata={
                             "expected_skill_name": expected_skill_name,
                             "skill_loaded": None,
-                            "attestation_passed": False,
                         },
                     )
                     if failed_attestation_items is not None:
@@ -537,7 +535,6 @@ def make_task(prompt_prefix, agent_id, timeout_seconds,
                     }
                     if expected_skill_name:
                         span_metadata["expected_skill_name"] = expected_skill_name
-                        span_metadata["attestation_passed"] = attestation_passed
                     langfuse_client.update_current_span(metadata=span_metadata)
                     # Raise an error so run_experiment marks this item as failed
                     # and excludes it from scoring, rather than returning a response
@@ -554,7 +551,6 @@ def make_task(prompt_prefix, agent_id, timeout_seconds,
                 }
                 if expected_skill_name:
                     span_metadata["expected_skill_name"] = expected_skill_name
-                    span_metadata["attestation_passed"] = attestation_passed
                 langfuse_client.update_current_span(metadata=span_metadata)
                 break
 
@@ -587,7 +583,6 @@ def make_task(prompt_prefix, agent_id, timeout_seconds,
                     "openclaw_session_id": openclaw_session_id,
                     "skill_loaded": skill_loaded,
                     "expected_skill_name": expected_skill_name,
-                    "attestation_passed": False,
                 }
                 langfuse_client.update_current_span(metadata=span_metadata)
                 raise RuntimeError(
