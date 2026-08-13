@@ -240,7 +240,7 @@ Start the harness in the background, then poll until it completes:
 
 ```
 exec(
-  command="cd <harness-dir> && source ~/.openclaw/secrets/langfuse.env && source <atf-dir>/.venv/bin/activate && python src/eval_harness.py --manifest <path> --run-name '<name>' --prompt-prefix '<prefix>' --expected-skill-name <suffixed-skill-name> --eval-score-names '<score-names>' --repeat <N> --item-concurrency 3 --experiment-concurrency 2 [--model <model>]",
+  command="cd <harness-dir> && source ~/.openclaw/secrets/langfuse.env && source <atf-dir>/.venv/bin/activate && python src/eval_harness.py --manifest <path> --run-name '<name>' --prompt-prefix '<prefix>' --expected-skill-name <suffixed-skill-name> --repeat <N> --item-concurrency 3 --experiment-concurrency 2 [--model <model>]",
   background=true,
   timeout=<exec_timeout>
 )
@@ -248,7 +248,6 @@ exec(
 
 Then monitor with `process(action=poll, timeout=30000)` every 30s until the process exits.
 
-**`--eval-score-names`:** Comma-separated list of evaluator score names configured for this dataset in Langfuse (e.g. `'task_quality,attestation'`). Only scores matching these names are cleaned up from failed attestation attempts. If omitted, no scores are deleted (safety default). Resolve the names from the Langfuse UI → Datasets → <dataset> → Evaluators, or from the evaluator check output in the Evaluator Check phase.
 
 
 #### 4. Monitor and capture results
