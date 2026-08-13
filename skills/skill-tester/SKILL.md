@@ -203,7 +203,6 @@ For model comparison tests (Slack-triggered, single skill variant), the same suf
 
 Source langfuse.env, then invoke `eval_harness.py` for each (skill variant × model) combination with: `--manifest` (path from sync phase), `--run-name` (base experiment name without timestamp/repeat suffixes), `--prompt-prefix` (the skill-reading prefix from step 2), `--expected-skill-name` (the suffixed skill name from step 2), `--model` (omit for agent default), `--repeat` (always pass; use the repeat count from the user request — e.g., "run each test once" → 1; default 10 if not specified; subtract recency-found runs), `--item-concurrency 3` (max 6 concurrent subprocesses), and `--experiment-concurrency 2`. Variants run sequentially — one completes before the next begins.
 
-**Deterministic attestation verification:** The harness verifies that the agent loaded the correct skill by checking the `openclaw.skill.used` span on the Langfuse trace. This is a deterministic string comparison — no LLM involved. If the skill doesn't match (or no span is found), the harness retries the item (up to 2 times). Items that exhaust attestation retries are raised as errors and excluded from scoring.
 
 **Computing the exec timeout:**
 
