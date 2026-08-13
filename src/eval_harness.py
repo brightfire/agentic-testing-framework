@@ -61,7 +61,7 @@ def load_manifest(manifest_path):
     manifest items. This pins the dataset to the state at the last item write,
     which is more precise than synced_at (which is a post-sync wall clock).
 
-    Returns (dataset_name, item_ids, version_datetime, timeout_per_run) or (None, None, None, None)
+    Returns (dataset_name, item_ids, version_datetime, timeout_per_run, agent) or (None, None, None, None, None)
     if the manifest is invalid.
     """
     try:
@@ -104,7 +104,8 @@ def load_manifest(manifest_path):
     version_dt = max(item_timestamps)
     log(f"Loaded manifest '{manifest_path}' — dataset '{dataset_name}', {len(item_ids)} items, version pinned to {version_dt.isoformat()} (max item timestamp)")
     timeout_per_run = manifest.get("timeout_per_run")
-    return dataset_name, item_ids, version_dt, timeout_per_run
+    agent = manifest.get("agent")
+    return dataset_name, item_ids, version_dt, timeout_per_run, agent
 
 
 def log(msg, level="INFO"):
@@ -746,7 +747,7 @@ def main():
     dataset_version = None
     manifest_item_ids = None  # None = no manifest; list = filter to these IDs
     if args.manifest:
-        manifest_dataset, manifest_item_ids, dataset_version, manifest_timeout = load_manifest(args.manifest)
+        manifest_dataset, manifest_item_ids, dataset_version, manifest_timeout, manifest_agent = load_manifest(args.manifest)
         if manifest_dataset is None:
             log(f"Failed to load manifest from '{args.manifest}' — aborting.", "ERROR")
             sys.exit(1)
@@ -755,6 +756,10 @@ def main():
         if manifest_timeout and args.timeout == 180:
             args.timeout = manifest_timeout
             log(f"Using timeout_per_run={manifest_timeout}s from manifest as --timeout", "INFO")
+        # If --agent wasn't explicitly set and manifest has agent, use it
+        if manifest_agent and args.agent == "main":
+            args.agent = manifest_agent
+            log(f"Using agent='{manifest_agent}' from manifest", "INFO")
     else:
         dataset_name = args.dataset
 
@@ -823,15 +828,19 @@ def main():
         if resolved_model:
             log(f"Using agent '{args.agent}' model: {resolved_model}")
         else:
-            log(f"Could not look up model for agent '{args.agent}' — falling back to agent default (no --model flag)", "WARN")
+            log(
+                f"Could not resolve model for agent '{args.agent}'. "
+                f"The model ID is encoded into the experiment name to ensure "
+                f"comparability across runs. Aborting — pass --model explicitly "
+                f"if agent model lookup is unavailable.",
+                "ERROR",
+            )
+            sys.exit(1)
 
     # --- Append model to run name ---
     # The harness is responsible for encoding the model into the experiment name.
     # The skill passes a base name (variant only, no model) via --run-name.
-    if resolved_model:
-        model_id = resolved_model.replace("/", "-")
-    else:
-        model_id = "default"
+    model_id = resolved_model.replace("/", "-")
     args.run_name = f"{args.run_name}__{model_id}"
     log(f"Experiment base name (with model): {args.run_name}")
 
