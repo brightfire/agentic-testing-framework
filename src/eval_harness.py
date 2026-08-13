@@ -362,89 +362,6 @@ def verify_attestation(langfuse_host, auth_header, trace_id, session_id, expecte
         return None, False
 
 
-def delete_scores_for_observation(langfuse_host, auth_header, trace_id,
-                                    eval_score_names=None):
-    """Delete scores attached to observations on the given trace that were
-    created by this evaluation run.
-
-    Only deletes scores whose name matches one of eval_score_names (the
-    evaluator names configured for this dataset). This avoids deleting
-    unrelated scores (safety, quality, cost, etc.) that may exist on the
-    agent trace from other sources.
-
-    If eval_score_names is None, no scores are deleted (safety default).
-    """
-    if not eval_score_names:
-        log(f"  Skipping score cleanup for trace {trace_id} — no evaluator names provided", "INFO")
-        return 0
-    try:
-        # Fetch all observations on the trace, paginating through all pages
-        all_observations = []
-        page = 1
-        while True:
-            resp = requests.get(
-                f"{langfuse_host}/api/public/v2/observations",
-                params={
-                    "traceId": trace_id,
-                    "fields": "core,basic",
-                    "limit": 100,
-                    "page": page,
-                },
-                headers={"Authorization": f"Basic {auth_header}"},
-                timeout=10,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            obs_batch = data.get("data", [])
-            all_observations.extend(obs_batch)
-            meta = data.get("meta", {}) or {}
-            total_pages = meta.get("totalPages", 1)
-            if page >= total_pages or len(obs_batch) < 100:
-                break
-            page += 1
-
-        deleted_count = 0
-        for obs in all_observations:
-            obs_id = obs.get("id")
-            if not obs_id:
-                continue
-            # Fetch scores for this observation
-            scores_resp = requests.get(
-                f"{langfuse_host}/api/public/v2/scores",
-                params={
-                    "observationId": obs_id,
-                    "limit": 50,
-                },
-                headers={"Authorization": f"Basic {auth_header}"},
-                timeout=10,
-            )
-            if scores_resp.status_code != 200:
-                continue
-            scores = scores_resp.json().get("data", [])
-            for score in scores:
-                score_id = score.get("id")
-                score_name = score.get("name", "")
-                # Only delete scores whose name matches one of our evaluators
-                if score_name not in eval_score_names:
-                    continue
-                del_resp = requests.delete(
-                    f"{langfuse_host}/api/public/v2/scores/{score_id}",
-                    headers={"Authorization": f"Basic {auth_header}"},
-                    timeout=10,
-                )
-                if del_resp.status_code in (200, 204):
-                    deleted_count += 1
-                else:
-                    log(f"  Failed to delete score {score_id}: {del_resp.status_code}", "WARN")
-
-        if deleted_count:
-            log(f"  Deleted {deleted_count} score(s) from trace {trace_id}")
-        return deleted_count
-    except Exception as e:
-        log(f"  Error cleaning up scores for trace {trace_id}: {e}", "WARN")
-        return 0
-
-
 def get_dataset(langfuse_client, dataset_name, version=None):
     """Fetch a Langfuse dataset by name. Returns DatasetClient or exits.
 
@@ -469,8 +386,7 @@ def get_dataset(langfuse_client, dataset_name, version=None):
 def make_task(prompt_prefix, agent_id, timeout_seconds,
               langfuse_client, langfuse_host, auth_header, model=None,
               expected_skill_name=None, max_retries=2,
-              max_attestation_retries=2, failed_attestation_items=None,
-              eval_score_names=None):
+              max_attestation_retries=2, failed_attestation_items=None):
     """
     Build a task function for run_experiment.
 
@@ -495,10 +411,6 @@ def make_task(prompt_prefix, agent_id, timeout_seconds,
     run_experiment marks it as failed and it is excluded from scoring.
     Failed attestation items are tracked in failed_attestation_items
     (a list, passed by reference) for post-experiment reporting.
-
-    eval_score_names: set of evaluator score names configured for this
-    dataset. Only scores matching these names are cleaned up from failed
-    attestation attempts (safety: if None, no scores are deleted).
     """
 
     def run_cli(prompt, session_key):
@@ -830,13 +742,6 @@ def main():
              "--prompt-prefix contains an attestation prefix."
     )
     parser.add_argument(
-        "--eval-score-names", default=None,
-        help="Comma-separated list of evaluator score names configured for this "
-             "dataset (e.g. 'task_quality,attestation'). Only scores matching "
-             "these names are cleaned up from failed attestation attempts. "
-             "If omitted, no scores are deleted (safety default)."
-    )
-    parser.add_argument(
         "--manifest", default=None,
         help="Path to a sync manifest JSON file (from dataset_sync.py --output-manifest). "
              "The manifest is the source of truth: dataset name, item IDs, and per-item "
@@ -949,12 +854,6 @@ def main():
     # Track items that failed attestation across all experiments
     failed_attestation_items = []
 
-    # Parse evaluator score names for safe score cleanup
-    eval_score_names = None
-    if args.eval_score_names:
-        eval_score_names = set(s.strip() for s in args.eval_score_names.split(",") if s.strip())
-        log(f"Evaluator score names for cleanup: {eval_score_names}")
-
     task = make_task(
         prompt_prefix=args.prompt_prefix,
         agent_id=args.agent,
@@ -965,7 +864,6 @@ def main():
         model=args.model,
         expected_skill_name=args.expected_skill_name,
         failed_attestation_items=failed_attestation_items,
-        eval_score_names=eval_score_names,
     )
 
     # Run experiments — --repeat N creates N separate experiments, each with all dataset items.
