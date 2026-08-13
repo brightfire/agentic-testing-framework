@@ -189,7 +189,7 @@ If all variants were pruned by the recency check, skip this phase entirely and p
 
 #### 1. Construct experiment names
 
-For each (skill variant × model) combination, construct the base experiment name following the naming convention defined in the Variant Inference section. When no model override is specified, the harness looks up the agent's primary model via `openclaw agents list --json` (using the `agent` field from eval.yaml, default `main`). Use the resolved model ID for the experiment name.
+For each (skill variant × model) combination, construct the base experiment name following the naming convention defined in the Variant Inference section. When no model override is specified, use the agent's default model ID for the experiment name.
 
 The harness appends ` - <timestamp>` (and ` - <run_idx>/<total>` for repeats) at runtime — the base name passed via `--run-name` must NOT include these suffixes.
 
