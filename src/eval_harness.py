@@ -298,25 +298,33 @@ def find_skill_used_span(langfuse_host, auth_header, trace_id, session_id=None,
             filter_json = json.dumps([
                 {"type": "string", "column": "sessionId", "operator": "=", "value": session_id}
             ])
-            resp = requests.get(
-                f"{langfuse_host}/api/public/v2/observations",
-                params={
-                    "filter": filter_json,
-                    "fields": "core,basic,trace_context",
-                    "limit": 50,
-                },
-                headers={"Authorization": f"Basic {auth_header}"},
-                timeout=10,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            observations = data.get("data", [])
-            # Collect unique trace IDs (excluding the one we already checked)
+            # Paginate through all observations for this session
             other_trace_ids = set()
-            for obs in observations:
-                tid = obs.get("traceId")
-                if tid and tid != trace_id:
-                    other_trace_ids.add(tid)
+            page = 1
+            while True:
+                resp = requests.get(
+                    f"{langfuse_host}/api/public/v2/observations",
+                    params={
+                        "filter": filter_json,
+                        "fields": "core,basic,trace_context",
+                        "limit": 100,
+                        "page": page,
+                    },
+                    headers={"Authorization": f"Basic {auth_header}"},
+                    timeout=10,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                observations = data.get("data", [])
+                for obs in observations:
+                    tid = obs.get("traceId")
+                    if tid and tid != trace_id:
+                        other_trace_ids.add(tid)
+                meta = data.get("meta", {}) or {}
+                total_pages = meta.get("totalPages", 1)
+                if page >= total_pages or len(observations) < 100:
+                    break
+                page += 1
 
             for tid in other_trace_ids:
                 found_skills = _query_trace_for_skill_span(tid)
@@ -368,22 +376,33 @@ def delete_scores_for_observation(langfuse_host, auth_header, trace_id,
         log(f"  Skipping score cleanup for trace {trace_id} — no evaluator names provided", "INFO")
         return 0
     try:
-        # Fetch all observations on the trace to get their IDs
-        resp = requests.get(
-            f"{langfuse_host}/api/public/v2/observations",
-            params={
-                "traceId": trace_id,
-                "fields": "core,basic",
-                "limit": 100,
-            },
-            headers={"Authorization": f"Basic {auth_header}"},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        observations = resp.json().get("data", [])
+        # Fetch all observations on the trace, paginating through all pages
+        all_observations = []
+        page = 1
+        while True:
+            resp = requests.get(
+                f"{langfuse_host}/api/public/v2/observations",
+                params={
+                    "traceId": trace_id,
+                    "fields": "core,basic",
+                    "limit": 100,
+                    "page": page,
+                },
+                headers={"Authorization": f"Basic {auth_header}"},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            obs_batch = data.get("data", [])
+            all_observations.extend(obs_batch)
+            meta = data.get("meta", {}) or {}
+            total_pages = meta.get("totalPages", 1)
+            if page >= total_pages or len(obs_batch) < 100:
+                break
+            page += 1
 
         deleted_count = 0
-        for obs in observations:
+        for obs in all_observations:
             obs_id = obs.get("id")
             if not obs_id:
                 continue
