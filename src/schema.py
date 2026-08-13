@@ -137,6 +137,11 @@ class EvalFile(BaseModel):
     during the Execute phase to compute the per-invocation exec timeout for
     the harness process: ``exec_timeout = timeout_per_run * repeat + 120``.
     Variants run sequentially in separate exec calls, each with its own timeout.
+
+    ``agent`` is optional (default ``"main"``). It declares which OpenClaw
+    agent the skill should be tested under. The harness looks up the
+    agent's primary model via ``openclaw agents list --json`` and passes
+    it as ``--model`` to the ``openclaw agent`` CLI command.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -151,6 +156,13 @@ class EvalFile(BaseModel):
             "count to derive the per-invocation exec timeout for the "
             "harness process: exec_timeout = timeout_per_run * repeat + 120. "
             "Default 600 (10 minutes). Must be a positive integer.",
+    )
+    agent: str = Field(
+        default="main",
+        description="OpenClaw agent ID to use for testing (default: main). "
+            "The harness looks up the agent's primary model via "
+            "'openclaw agents list --json' and passes it as --model to "
+            "the 'openclaw agent' CLI command.",
     )
     items: list[EvalItem] = Field(description="List of eval test cases")
 

@@ -4,6 +4,8 @@ description: "Skill-tester skill test cases — real runs through inference, con
 
 timeout_per_run: 1800  # 30 min - max time to execute all items sequentially
 
+agent: main  # OpenClaw agent to test under — harness looks up its model automatically
+
 items:
   # ─── Inference + confirmation (stops at confirmation gate) ──────────
 
