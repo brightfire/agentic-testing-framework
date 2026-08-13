@@ -139,11 +139,9 @@ class EvalFile(BaseModel):
     Variants run sequentially in separate exec calls, each with its own timeout.
 
     ``agent`` is optional (default ``"main"``). It declares which OpenClaw
-    agent the skill should be tested under. Skills reference agents, not
-    models — when a new model comes out, you update the agent config once
-    instead of updating all skills. The harness looks up the agent's primary
-    model via ``openclaw agents list --json`` and passes it as ``--model``
-    to the ``openclaw agent`` CLI command, ensuring no retry contamination.
+    agent the skill should be tested under. The harness looks up the
+    agent's primary model via ``openclaw agents list --json`` and passes
+    it as ``--model`` to the ``openclaw agent`` CLI command.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -164,8 +162,7 @@ class EvalFile(BaseModel):
         description="OpenClaw agent ID to use for testing (default: main). "
             "The harness looks up the agent's primary model via "
             "'openclaw agents list --json' and passes it as --model to "
-            "the 'openclaw agent' CLI command. This ensures no retry "
-            "contamination from model fallbacks.",
+            "the 'openclaw agent' CLI command.",
     )
     items: list[EvalItem] = Field(description="List of eval test cases")
 

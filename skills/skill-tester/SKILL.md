@@ -189,7 +189,7 @@ If all variants were pruned by the recency check, skip this phase entirely and p
 
 #### 1. Construct experiment names
 
-For each (skill variant × model) combination, construct the base experiment name following the naming convention defined in the Variant Inference section. When no model override is specified, read the `agent` field from eval.yaml (default `main`) and use it as the `--agent` flag when invoking the harness. The harness looks up the agent's primary model via `openclaw agents list --json` at invocation time and passes it as `--model` internally — this ensures no retry contamination from model fallbacks. Use the resolved model ID for the experiment name.
+For each (skill variant × model) combination, construct the base experiment name following the naming convention defined in the Variant Inference section. When no model override is specified, the harness looks up the agent's primary model via `openclaw agents list --json` (using the `agent` field from eval.yaml, default `main`). Use the resolved model ID for the experiment name.
 
 The harness appends ` - <timestamp>` (and ` - <run_idx>/<total>` for repeats) at runtime — the base name passed via `--run-name` must NOT include these suffixes.
 
@@ -201,7 +201,7 @@ For model comparison tests (Slack-triggered, single skill variant), the same suf
 
 #### 3. Invoke the harness
 
-Source langfuse.env, then invoke `eval_harness.py` for each (skill variant × model) combination with: `--manifest` (path from sync phase), `--run-name` (base experiment name without timestamp/repeat suffixes), `--prompt-prefix` (the skill-reading prefix from step 2), `--expected-skill-name` (the suffixed skill name from step 2), `--agent` (read from eval.yaml's `agent` field, default `main`; the harness resolves the agent's model automatically via `openclaw agents list --json`), `--model` (omit for agent default — the harness auto-resolves the model; only pass explicitly for model comparison runs), `--repeat` (always pass; use the repeat count from the user request — e.g., "run each test once" → 1; default 10 if not specified; subtract recency-found runs), `--item-concurrency 3` (max 6 concurrent subprocesses), and `--experiment-concurrency 2`. Variants run sequentially — one completes before the next begins.
+Source langfuse.env, then invoke `eval_harness.py` for each (skill variant × model) combination with: `--manifest` (path from sync phase), `--run-name` (base experiment name without timestamp/repeat suffixes), `--prompt-prefix` (the skill-reading prefix from step 2), `--expected-skill-name` (the suffixed skill name from step 2), `--agent` (from eval.yaml's `agent` field, default `main`), `--model` (omit for agent default — only pass explicitly for model comparison runs), `--repeat` (always pass; use the repeat count from the user request — e.g., "run each test once" → 1; default 10 if not specified; subtract recency-found runs), `--item-concurrency 3` (max 6 concurrent subprocesses), and `--experiment-concurrency 2`. Variants run sequentially — one completes before the next begins.
 
 **Computing the exec timeout:**
 
