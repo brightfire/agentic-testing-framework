@@ -182,7 +182,8 @@ def find_openclaw_trace_id(langfuse_host, auth_header, session_id, max_wait=15):
     return None
 
 
-def find_skill_used_span(langfuse_host, auth_header, trace_id, session_id=None):
+def find_skill_used_span(langfuse_host, auth_header, trace_id, session_id=None,
+                         expected_skill_name=None, max_wait=10):
     """Look up the openclaw.skill.used span on a trace via the Langfuse REST API.
 
     The OpenClaw gateway emits a SPAN observation named 'openclaw.skill.used'
@@ -190,8 +191,16 @@ def find_skill_used_span(langfuse_host, auth_header, trace_id, session_id=None):
     attributes.openclaw.skill.name with the exact skill name.
 
     Queries /api/public/v2/observations for the given trace ID, filtering
-    for SPAN type, and finds the observation named 'openclaw.skill.used'.
-    Extracts attributes.openclaw.skill.name from its metadata.
+    for SPAN type, paginating through all results to find the observation
+    named 'openclaw.skill.used'. Extracts attributes.openclaw.skill.name from
+    its metadata.
+
+    If expected_skill_name is provided, scans all matching spans and prefers
+    one whose skill name matches. This handles the case where the agent loads
+    multiple skills and an auxiliary skill's span appears first.
+
+    Polls for up to max_wait seconds to allow the OTel exporter to flush the
+    skill span (which may arrive slightly after the trace itself appears).
 
     If not found on the given trace and session_id is provided, also checks
     other traces with the same session ID. This handles the retry case where
@@ -199,46 +208,85 @@ def find_skill_used_span(langfuse_host, auth_header, trace_id, session_id=None):
 
     Returns the skill name string, or None if not found.
     """
-    def _query_trace_for_skill_span(tid):
-        """Query a single trace for the openclaw.skill.used span."""
-        try:
-            resp = requests.get(
-                f"{langfuse_host}/api/public/v2/observations",
-                params={
-                    "traceId": tid,
-                    "type": "SPAN",
-                    "fields": "core,basic,io,metadata",
-                    "limit": 100,
-                },
-                headers={"Authorization": f"Basic {auth_header}"},
-                timeout=10,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            observations = data.get("data", [])
-            for obs in observations:
-                if obs.get("name") == "openclaw.skill.used":
-                    md = obs.get("metadata", {}) or {}
-                    # The skill name is stored as a flat key with literal dots:
-                    # "attributes.openclaw.skill.name". Langfuse flattens OTel
-                    # span attributes into dot-separated top-level metadata keys.
-                    skill_name = md.get("attributes.openclaw.skill.name")
-                    if not skill_name:
-                        # Fallback: nested dict form (older Langfuse versions)
-                        attrs = md.get("attributes", {}) or {}
-                        skill_name = attrs.get("openclaw.skill.name")
-                    if not skill_name:
-                        # Fallback: without attributes. prefix
-                        skill_name = md.get("openclaw.skill.name")
-                    return skill_name
-        except Exception as e:
-            log(f"  Error querying trace {tid} for skill.used span: {e}", "WARN")
-        return None
-
-    # 1. Check the given trace
-    skill_name = _query_trace_for_skill_span(trace_id)
-    if skill_name:
+    def _extract_skill_name(obs):
+        """Extract the skill name from an observation's metadata."""
+        md = obs.get("metadata", {}) or {}
+        # The skill name is stored as a flat key with literal dots:
+        # "attributes.openclaw.skill.name". Langfuse flattens OTel
+        # span attributes into dot-separated top-level metadata keys.
+        skill_name = md.get("attributes.openclaw.skill.name")
+        if not skill_name:
+            # Fallback: nested dict form (older Langfuse versions)
+            attrs = md.get("attributes", {}) or {}
+            skill_name = attrs.get("openclaw.skill.name")
+        if not skill_name:
+            # Fallback: without attributes. prefix
+            skill_name = md.get("openclaw.skill.name")
         return skill_name
+
+    def _query_trace_for_skill_span(tid):
+        """Query a single trace for all openclaw.skill.used spans, paginating
+        through all SPAN observations. Returns a list of skill names found."""
+        found_skills = []
+        page = 1
+        while True:
+            try:
+                resp = requests.get(
+                    f"{langfuse_host}/api/public/v2/observations",
+                    params={
+                        "traceId": tid,
+                        "type": "SPAN",
+                        "fields": "core,basic,io,metadata",
+                        "limit": 100,
+                        "page": page,
+                    },
+                    headers={"Authorization": f"Basic {auth_header}"},
+                    timeout=10,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                observations = data.get("data", [])
+                for obs in observations:
+                    if obs.get("name") == "openclaw.skill.used":
+                        skill_name = _extract_skill_name(obs)
+                        if skill_name:
+                            found_skills.append(skill_name)
+                # Check for more pages (Langfuse uses offset-based pagination)
+                meta = data.get("meta", {}) or {}
+                total_pages = meta.get("totalPages", 1)
+                if page >= total_pages or len(observations) < 100:
+                    break
+                page += 1
+            except Exception as e:
+                log(f"  Error querying trace {tid} for skill.used span (page {page}): {e}", "WARN")
+                break
+        return found_skills
+
+    def _select_skill_name(found_skills):
+        """Select the best skill name from a list of found skills.
+
+        If expected_skill_name is provided and a matching span exists, prefer
+        it. Otherwise return the first skill span found.
+        """
+        if not found_skills:
+            return None
+        if expected_skill_name:
+            for name in found_skills:
+                if name == expected_skill_name:
+                    return name
+        return found_skills[0]
+
+    # 1. Poll for the skill span on the given trace (allow OTel exporter to flush)
+    for attempt in range(max_wait):
+        found_skills = _query_trace_for_skill_span(trace_id)
+        skill_name = _select_skill_name(found_skills)
+        if skill_name:
+            if attempt > 0:
+                log(f"  Skill span found after {attempt + 1} poll attempts")
+            return skill_name
+        if attempt < max_wait - 1:
+            import time as _time
+            _time.sleep(1)
 
     # 2. If not found and we have a session_id, check other traces
     #    with the same session ID (retry fallback)
@@ -268,7 +316,8 @@ def find_skill_used_span(langfuse_host, auth_header, trace_id, session_id=None):
                     other_trace_ids.add(tid)
 
             for tid in other_trace_ids:
-                skill_name = _query_trace_for_skill_span(tid)
+                found_skills = _query_trace_for_skill_span(tid)
+                skill_name = _select_skill_name(found_skills)
                 if skill_name:
                     log(f"  Skill used span found on alternate trace {tid} (session: {session_id})")
                     return skill_name
@@ -395,14 +444,23 @@ def make_task(prompt_prefix, agent_id, timeout_seconds,
         openclaw_session_id = meta.get("agentMeta", {}).get("sessionId")
         skill_loaded = None
         if openclaw_session_id:
-            openclaw_trace_id = find_openclaw_trace_id(
-                langfuse_host, auth_header, openclaw_session_id,
+            # Run trace/span lookups in executor to avoid blocking the asyncio
+            # event loop when --item-concurrency > 1 (these use sync requests.get)
+            openclaw_trace_id = await loop.run_in_executor(
+                None,
+                lambda: find_openclaw_trace_id(
+                    langfuse_host, auth_header, openclaw_session_id,
+                ),
             )
             if openclaw_trace_id:
                 log(f"Linked OpenClaw trace: {openclaw_trace_id} (session: {openclaw_session_id})")
                 # Look up the openclaw.skill.used span for deterministic attestation
-                skill_loaded = find_skill_used_span(
-                    langfuse_host, auth_header, openclaw_trace_id, openclaw_session_id,
+                skill_loaded = await loop.run_in_executor(
+                    None,
+                    lambda: find_skill_used_span(
+                        langfuse_host, auth_header, openclaw_trace_id,
+                        openclaw_session_id, expected_skill_name,
+                    ),
                 )
                 if skill_loaded:
                     log(f"  Skill loaded: '{skill_loaded}' (verified via openclaw.skill.used span)")
