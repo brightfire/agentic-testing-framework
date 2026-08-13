@@ -26,6 +26,10 @@ docs/                 — Eval result snapshots and reference docs
 
 See `src/schema.py` for the authoritative schema (Pydantic v2, `extra="forbid"`) and `samples/eval-sample.yaml` for a complete example.
 
+### `agent` field
+
+Optional. Defaults to `"main"`. Declares which OpenClaw agent the skill should be tested under. The harness looks up the agent's primary model via `openclaw agents list --json` and passes it as `--model` to the `openclaw agent` CLI command.
+
 ### Authoring Conventions
 
 **Inputs are natural user requests, not instructions.**
