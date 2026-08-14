@@ -198,12 +198,17 @@ For model comparison tests (Slack-triggered, single skill variant), the same suf
 
 #### 3. Invoke the harness
 
-Source langfuse.env, then invoke `eval_harness.py` for each (skill variant × model) combination with: `--manifest` (path from sync phase), `--run-name` (base experiment name without model, timestamp, or repeat suffixes — the harness appends the model), `--prompt-prefix` (the skill-reading prefix from step 2), `--expected-skill-name` (the suffixed skill name from step 2), `--agent` (from eval.yaml's `agent` field, default `main`), `--model` (omit for agent default — only pass explicitly for model comparison runs), `--repeat` (always pass; use the repeat count from the user request — e.g., "run each test once" → 1; default 10 if not specified; subtract recency-found runs), `--item-concurrency 3` (max 6 concurrent subprocesses), and `--experiment-concurrency 2`. Variants run sequentially — one completes before the next begins.
+Source langfuse.env, then invoke `eval_harness.py` for each (skill variant × model) combination with: `--manifest` (path from sync phase), `--run-name` (base experiment name without model, timestamp, or repeat suffixes — the harness appends the model), `--prompt-prefix` (the skill-reading prefix from step 2), `--expected-skill-name` (the suffixed skill name from step 2), `--agent` (from eval.yaml's `agent` field, default `main`), `--timeout` (per-prompt timeout, read directly from eval.yaml's `timeout_per_run`), `--model` (omit for agent default — only pass explicitly for model comparison runs), `--repeat` (always pass; use the repeat count from the user request — e.g., "run each test once" → 1; default 10 if not specified; subtract recency-found runs), `--item-concurrency 3` (max 6 concurrent subprocesses), and `--experiment-concurrency 2`. Variants run sequentially — one completes before the next begins.
 
-**Computing the exec timeout:**
+**Computing timeouts:**
 
-Read `timeout_per_run` from eval.yaml (default 600s). Compute per invocation:
+Read `timeout_per_run` from eval.yaml (default 600s). Compute two values per invocation:
 
+1. **`--timeout <timeout_per_run>`** — passed to the harness CLI. This is the per-prompt timeout (each `openclaw agent` call gets this much time):
+```
+--timeout = timeout_per_run
+```
+2. **`timeout=<exec_timeout>`** — passed to the `exec()` call. This is the process-level kill timeout for the entire harness run (all repeats):
 ```
 exec_timeout = timeout_per_run * repeat + 120
 ```
@@ -236,7 +241,7 @@ Start the harness in the background, then poll until it completes:
 
 ```
 exec(
-  command="cd <harness-dir> && source ~/.openclaw/secrets/langfuse.env && source <atf-dir>/.venv/bin/activate && python src/eval_harness.py --manifest <path> --run-name '<name>' --prompt-prefix '<prefix>' --expected-skill-name <suffixed-skill-name> --agent <agent-from-eval-yaml> --repeat <N> --item-concurrency 3 --experiment-concurrency 2 [--model <model>]",
+  command="cd <harness-dir> && source ~/.openclaw/secrets/langfuse.env && source <atf-dir>/.venv/bin/activate && python src/eval_harness.py --manifest <path> --run-name '<name>' --prompt-prefix '<prefix>' --expected-skill-name <suffixed-skill-name> --agent <agent-from-eval-yaml> --timeout <timeout_per_run> --repeat <N> --item-concurrency 3 --experiment-concurrency 2 [--model <model>]",
   background=true,
   timeout=<exec_timeout>
 )

@@ -253,12 +253,16 @@ def get_server_version_timestamp(date_header, response_body=None):
     return datetime.now(timezone.utc)
 
 
-def write_manifest(output_path, dataset_name, manifest_items, sync_completed_at, timeout_per_run=None):
+def write_manifest(output_path, dataset_name, manifest_items, sync_completed_at):
     """Write the sync manifest JSON file if --output-manifest was provided.
 
     Returns True on success or if no output path was given, False on write
     failure. Callers should check the return value when --output-manifest was
     explicitly requested and exit non-zero on failure.
+
+    The manifest contains only dataset-level info: dataset name, synced_at,
+    and items. Run config like timeout_per_run is read from eval.yaml at
+    run time — it does not belong in the dataset snapshot.
     """
     if not output_path:
         return True
@@ -267,8 +271,6 @@ def write_manifest(output_path, dataset_name, manifest_items, sync_completed_at,
         "synced_at": sync_completed_at.isoformat(),
         "items": manifest_items,
     }
-    if timeout_per_run is not None:
-        manifest["timeout_per_run"] = timeout_per_run
     try:
         with open(output_path, "w") as f:
             json.dump(manifest, f, indent=2)
@@ -431,11 +433,11 @@ def main():
         if failed:
             log(f"{failed} upsert(s) failed — fix errors and re-run.", "WARN")
             sync_completed_at = datetime.now(timezone.utc)
-            write_manifest(args.output_manifest, dataset_name, manifest_items, sync_completed_at, timeout_per_run)
+            write_manifest(args.output_manifest, dataset_name, manifest_items, sync_completed_at)
             sys.exit(1)
         log("Nothing to archive — dataset is in sync.", "INFO")
         sync_completed_at = datetime.now(timezone.utc)
-        if not write_manifest(args.output_manifest, dataset_name, manifest_items, sync_completed_at, timeout_per_run):
+        if not write_manifest(args.output_manifest, dataset_name, manifest_items, sync_completed_at):
             sys.exit(1)
         return
 
@@ -473,7 +475,7 @@ def main():
     log(f"Failed:    {failed}")
 
     sync_completed_at = datetime.now(timezone.utc)
-    if not write_manifest(args.output_manifest, dataset_name, manifest_items, sync_completed_at, timeout_per_run):
+    if not write_manifest(args.output_manifest, dataset_name, manifest_items, sync_completed_at):
         sys.exit(1)
 
     sys.exit(0 if failed == 0 else 1)
