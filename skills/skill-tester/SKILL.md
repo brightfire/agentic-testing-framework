@@ -190,7 +190,7 @@ For each skill variant, construct the base experiment name following the naming 
 
 #### 2. Construct skill-reading prefix
 
-Format: `Read the <suffixed-skill-name> skill from available_skills. Do not spawn subagents or yield — complete all work inline in this single response. Then, ` — pass this verbatim as `--prompt-prefix` in step 3.
+Format: `Read the <suffixed-skill-name> skill from available_skills. Do not spawn subagents or yield — complete all work inline in this single response, unless the skill defines a mandatory stop point (such as a confirmation gate). Then, ` — pass this verbatim as `--prompt-prefix` in step 3.
 
 For model comparison tests (Slack-triggered, single skill variant), the same suffixed skill name is used for both model runs — only `--model` differs.
 
