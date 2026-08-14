@@ -104,7 +104,7 @@ items:
       - Base branch: main
       - Files changed: linear-create/SKILL.md, linear-create/eval.yaml
 
-      User request: "Run tests for this skill. Skip confirmation and run each test once. Output the confirmation summary and final report as your response text — do not post them as a comment on the PR."
+      User request: "Run tests for this skill. Skip confirmation and run each test once. Include both the confirmation summary and final report in your final response."
     expected_output:
       behavior: |
         The agent runs the full pipeline: inference, confirmation (skip — proceed directly), pre-flight, sync, env
@@ -131,7 +131,7 @@ items:
 
   - id: execute-model-ab
     input: |
-      User request: "Run tests for linear-create against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6. Skip confirmation and run each test once. Output the confirmation summary and final report as your response."
+      User request: "Run tests for linear-create against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6. Skip confirmation and run each test once. Include both the confirmation summary and final report in your final response."
     expected_output:
       behavior: |
         The agent processes the model comparison test request. It infers: skill = linear-create, models = glm-5.2 and claude-sonnet-4-6,
@@ -166,7 +166,7 @@ items:
       - Base branch: main
       - Files changed: linear-create/eval.yaml (new file)
 
-      User request: "Run tests for this skill. Skip confirmation and run each test once. Output the confirmation summary and final report as your response text — do not post them as a comment on the PR."
+      User request: "Run tests for this skill. Skip confirmation and run each test once. Include both the confirmation summary and final report in your final response."
     expected_output:
       behavior: |
         The agent runs inference, resolves refs (main to c8269935, PR head to 65fbaaee via PR API fallback), and verifies eval.yaml exists at both pinned
@@ -222,7 +222,7 @@ items:
       - Base branch: main
       - Files changed: linear-create/eval.yaml
 
-      User request: "Just run tests for the PR version of linear-create — no need to compare against main. Skip confirmation and run each test once. Output the confirmation summary and final report as your response text — do not post them as a comment on the PR."
+      User request: "Just run tests for the PR version of linear-create — no need to compare against main. Skip confirmation and run each test once. Include both the confirmation summary and final report in your final response."
     expected_output:
       behavior: |
         The agent recognizes this is a single-variant run (pr-417@65fbaaee only, single variant, no comparison). It resolves the PR head to 65fbaaee via the
@@ -251,7 +251,7 @@ items:
       Branch: main
       Skill: linear-create
 
-      User request: "Run tests for the linear-create skill for the past 3 commits on main. Skip confirmation and run each test once. Output the confirmation summary and final report as your response."
+      User request: "Run tests for the linear-create skill for the past 3 commits on main. Skip confirmation and run each test once. Include both the confirmation summary and final report in your final response."
     expected_output:
       behavior: |
         The agent recognizes this is a 3-variant run and selects raw score report mode.
