@@ -213,7 +213,7 @@ harness_timeout = timeout_per_run * repeat
 exec_timeout = harness_timeout + 60
 ```
 
-The `+60` covers startup, teardown, and overhead. Variants run sequentially in separate exec calls, each with its own timeout. Do not multiply by the number of variants — each exec call runs ONE variant.
+Variants run sequentially in separate exec calls, each with its own timeout. Do not multiply by the number of variants — each exec call runs ONE variant.
 
 **Harness directory:**
 
