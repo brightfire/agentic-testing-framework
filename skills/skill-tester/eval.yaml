@@ -129,15 +129,15 @@ items:
   # ─── Execute phase ──────────────────────────────────────────────────
 
 
-  - id: execute-model-ab-slack-triggered
+  - id: execute-model-ab
     input: |
-      Slack message: "@vashbrightfire Run tests for linear-create against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6 Skip confirmation and run each test once. Output the confirmation summary and final report as your response."
+      User request: "Run tests for linear-create against openrouter/z-ai/glm-5.2 and anthropic/claude-sonnet-4-6. Skip confirmation and run each test once. Output the confirmation summary and final report as your response."
     expected_output:
       behavior: |
-        The agent processes the Slack-triggered model comparison test request. It infers: skill = linear-create, models = glm-5.2 and claude-sonnet-4-6,
+        The agent processes the model comparison test request. It infers: skill = linear-create, models = glm-5.2 and claude-sonnet-4-6,
         branch = main (current HEAD, no PR or branch referenced). The agent runs through all phases: inference, confirmation, pre-flight, sync, env setup,
         execute, and report. During execute, the agent invokes the harness twice — once per model — using the same suffixed skill name (skill unchanged
-        between model variants). Both invocations use --repeat 1. The agent posts results back to the Slack channel.
+        between model variants). Both invocations use --repeat 1.
       scoring_type: pass_fail
       scoring_criteria:
         # Confirmation format
