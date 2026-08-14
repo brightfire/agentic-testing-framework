@@ -38,8 +38,9 @@ Variant inference outputs (git ref, label) pairs for each variant. Ref resolutio
 ```
 
 - `<variant-label>`: base branch name, `pr-<number>`, or commit ref, `/` → `-`
+- `<git-hash>`: first 7 characters of the pinned commit SHA (e.g. `aaaaaaa`)
 - `<item-scope>`: `all` or 8-char SHA-256 prefix of sorted item IDs joined by `|`
-- Example: `linear-create-eval__pr-123__e5f6g7h__all`
+- Example: `linear-create__pr-123__e5f6g7h__all`
 
 The harness appends `__<model-id>`, ` - <timestamp>`, and ` - <run_idx>/<total>` for repeats at runtime — the base name passed via `--run-name` must NOT include these suffixes.
 
@@ -49,7 +50,9 @@ The harness appends `__<model-id>`, ` - <timestamp>`, and ` - <run_idx>/<total>`
 
 After variant inference (and before the recency check), pin all git refs to commit hashes so subsequent phases use a fixed snapshot:
 
-1. Fetch and pin each ref to a commit hash: `git fetch origin "<ref>"` then `git rev-parse "origin/<ref>"` for branch refs. For explicit commit hashes, `git fetch origin "<hash>"` ensures the commit is present locally (no re-resolution needed — the hash is the pin). If `git fetch origin "<branch>"` fails (branch deleted after merge), resolve the head SHA via the PR API: `gh api repos/<owner>/<repo>/pulls/<pr-number> --jq '.head.sha'` (or `.base.sha'` for the base ref). Then `git fetch origin "<sha>"` to ensure the commit is present locally. Use the SHA as the pinned ref.
+1. **When a PR is referenced**, resolve both variant SHAs from the PR API in a single call: `gh api repos/<owner>/<repo>/pulls/<pr-number> --jq '{head: .head.sha, base: .base.sha}'`. Use `.base.sha` for the base variant (the tip of the PR's target branch at creation time — NOT `git rev-parse origin/<base-branch>`, which may have advanced since the PR was created). Use `.head.sha` for the PR head variant. Then `git fetch origin "<sha>"` for each to ensure the commits are present locally.
+
+   **When no PR is referenced** (branch or commit only), fetch and pin each ref directly: `git fetch origin "<ref>"` then `git rev-parse "origin/<ref>"` for branch refs. For explicit commit hashes, `git fetch origin "<hash>"` ensures the commit is present locally. If `git fetch origin "<branch>"` fails (branch deleted after merge), resolve the head SHA via the PR API as above.
 2. Replace the branch ref with the resolved commit hash in the variant spec.
 3. Verify eval.yaml exists at each pinned commit: `git show "<hash>:<eval-yaml-path>"` — if it fails, exclude that skill version from the matrix (nothing to test).
 
@@ -101,7 +104,7 @@ Use this template verbatim (adapt the content, keep the structure):
 Reply with `@<github bot id> confirm` or `@<github bot id> proceed` to start the run.
 ```
 
-The `@<github bot id>` mention is required on GitHub. Resolve your bot ID via `gh auth status --hostname github.com --active --json hosts` (pipe through `jq -r '.hosts["github.com"][0].login'` and strip `[bot]`). If the result is `null`, fails, or is unexpected, ask the user for the bot's GitHub login explicitly rather than using a placeholder.
+The `@<github bot id>` mention is required on GitHub. Resolve it with: `gh auth status --hostname github.com --active --json hosts | python3 -c "import sys,json; print(json.load(sys.stdin)['hosts']['github.com'][0]['login'].replace('[bot]',''))"`. If this fails or returns empty, ask the user for the bot's GitHub login. Do NOT include `[bot]` in the mention.
 
 Do not include a mention prefix on Slack or webchat, where the bot receives all messages directly.
 
