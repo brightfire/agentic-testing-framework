@@ -96,8 +96,6 @@ Use this template verbatim (adapt the content, keep the structure):
 
 **Total runs:** N
 
-> ⚠️ After confirmation, an evaluator check will run to verify that at least one evaluator is configured for the dataset in Langfuse. If no evaluator is found, the run will stop after sync — no execution will occur.
-
 ---
 
 Reply with `@<github bot id> confirm` or `@<github bot id> proceed` to start the run.
