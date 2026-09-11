@@ -2,11 +2,12 @@
 name: skill-tester
 description: "Use when evaluating a skill or running tests for a skill — syncs eval definitions to Langfuse, prepares the eval environment, and orchestrates variant runs. SKIP for skill creation, editing, or auditing requests — use the skill-creator or skill-reviewer skills instead."
 metadata:
-  {
-    "author": "brightfire",
-    "version": "2.5",
-    "openclaw": { "requires": { "config": ["skills.entries.skill-tester.enabled"] } },
-  }
+  author: brightfire
+  version: "2.5"
+  openclaw:
+    requires:
+      config:
+        - skills.entries.skill-tester.enabled
 ---
 
 # Skill Tester
