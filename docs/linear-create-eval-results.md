@@ -8,7 +8,7 @@
 
 ## Overview
 
-This document demonstrates how the agentic testing framework can produce objective, repeatable evidence that a skill change actually improves agent behavior — or doesn't. It uses the `linear-create` skill improvement shipped in [PR #125](https://github.com/example-org/skill-repo/pull/125) as a concrete case study.
+This document demonstrates how the agentic testing framework can produce objective, repeatable evidence that a skill change actually improves agent behavior — or doesn't. It uses a real `linear-create` skill improvement as a concrete case study.
 
 The core problem the framework solves: **without structured evaluation, you can't distinguish a good skill change from a lucky demo.** A single test run tells you the agent worked once. Ten isolated runs per item, scored by an LLM judge against a fixed rubric, tell you whether the behavior is reliable.
 
@@ -92,14 +92,14 @@ The rubric is the judge's scoring guide. It determines whether a 9.0 means "almo
 
 ---
 
-## Case study: `linear-create` skill — PR #125
+## Case study: `linear-create` skill improvement
 
 ### What changed
 
-| Version | Commit | Summary |
-|---------|--------|---------|
-| **v1.2 (baseline)** | [`eeeeeee`](https://github.com/example-org/skill-repo/blob/eeeeeee/linear-create/SKILL.md) | Auto-assigns projects on name match only |
-| **v2.1 (improved)** | [`fffffff`](https://github.com/example-org/skill-repo/blob/fffffff/linear-create/SKILL.md) | Cascading project matching (name → summary → description); explicit dry-run handling |
+| Version | Summary |
+|---------|---------|
+| **v1.2 (baseline)** | Auto-assigns projects on name match only |
+| **v2.1 (improved)** | Cascading project matching (name → summary → description); explicit dry-run handling |
 
 **Problem the change addresses:** Eval results showed agents were missing semantic project matches — "Meta listing import" should match the "Meta Ads Integration" project, but agents relying on name-only matching couldn't make the connection. The v2.1 skill adds a 4-step cascade: check project names, then summaries, then full descriptions, then give up.
 
@@ -495,8 +495,5 @@ Timestamps for each batch:
 
 ## References
 
-- **PR #125** (improved skill): https://github.com/example-org/skill-repo/pull/125
-- **Baseline skill (v1.2):** https://github.com/example-org/skill-repo/blob/eeeeeee/linear-create/SKILL.md
-- **Improved skill (v2.1):** https://github.com/example-org/skill-repo/blob/fffffff/linear-create/SKILL.md
 - **Eval harness:** `src/eval_harness.py` in this repo
 - **Report generator:** `src/eval_report.py` in this repo
