@@ -74,18 +74,21 @@ def fetch_dataset_id(langfuse_host, auth_headers, dataset_name):
 
 
 def fetch_evaluation_rules(langfuse_host, auth_headers):
-    """Fetch all evaluation rules from the unstable API.
+    """Fetch all evaluation rules from the stable v2 API.
 
-    Returns a list of rule dicts. Each rule has: enabled, filter, target, name,
-    evaluator (nested object with name, id, scope, type).
+    Langfuse removed the unstable evaluation-rules endpoint (2026-09-04) in
+    favor of the stable, ID-based v2 API (changelog 2026-08-27; migrate by
+    2026-11-16). Returns a list of rule dicts. Each rule has: id, name,
+    enabled, sampling, filter (list), evaluatorAssignments (list).
     """
-    url = f"{langfuse_host}{API_BASE}/unstable/evaluation-rules"
+    url = f"{langfuse_host}{API_BASE}/v2/evaluation-rules"
     all_rules = []
-    page = 1
-    total_pages = 1
+    cursor = None
 
-    while page <= total_pages:
-        params = {"page": page, "limit": PAGE_LIMIT}
+    while True:
+        params = {"limit": PAGE_LIMIT}
+        if cursor:
+            params["cursor"] = cursor
         resp = requests.get(url, params=params, headers=auth_headers, timeout=30)
         if resp.status_code != 200:
             raise RuntimeError(
@@ -93,9 +96,9 @@ def fetch_evaluation_rules(langfuse_host, auth_headers):
             )
         data = resp.json()
         all_rules.extend(data.get("data", []))
-        meta = data.get("meta", {})
-        total_pages = meta.get("totalPages", 1)
-        page += 1
+        cursor = data.get("meta", {}).get("cursor")
+        if not cursor:
+            break
 
     return all_rules
 
@@ -105,8 +108,6 @@ def find_matching_rules(rules, dataset_id):
 
     A rule matches if:
       - rule["enabled"] is True
-      - rule["target"] is "experiment" (trace/observation rules don't score dataset runs)
-      - rule is not paused (status != "paused", if the field exists)
       - rule has no filters (applies to all datasets), OR
       - rule has a datasetId filter with operator "any of" (or no operator)
         whose "value" array includes the dataset_id, OR
@@ -121,12 +122,6 @@ def find_matching_rules(rules, dataset_id):
     matching = []
     for rule in rules:
         if not rule.get("enabled", False):
-            continue
-        # Only experiment rules score dataset runs
-        if rule.get("target") != "experiment":
-            continue
-        # Defensive: skip paused rules if the field is present
-        if rule.get("status") == "paused":
             continue
         filters = rule.get("filter", [])
         # No filters = applies to all datasets
@@ -228,10 +223,9 @@ def main():
     log(f"Found {len(matching_rules)} matching evaluator rule(s):")
     for rule in matching_rules:
         rule_name = rule.get("name", "(unnamed)")
-        evaluator = rule.get("evaluator", {})
-        eval_name = evaluator.get("name", "(unknown)")
-        eval_type = evaluator.get("type", "(unknown)")
-        log(f"  - Rule '{rule_name}' → evaluator '{eval_name}' (type: {eval_type})")
+        assignments = rule.get("evaluatorAssignments", [])
+        eval_ids = ", ".join(a.get("evaluatorId", "?") for a in assignments) or "(none)"
+        log(f"  - Rule '{rule_name}' → evaluatorId(s): {eval_ids}")
 
     print(
         f"OK: {len(matching_rules)} evaluator rule(s) configured for dataset '{args.dataset}'.",
