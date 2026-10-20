@@ -183,6 +183,54 @@ def validate_model(model_id):
         return True  # Don't block on unexpected errors
 
 
+def check_staged_skill_dir(expected_skill_name):
+    """Pre-flight: warn loudly if --expected-skill-name matches no staged skill.
+
+    setup_eval_skill.sh stages eval skill copies under
+    ~/.openclaw/workspace/eval-skills/<skill-name>-<label>-<7-char-hash>-<suffix>,
+    rewriting the SKILL.md `name:` to match that directory. If the caller passes
+    an --expected-skill-name that was re-derived (e.g. from
+    `git rev-parse --short`, which can return more than 7 chars on prefix
+    collisions) instead of taken verbatim from the setup script's stdout, the
+    eval sessions cannot find the skill in their registry, fall back to
+    manual file reads, and every item fails the openclaw.skill.used
+    attestation after all retries.
+
+    This check looks for a matching staged directory (eval-skills/ or the
+    standard skills dirs) and logs a clear pre-flight warning when the name
+    matches nothing, so a bad fqid surfaces in seconds instead of after a
+    multi-hour run of guaranteed attestation failures.
+
+    Returns True when a matching directory exists (or the check can't run),
+    False when it definitely does not.
+    """
+    from pathlib import Path
+    home = Path.home()
+    search_bases = [
+        home / ".openclaw" / "workspace" / "eval-skills",
+        home / ".openclaw" / "workspace" / "skills",
+        home / ".openclaw" / "workspace" / "repos",
+    ]
+    # eval-skills/ and skills/ hold skills at depth 1 (<name>/SKILL.md);
+    # repos/ holds checkouts at greater depth (repos/<repo>/.../<name>/SKILL.md).
+    patterns = ("{name}/SKILL.md", "*/{name}/SKILL.md", "*/*/{name}/SKILL.md", "*/*/*/{name}/SKILL.md")
+    for base in search_bases:
+        for pat in patterns:
+            pat = pat.format(name=expected_skill_name)
+            try:
+                matches = list(base.glob(pat))
+            except OSError:
+                continue
+            if matches:
+                log(f"Pre-flight: expected skill '{expected_skill_name}' staged at {matches[0].parent}")
+                return True
+    log(f"Pre-flight WARNING: no staged skill directory named '{expected_skill_name}' found under "
+        f"~/.openclaw/workspace/eval-skills/, skills/, or repos/. If this name was re-derived "
+        f"(instead of taken verbatim from setup_eval_skill.sh stdout), eval sessions will not find "
+        f"the skill and every item will fail attestation.", "WARN")
+    return False
+
+
 def find_openclaw_trace_id(langfuse_host, auth_header, session_id, max_wait=15):
     """Look up the OpenClaw trace ID by session ID via the Langfuse REST API.
 
@@ -716,6 +764,10 @@ def main():
     if args.manifest and args.dataset:
         log("--manifest cannot be used with --dataset. The manifest is the source of truth.", "ERROR")
         sys.exit(1)
+
+    # --- Pre-flight staged-skill check (fail-fast signal on fqid mismatch) ---
+    if args.expected_skill_name:
+        check_staged_skill_dir(args.expected_skill_name)
 
     if not args.manifest and not args.dataset:
         log("Either --manifest or --dataset must be specified.", "ERROR")

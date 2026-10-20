@@ -42,7 +42,7 @@ Variant inference outputs (git ref, label) pairs for each variant. Ref resolutio
 ```
 
 - `<variant-label>`: base branch name, `pr-<number>`, or commit ref, `/` → `-`
-- `<git-hash>`: first 7 characters of the pinned commit SHA (e.g. `aaaaaaa`)
+- `<git-hash>`: first 7 characters of the pinned commit SHA (e.g. `aaaaaaa`) — a **fixed 7-char slice** of the full pinned SHA (`${SHA:0:7}`). Never use bare `git rev-parse --short` for this: git lengthens `--short` past 7 chars on prefix collisions, and an 8+ char hash here can never match the 7-char short hash `setup_eval_skill.sh` bakes into the staged skill directory name.
 - `<item-scope>`: `all` or 8-char SHA-256 prefix of sorted item IDs joined by `|`
 - Example: `linear-create__pr-123__e5f6g7h__all`
 
@@ -181,6 +181,8 @@ For each skill version, invoke `setup_eval_skill.sh` with `--skill-dir`, `--hash
 
 List of suffixed directories created in `~/.openclaw/workspace/eval-skills/`, each with: suffixed skill name, directory path, git ref and label.
 
+**Single source of truth for the suffixed skill name.** The suffixed skill name passed downstream (prompt prefix, `--expected-skill-name`) MUST be the `basename` of a directory path printed to stdout by `setup_eval_skill.sh` — taken verbatim, never re-derived from the git hash or label. The script owns the name (`<skill-name>-<label>-<hash[:7]>-<mktemp-suffix>`, with `name:` in the staged SKILL.md rewritten to match); re-deriving it elsewhere has produced fqid mismatches (e.g. an 8-char `git rev-parse --short` hash) where the eval sessions cannot find the skill in their registry, fall back to manual file reads, and every item fails the `openclaw.skill.used` attestation.
+
 See [`references/gotchas.md`](references/gotchas.md) for Environment Setup error prevention.
 
 ## Execute Phase
@@ -197,7 +199,7 @@ For each skill variant, construct the base experiment name following the naming 
 
 #### 2. Construct skill-reading prefix
 
-Format: `Read the <suffixed-skill-name> skill from available_skills. Do not spawn subagents or yield — complete all work inline in this single response, unless the skill defines a mandatory stop point (such as a confirmation gate). Then, ` — pass this verbatim as `--prompt-prefix` in step 3.
+Format: `Read the <suffixed-skill-name> skill from available_skills. (`<suffixed-skill-name>` is the basename of a staged directory from the Environment Setup output, verbatim — see Environment Setup Phase.) Do not spawn subagents or yield — complete all work inline in this single response, unless the skill defines a mandatory stop point (such as a confirmation gate). Then, ` — pass this verbatim as `--prompt-prefix` in step 3.
 
 For model comparison tests (Slack-triggered, single skill variant), the same suffixed skill name is used for both model runs — only `--model` differs.
 
