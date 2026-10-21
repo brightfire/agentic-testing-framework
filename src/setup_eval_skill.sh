@@ -71,8 +71,8 @@ fi
 # --- Normalize label: [a-z0-9-] ---
 LABEL_NORMALIZED=$(echo "$LABEL" | tr '/' '-' | tr '[:upper:]' '[:lower:]' | tr -d '._')
 
-# --- Short hash (7 chars) ---
-SHORT_HASH="${HASH:0:7}"
+# --- Short hash via git rev-parse --short (variable length; matches git default) ---
+SHORT_HASH=$(git -C "$REPO_ROOT" rev-parse --short "$HASH")
 
 # --- Create suffixed directory via mktemp ---
 EVAL_SKILLS_DIR="$HOME/.openclaw/workspace/eval-skills"

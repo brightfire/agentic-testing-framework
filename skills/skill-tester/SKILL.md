@@ -23,7 +23,7 @@ Determine what to test from the request. Three dimensions:
 - **Request names specific commits** → use those commits as skill variants. The variant label is the commit hash.
 - **Request says "just the PR version" or similar** → single skill variant: `<pr-branch>@<hash>`. The variant label is `pr-<number>` (e.g., `pr-123`).
 - **Explicit skill variant specs provided** → use them. The variant label is the branch name or commit hash provided.
-- **Request asks for "past N commits" on a branch** → resolve the branch, list the last N commit hashes via `git rev-list --max-count=N <branch>`, and create N skill variants — one per commit. The variant label for each is the short commit hash (7 chars).
+- **Request asks for "past N commits" on a branch** → resolve the branch, list the last N commit hashes via `git rev-list --max-count=N <branch>`, and create N skill variants — one per commit. The variant label for each is the short commit hash (as returned by `git rev-parse --short` — variable length).
 
 **Models** (what models to run each skill variant against):
 - **Request mentions model comparison, or names a specific model** → model comparison dimension added. Naming a single specific model (e.g., "test against claude-sonnet-4-6") implies a comparison with the agent default as the first model and the named model as the second.
@@ -42,7 +42,7 @@ Variant inference outputs (git ref, label) pairs for each variant. Ref resolutio
 ```
 
 - `<variant-label>`: base branch name, `pr-<number>`, or commit ref, `/` → `-`
-- `<git-hash>`: first 7 characters of the pinned commit SHA (e.g. `aaaaaaa`)
+- `<git-hash>`: the short form of the pinned commit SHA, as returned by `git rev-parse --short <sha>` (variable length, e.g. `aaaaaaa` — may be longer when the short prefix is ambiguous). Never slice the SHA to a fixed length, and do not assume a fixed hash length when parsing staged skill dir names; prefer consuming the staged dir name that `src/setup_eval_skill.sh` prints rather than re-deriving the hash.
 - `<item-scope>`: `all` or 8-char SHA-256 prefix of sorted item IDs joined by `|`
 - Example: `linear-create__pr-123__e5f6g7h__all`
 
