@@ -197,7 +197,15 @@ For each skill variant, construct the base experiment name following the naming 
 
 #### 2. Construct skill-reading prefix
 
-Format: `Read the <suffixed-skill-name> skill from available_skills using the `read` tool (do not use exec/shell to read skill files). Do not spawn subagents or yield — complete all work inline in this single response, unless the skill defines a mandatory stop point (such as a confirmation gate). Then, ` — pass this verbatim as `--prompt-prefix` in step 3.
+Format — pass this verbatim as `--prompt-prefix` in step 3 (the harness appends the dataset item input directly after it):
+
+```
+/skill <suffixed-skill-name>
+Read the SKILL.md for this skill with the `read` tool — never exec/shell. Do not spawn subagents or yield — complete all work inline in this single response, unless the skill defines a mandatory stop point (such as a confirmation gate).
+
+```
+
+Use the `/skill <name>` form — never a direct `/<name>` command. The gateway registers direct skill-command aliases in sanitized form (lowercase, non-`[a-z0-9_]` runs become underscores, truncated to 32 chars), so a direct `/<suffixed-skill-name>` does not resolve when the name contains hyphens; `/skill` matches the skill name itself and tolerates the suffix. The command sits on its own line (the parser takes the first token as the command name; everything after, including newlines, is arguments), and the prefix ends with a blank line so the dataset item input starts a new paragraph. Keep the prefix free of apostrophes — step 3 embeds it in a single-quoted shell argument. The `/skill` invocation makes the gateway resolve the suffixed skill explicitly into the run (no `available_skills` discovery step — the expansion rewrites the prompt into an explicit skill reference); the agent still reads the SKILL.md itself, which `--expected-skill-name` verifies deterministically via the `openclaw.skill.used` span. That span only fires for `read`/`skills_read` tool calls — an exec/shell read would load the content but skip the span — hence the read-tool constraint in the prefix.
 
 For model comparison tests (Slack-triggered, single skill variant), the same suffixed skill name is used for both model runs — only `--model` differs.
 

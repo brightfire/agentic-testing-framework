@@ -29,7 +29,8 @@ pip install -r requirements.txt
 python src/eval_harness.py \
   --dataset linear-skill-evaluation \
   --run-name linear-improved \
-  --prompt-prefix "Read the linear-improved skill from available_skills. Then " \
+  --prompt-prefix $'/skill linear-improved-main-a1b2c3d-e4f5\nRead the SKILL.md for this skill with the `read` tool — never exec/shell. Do not spawn subagents or yield — complete all work inline in this single response, unless the skill defines a mandatory stop point (such as a confirmation gate).\n\n' \
+  --expected-skill-name linear-improved-main-a1b2c3d-e4f5 \
   --repeat 10 \
   --timeout 180 \
   --experiment-concurrency 5 \
