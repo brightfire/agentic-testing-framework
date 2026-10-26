@@ -63,7 +63,7 @@ The attestation clause (`You must state which skill you read... score of zero...
 
 **This is non-negotiable for isolated session testing.** The prefix must close the loop between "the agent was told to use skill X" and "the agent actually used skill X." The rubric can then trust that the behavior being scored reflects the skill under test.
 
-Early test runs without attestation showed the agent occasionally not confirming which skill it read at all. With the attestation clause, non-compliance becomes immediately visible and scoreable.
+Early test runs without attestation showed the agent occasionally not confirming which skill it read at all. Attestation is now enforced deterministically by the harness: it checks the `openclaw.skill.used` span on the OpenClaw trace, retries the CLI call (up to 2 retries, fresh session) on mismatch or missing span, and on exhaustion marks the item failed and **excludes it from scoring as an invalid test case** — a framework/trigger failure, not a scored zero. Check the recorded failure reason before blaming the prefix: `no_trace_found` / `no_session_id` exclusions point at Langfuse/OTel infrastructure; only `skill_mismatch` (or no skill span with infra verified clean) implicates the prompt prefix or trigger description. Rerun affected items after the actual cause is fixed.
 
 ### 2. Dataset items
 
@@ -401,6 +401,7 @@ The evaluator fires automatically after each dataset run item completes.
 python src/eval_harness.py \
   --dataset linear-skill-evaluation \
   --run-name linear-baseline \
+  --expected-skill-name linear-baseline \
   --prompt-prefix "Read the linear-baseline skill from available_skills. You must state which skill you read at the end of your response, after completing the task. You are being evaluated on your ability to adhere to instructions. If you do not confirm which skill you read, your response will receive a score of zero regardless of quality. Then " \
   --repeat 10 \
   --timeout 180 \
@@ -413,6 +414,7 @@ python src/eval_harness.py \
 python src/eval_harness.py \
   --dataset linear-skill-evaluation \
   --run-name linear-improved \
+  --expected-skill-name linear-improved \
   --prompt-prefix "Read the linear-improved skill from available_skills. You must state which skill you read at the end of your response, after completing the task. You are being evaluated on your ability to adhere to instructions. If you do not confirm which skill you read, your response will receive a score of zero regardless of quality. Then " \
   --repeat 10 \
   --timeout 180 \
@@ -425,6 +427,7 @@ python src/eval_harness.py \
 python src/eval_harness.py \
   --dataset linear-skill-evaluation \
   --run-name linear-baseline-opus \
+  --expected-skill-name linear-baseline \
   --model anthropic/claude-opus-4-8 \
   --prompt-prefix "Read the linear-baseline skill from available_skills. You must state which skill you read at the end of your response, after completing the task. You are being evaluated on your ability to adhere to instructions. If you do not confirm which skill you read, your response will receive a score of zero regardless of quality. Then " \
   --repeat 10 \
@@ -440,6 +443,7 @@ python src/eval_harness.py \
 python src/eval_harness.py \
   --dataset linear-skill-evaluation \
   --run-name linear-improved-opus \
+  --expected-skill-name linear-improved \
   --model anthropic/claude-opus-4-8 \
   --prompt-prefix "Read the linear-improved skill from available_skills. You must state which skill you read at the end of your response, after completing the task. You are being evaluated on your ability to adhere to instructions. If you do not confirm which skill you read, your response will receive a score of zero regardless of quality. Then " \
   --repeat 10 \
