@@ -106,5 +106,19 @@ sed -i "s/^name:.*/name: ${SUFFIXED_NAME}/" "$SUFFIXED_DIR/SKILL.md" || {
   exit 1
 }
 
+# --- Force user-invocable: true in SKILL.md frontmatter ---
+# The eval prompt prefix invokes the staged copy via /skill <name>; skills that are
+# not user-invocable get no slash-command spec, so the prefix cannot resolve. Staged
+# eval copies are unique-named and ephemeral, so forcing this is safe.
+if grep -qE '^user[-_]invocable:' "$SUFFIXED_DIR/SKILL.md"; then
+  sed -i -E "s/^user[-_]invocable:.*/user-invocable: true/" "$SUFFIXED_DIR/SKILL.md"
+else
+  sed -i "0,/^name:/s/^name:.*/&\nuser-invocable: true/" "$SUFFIXED_DIR/SKILL.md"
+fi || {
+  echo "Error: failed to set user-invocable: true in SKILL.md" >&2
+  rm -rf "$SUFFIXED_DIR"
+  exit 1
+}
+
 # --- Output the suffixed directory path to stdout ---
 echo "$SUFFIXED_DIR"
