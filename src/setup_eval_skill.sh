@@ -98,24 +98,24 @@ git -C "$REPO_ROOT" archive "$HASH" -- "${SKILL_REL}/" | \
   exit 1
 }
 
-# --- Rewrite name: field in SKILL.md to match suffixed dir name ---
-SUFFIXED_NAME=$(basename "$SUFFIXED_DIR")
-sed -i "s/^name:.*/name: ${SUFFIXED_NAME}/" "$SUFFIXED_DIR/SKILL.md" || {
-  echo "Error: failed to rewrite name: field in SKILL.md" >&2
-  rm -rf "$SUFFIXED_DIR"
-  exit 1
-}
-
-# --- Force user-invocable: true in SKILL.md frontmatter ---
+# --- Rewrite name: and force user-invocable: true — scoped to the frontmatter block ---
 # The eval prompt prefix invokes the staged copy via /skill <name>; skills that are
 # not user-invocable get no slash-command spec, so the prefix cannot resolve. Staged
 # eval copies are unique-named and ephemeral, so forcing this is safe.
-if grep -qE '^user[-_]invocable:' "$SUFFIXED_DIR/SKILL.md"; then
-  sed -i -E "s/^user[-_]invocable:.*/user-invocable: true/" "$SUFFIXED_DIR/SKILL.md"
-else
-  sed -i "0,/^name:/s/^name:.*/&\nuser-invocable: true/" "$SUFFIXED_DIR/SKILL.md"
-fi || {
-  echo "Error: failed to set user-invocable: true in SKILL.md" >&2
+# Both rewrites are scoped to the YAML frontmatter (between the leading `---` line and
+# its closing `---`): a naive whole-file sed would also rewrite column-zero `name:` /
+# `user-invocable:` lines in the body (e.g. inside fenced YAML examples), silently
+# diverging the staged copy from the source under test.
+SUFFIXED_NAME=$(basename "$SUFFIXED_DIR")
+awk -v suffix="$SUFFIXED_NAME" '
+  BEGIN { infm = 0; seen_inv = 0 }
+  NR == 1 && $0 == "---" { infm = 1; print; next }
+  infm && $0 == "---" { if (!seen_inv) print "user-invocable: true"; infm = 0; print; next }
+  infm && $0 ~ /^user[-_]invocable:/ { print "user-invocable: true"; seen_inv = 1; next }
+  infm && $0 ~ /^name:/ { print "name: " suffix; next }
+  { print }
+' "$SUFFIXED_DIR/SKILL.md" > "$SUFFIXED_DIR/SKILL.md.awk-tmp" && mv "$SUFFIXED_DIR/SKILL.md.awk-tmp" "$SUFFIXED_DIR/SKILL.md" || {
+  echo "Error: failed to rewrite SKILL.md frontmatter (name / user-invocable)" >&2
   rm -rf "$SUFFIXED_DIR"
   exit 1
 }
