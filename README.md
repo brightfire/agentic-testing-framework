@@ -29,7 +29,7 @@ pip install -r requirements.txt
 python src/eval_harness.py \
   --dataset linear-skill-evaluation \
   --run-name linear-improved \
-  --prompt-prefix $'/linear-improved-main-a1b2c3d-e4f5 Do not spawn subagents or yield — complete all work inline in this single response, unless the skill defines a mandatory stop point (such as a confirmation gate).\n\n' \
+  --prompt-prefix $'/linear-improved-main-a1b2c3d-e4f5\nRead the skill\'s SKILL.md with the `read` tool — never exec/shell. Do not spawn subagents or yield — complete all work inline in this single response, unless the skill defines a mandatory stop point (such as a confirmation gate).\n\n' \
   --expected-skill-name linear-improved-main-a1b2c3d-e4f5 \
   --repeat 10 \
   --timeout 180 \
