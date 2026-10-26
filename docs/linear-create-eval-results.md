@@ -63,7 +63,7 @@ The attestation clause (`You must state which skill you read... score of zero...
 
 **This is non-negotiable for isolated session testing.** The prefix must close the loop between "the agent was told to use skill X" and "the agent actually used skill X." The rubric can then trust that the behavior being scored reflects the skill under test.
 
-Early test runs without attestation showed the agent occasionally not confirming which skill it read at all. With the attestation clause, non-compliance becomes immediately visible and scoreable.
+Early test runs without attestation showed the agent occasionally not confirming which skill it read at all. Attestation is now enforced deterministically by the harness: it checks the `openclaw.skill.used` span on the OpenClaw trace, retries the CLI call (up to 2 retries, fresh session) on mismatch or missing span, and on exhaustion marks the item failed and **excludes it from scoring as an invalid test case** — a framework/trigger failure, not a scored zero. A high excluded count points at the skill-reading prompt prefix or trigger description; rerun those items after the prefix is fixed.
 
 ### 2. Dataset items
 

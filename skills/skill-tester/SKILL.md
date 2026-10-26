@@ -268,6 +268,8 @@ See [`references/execute-failure-handling.md`](references/execute-failure-handli
 
 ## Report Phase
 
+**Attestation-failed items are invalid test cases, not scored failures.** When deterministic attestation (`openclaw.skill.used` span != expected skill, or no span) exhausts its retries, the harness marks the item failed and **excludes it from scoring entirely** — an invalid TC caused by a framework/skill-trigger failure, not a skill-quality signal. Never report excluded items as scored zeros. A high excluded count is a diagnostic on the skill-reading prompt prefix or trigger description (this drove the tool-explicit prefix fix in PR #47); rerun the affected items after the fix.
+
 **Inputs:** Experiment run names (base prefixes per variant, including recency-pruned), dataset name (sync output), originating channel (request context), skill diff (`git diff <base-ref> <head-ref> -- <skill-path>`).
 
 **Variant prefixes are model-qualified:** The harness appends `__<model-id>` to the base experiment name. When passing variant prefixes to the Report Phase (and to `wait_for_scores.py`), use the full model-qualified prefix — `<base>__<model-id>` — not just the base. For model comparison runs (single skill variant, two models), each model produces a separate variant prefix: `<base>__<model-a>` and `<base>__<model-b>`. Passing the unqualified base would cause `eval_report.py` to match and aggregate both models into a single result, losing the model-to-model delta. For skill-variant comparisons (different git refs, same agent default model), all variants share the same `__<model-id>` suffix.
