@@ -401,6 +401,7 @@ The evaluator fires automatically after each dataset run item completes.
 python src/eval_harness.py \
   --dataset linear-skill-evaluation \
   --run-name linear-baseline \
+  --expected-skill-name linear-baseline \\
   --prompt-prefix "Read the linear-baseline skill from available_skills. You must state which skill you read at the end of your response, after completing the task. You are being evaluated on your ability to adhere to instructions. If you do not confirm which skill you read, your response will receive a score of zero regardless of quality. Then " \
   --repeat 10 \
   --timeout 180 \
@@ -413,6 +414,7 @@ python src/eval_harness.py \
 python src/eval_harness.py \
   --dataset linear-skill-evaluation \
   --run-name linear-improved \
+  --expected-skill-name linear-improved \\
   --prompt-prefix "Read the linear-improved skill from available_skills. You must state which skill you read at the end of your response, after completing the task. You are being evaluated on your ability to adhere to instructions. If you do not confirm which skill you read, your response will receive a score of zero regardless of quality. Then " \
   --repeat 10 \
   --timeout 180 \
@@ -425,6 +427,7 @@ python src/eval_harness.py \
 python src/eval_harness.py \
   --dataset linear-skill-evaluation \
   --run-name linear-baseline-opus \
+  --expected-skill-name linear-baseline \\
   --model anthropic/claude-opus-4-8 \
   --prompt-prefix "Read the linear-baseline skill from available_skills. You must state which skill you read at the end of your response, after completing the task. You are being evaluated on your ability to adhere to instructions. If you do not confirm which skill you read, your response will receive a score of zero regardless of quality. Then " \
   --repeat 10 \
@@ -440,6 +443,7 @@ python src/eval_harness.py \
 python src/eval_harness.py \
   --dataset linear-skill-evaluation \
   --run-name linear-improved-opus \
+  --expected-skill-name linear-improved \\
   --model anthropic/claude-opus-4-8 \
   --prompt-prefix "Read the linear-improved skill from available_skills. You must state which skill you read at the end of your response, after completing the task. You are being evaluated on your ability to adhere to instructions. If you do not confirm which skill you read, your response will receive a score of zero regardless of quality. Then " \
   --repeat 10 \
