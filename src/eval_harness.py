@@ -697,8 +697,10 @@ def main():
              "this deterministically by checking the openclaw.skill.used span "
              "on the Langfuse trace — no LLM attestation needed. If the skill "
              "doesn't match, the harness retries the item (up to 2 times by "
-             "default) and cleans up scores from failed attempts. Required when "
-             "--prompt-prefix contains an attestation prefix."
+             "default) and cleans up scores from failed attempts. Pass on "
+             "every eval run: the slash-command prompt prefix guarantees the "
+             "skill is resolved into the run, but only this check verifies the "
+             "agent actually read it."
     )
     parser.add_argument(
         "--manifest", default=None,
