@@ -268,7 +268,7 @@ See [`references/execute-failure-handling.md`](references/execute-failure-handli
 
 ## Report Phase
 
-**Attestation-failed items are invalid test cases, not scored failures.** When deterministic attestation (`openclaw.skill.used` span != expected skill, or no span) exhausts its retries, the harness marks the item failed and **excludes it from scoring entirely** — an invalid TC caused by a framework/skill-trigger failure, not a skill-quality signal. Never report excluded items as scored zeros. A high excluded count is a diagnostic on the skill-reading prompt prefix or trigger description (this drove the tool-explicit prefix fix in PR #47); rerun the affected items after the fix.
+**Attestation-failed items are invalid test cases, not scored failures.** When deterministic attestation (`openclaw.skill.used` span != expected skill, or no span) exhausts its retries, the harness marks the item failed and **excludes it from scoring entirely** — an invalid TC caused by a framework/skill-trigger failure, not a skill-quality signal. Never report excluded items as scored zeros. Before attributing exclusions to the skill trigger, check the recorded failure reason and infrastructure: `no_trace_found` / `no_session_id` points at Langfuse connectivity or OTel export problems, not the skill; only `skill_mismatch` (or no-skill-span with infra verified clean) implicates the prompt prefix or trigger description (this drove the tool-explicit prefix fix in PR #47). Rerun affected items only after the cause is fixed.
 
 **Inputs:** Experiment run names (base prefixes per variant, including recency-pruned), dataset name (sync output), originating channel (request context), skill diff (`git diff <base-ref> <head-ref> -- <skill-path>`).
 
