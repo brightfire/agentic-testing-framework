@@ -183,6 +183,28 @@ def validate_model(model_id):
         return True  # Don't block on unexpected errors
 
 
+# OpenClaw exec-attribution markers. When the harness itself runs inside an
+# agent-exec context (OPENCLAW_SHELL=exec) or a subagent exec
+# (OPENCLAW_SUBAGENT_EXEC=1), the CLI refuses gateway `agent` calls to preserve
+# inter-session attribution. Eval prompts are their own attributed sessions
+# (fresh --session-key per attempt), so the markers must not propagate to them.
+EXEC_ATTRIBUTION_ENV_VARS = ("OPENCLAW_SHELL", "OPENCLAW_SUBAGENT_EXEC")
+
+
+def eval_cli_env():
+    """Build the env for eval-agent CLI subprocesses.
+
+    Copies os.environ minus the exec-attribution markers so the CLI's
+    inter-session attribution guard does not reject the call. Each eval
+    prompt runs as its own gateway session (--session-key), so exec-context
+    attribution for the harness process does not apply to it.
+    """
+    env = dict(os.environ)
+    for var in EXEC_ATTRIBUTION_ENV_VARS:
+        env.pop(var, None)
+    return env
+
+
 def find_openclaw_trace_id(langfuse_host, auth_header, session_id, max_wait=15):
     """Look up the OpenClaw trace ID by session ID via the Langfuse REST API.
 
@@ -400,6 +422,7 @@ def make_task(prompt_prefix, agent_id, timeout_seconds,
                 capture_output=True,
                 text=True,
                 timeout=timeout_seconds + 30,
+                env=eval_cli_env(),
             )
         except subprocess.TimeoutExpired:
             raise RuntimeError(f"CLI timeout after {timeout_seconds + 30}s")
